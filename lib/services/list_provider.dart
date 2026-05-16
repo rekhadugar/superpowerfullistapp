@@ -34,11 +34,12 @@ class ListProvider extends ChangeNotifier {
   // --- ACTIONS ---
 
   // 1. Add a new item to the cloud
-  Future<void> addItem(String name) async {
+  Future<void> addItem(String name, String category) async {
     final newItem = ListItem(
       id: '', // Firestore generates this automatically
       name: name,
-      order: _items.length, // Put it at the bottom of the list
+      category: category, // Now saving the selected category
+      order: _items.length,
     );
     await _db.collection('items').add(newItem.toMap());
   }
@@ -68,5 +69,30 @@ class ListProvider extends ChangeNotifier {
       batch.update(docRef, {'order': i});
     }
     await batch.commit();
+  }
+  // 4. Delete item from the cloud
+  Future<void> deleteItem(String id) async {
+    // Remove locally first for an instant UI response
+    _items.removeWhere((item) => item.id == id);
+    notifyListeners();
+
+    // Then delete from Firestore
+    await _db.collection('items').doc(id).delete();
+  }
+  // 5. Update quantity in the cloud
+  Future<void> updateQuantity(String id, int newQuantity) async {
+    if (newQuantity < 1) return; // Prevent quantity from dropping below 1
+
+    // Update locally for instant UI response
+    final index = _items.indexWhere((item) => item.id == id);
+    if (index != -1) {
+      _items[index].quantity = newQuantity;
+      notifyListeners();
+    }
+
+    // Push to Firestore
+    await _db.collection('items').doc(id).update({
+      'quantity': newQuantity,
+    });
   }
 }

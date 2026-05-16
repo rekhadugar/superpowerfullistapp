@@ -1,41 +1,91 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../components/add_item_modal.dart';
 import '../services/list_provider.dart';
 import '../components/list_item_card.dart';
+import '../theme/app_theme.dart';
 
-class MainScreen extends StatelessWidget { // <-- Changed from StatefulWidget to StatelessWidget!
+class MainScreen extends StatefulWidget {
   const MainScreen({super.key});
 
   @override
+  State<MainScreen> createState() => _MainScreenState();
+}
+
+class _MainScreenState extends State<MainScreen> {
+  // Controller to read the text input
+  final TextEditingController _controller = TextEditingController();
+
+  @override
+  void dispose() {
+    _controller.dispose(); // Always dispose controllers to prevent memory leaks
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    // We "watch" the provider. If notifyListeners() is called, this build method runs again.
     final listProvider = context.watch<ListProvider>();
     final items = listProvider.items;
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Listicle V2: Data Layer'),
-      ),
-      body: ReorderableListView.builder(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
-        itemCount: items.length,
-        buildDefaultDragHandles: false,
-        itemBuilder: (context, index) {
-          final item = items[index];
+      backgroundColor: AppTheme.background,
 
-          return ReorderableDelayedDragStartListener(
-            // The Key now securely uses our unique model ID
-            key: ValueKey(item.id),
-            index: index,
-            // We pass the whole object so the card knows its name AND status
-            child: ListItemCard(itemName: item.name),
+      body: SafeArea(
+        bottom: false,
+        child: CustomScrollView(
+          slivers: [
+            const SliverAppBar(
+              expandedHeight: 100.0,
+              floating: false,
+              pinned: true,
+              flexibleSpace: FlexibleSpaceBar(
+                title: Text('Groceries', style: TextStyle(color: Colors.black)),
+                titlePadding: EdgeInsets.only(left: 16, bottom: 16),
+              ),
+            ),
+
+            SliverPadding(
+              padding: const EdgeInsets.only(
+                left: 16,
+                right: 16,
+                bottom: 120,
+                top: 16,
+              ),
+              sliver: SliverReorderableList(
+                itemCount: items.length,
+                itemBuilder: (context, index) {
+                  final item = items[index];
+                  return ReorderableDelayedDragStartListener(
+                    key: ValueKey(item.id),
+                    index: index,
+                    child: ListItemCard(item: item),
+                  );
+                },
+                onReorder: (int oldIndex, int newIndex) {
+                  context.read<ListProvider>().reorderItems(oldIndex, newIndex);
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+
+      floatingActionButton: FloatingActionButton(
+        onPressed: () {
+          // Trigger the Slide-up sheet!
+          showModalBottomSheet(
+            context: context,
+            isScrollControlled: true, // Allows the keyboard to push the sheet up
+            backgroundColor: Colors.transparent, // Lets our custom container radius show
+            builder: (context) => const AddItemModal(),
           );
         },
-        onReorder: (int oldIndex, int newIndex) {
-          // We "read" the provider to call an action without constantly listening
-          context.read<ListProvider>().reorderItems(oldIndex, newIndex);
-        },
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(32),
+        ),
+        child: const Icon(Icons.add, size: 32),
       ),
+      floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
     );
   }
 }

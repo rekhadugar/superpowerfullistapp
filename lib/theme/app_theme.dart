@@ -1,32 +1,39 @@
 import 'package:flutter/material.dart';
 
 class AppTheme {
-  // 1. Core Color Tokens
-  static const Color background = Color(0xFFF2F2F7); // Standard soft gray
-  static const Color surface = Colors.white;         // Cards and AppBars
-  static const Color textPrimary = Color(0xFF1C1C1E); // Main typography
-  static const Color textSecondary = Color(0xFF8E8E93); // Subtitles
-  static const Color border = Color(0xFFE5E5EA);     // Card borders
-  static const Color primary = Color(0xFF007AFF);    // Interactive blue
+  // 1. Core Color Tokens from React Native Spec
+  static const Color background = Color(0xFFF2F2F7); // iOS Grouped Background
+  static const Color primary = Color(0xFF007AFF);    // iOS System Blue
+  static const Color success = Color(0xFF34C759);    // Shopping Mode Green
+  static const Color dragActive = Color(0xFFE5E9F0); // Darker grey/blue for active drag
+  static const Color textSecondary = Color(0xFF8E8E93); // Counts/Hints
+  static const Color surface = Color(0xFFFFFFFF);    // Pure White
+  static const Color border = Color(0xFFE5E5EA);     // Standard iOS border
 
   // 2. Global Theme Configuration
   static final ThemeData lightTheme = ThemeData(
     scaffoldBackgroundColor: background,
     primaryColor: primary,
-    // This automatically styles EVERY AppBar in the app
     appBarTheme: const AppBarTheme(
-      backgroundColor: surface,
-      elevation: 1,
-      iconTheme: IconThemeData(color: textPrimary),
+      backgroundColor: background,
+      elevation: 0,
+      iconTheme: IconThemeData(color: primary),
       titleTextStyle: TextStyle(
-        color: textPrimary,
-        fontSize: 20,
-        fontWeight: FontWeight.bold,
+        color: Colors.black,
+        fontSize: 28,
+        fontWeight: FontWeight.w800,
+        letterSpacing: 0.5,
       ),
+    ),
+    floatingActionButtonTheme: const FloatingActionButtonThemeData(
+      backgroundColor: primary,
+      foregroundColor: surface,
+      elevation: 8,
     ),
     colorScheme: ColorScheme.fromSeed(
       seedColor: primary,
       surface: surface,
+      background: background,
     ),
   );
 }
