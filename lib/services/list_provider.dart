@@ -17,6 +17,14 @@ class ListProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  bool _groupByStore = false;
+  bool get groupByStore => _groupByStore;
+
+  void toggleGroupBy() {
+    _groupByStore = !_groupByStore;
+    notifyListeners();
+  }
+
   // When the provider boots up, start listening to the cloud immediately
   ListProvider() {
 
@@ -131,5 +139,38 @@ class ListProvider extends ChangeNotifier {
     await _db.collection('items').doc(id).update({
       'quantity': newQuantity,
     });
+  }
+
+  // This handles the magic of changing an item's store/category via drag-and-drop
+  Future<void> reorderAndMoveItem(String itemId, String newGroup, List<ListItem> newlyOrderedItems) async {
+    // 1. Update the dragged item's group locally
+    final draggedItem = newlyOrderedItems.firstWhere((i) => i.id == itemId);
+    if (_groupByStore) {
+      draggedItem.locations = [newGroup];
+    } else {
+      draggedItem.category = newGroup;
+    }
+
+    // 2. Reassign the 'order' integer for every item based on its new visual position
+    for (int i = 0; i < newlyOrderedItems.length; i++) {
+      newlyOrderedItems[i].order = i;
+    }
+
+    // 3. Update the UI instantly
+    _items = newlyOrderedItems;
+    notifyListeners();
+
+    // 4. Perform a Firestore Batch Update so we only make 1 network call instead of 50
+    final batch = _db.batch();
+    for (var item in newlyOrderedItems) {
+      final docRef = _db.collection('items').doc(item.id);
+      batch.update(docRef, {
+        'order': item.order,
+        // Only update the group field for the item we actually dragged
+        if (item.id == itemId)
+          if (_groupByStore) 'locations': [newGroup] else 'category': newGroup,
+      });
+    }
+    await batch.commit();
   }
 }
