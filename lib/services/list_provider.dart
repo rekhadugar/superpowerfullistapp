@@ -34,7 +34,8 @@ class ListProvider extends ChangeNotifier {
 
 
   List<ListItem> get items {
-    final activeItems = _items.where((item) => !item.isDeleted).toList();
+    // We now filter out BOTH deleted AND completed items from the active view
+    final activeItems = _items.where((item) => !item.isDeleted && !item.isCompleted).toList();
 
     if (_activeType == 'All Items') {
       return activeItems;
