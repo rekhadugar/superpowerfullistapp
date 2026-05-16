@@ -7,26 +7,41 @@ class ListProvider extends ChangeNotifier {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
 
   List<ListItem> _items = [];
-  List<ListItem> get items => _items;
+  // --- ADD THIS TO THE TOP OF YOUR PROVIDER VARIABLES ---
+  String _activeType = 'All Items';
+
+  String get activeType => _activeType;
+
+  void setActiveType(String type) {
+    _activeType = type;
+    notifyListeners();
+  }
 
   // When the provider boots up, start listening to the cloud immediately
   ListProvider() {
+
     _listenToItems();
+  }
+
+
+
+  List<ListItem> get items {
+    final activeItems = _items.where((item) => !item.isDeleted).toList();
+
+    if (_activeType == 'All Items') {
+      return activeItems;
+    }
+    return activeItems.where((item) => item.type == _activeType).toList();
   }
 
   // THE MAGIC: A real-time stream that watches the 'items' collection
   void _listenToItems() {
-    _db.collection('items')
-        .orderBy('order') // Keeps your drag-and-drop sorting
-        .snapshots()
-        .listen((snapshot) {
-
-      // Convert the raw cloud data into our clean Dart objects
+    _db.collection('items').orderBy('order').snapshots().listen((snapshot) {
       _items = snapshot.docs
           .map((doc) => ListItem.fromMap(doc.data(), doc.id))
+      // Client-side filter: only keep items that are NOT soft-deleted
+          .where((item) => !item.isDeleted)
           .toList();
-
-      // Tell the screen to redraw with the live data
       notifyListeners();
     });
   }
@@ -34,12 +49,30 @@ class ListProvider extends ChangeNotifier {
   // --- ACTIONS ---
 
   // 1. Add a new item to the cloud
-  Future<void> addItem(String name, String category) async {
+  Future<void> addItem({
+    required String name,
+    required String type,
+    required String category,
+    List<String> locations = const ['Anywhere'],
+    String unit = '',
+    String context = '',
+  }) async {
+    final now = Timestamp.now();
+    final currentUser = 'Dhiraj'; // Temporary placeholder until we build Authentication
+
     final newItem = ListItem(
-      id: '', // Firestore generates this automatically
+      id: '',
       name: name,
-      category: category, // Now saving the selected category
+      type: type,
+      category: category,
+      locations: locations,
+      unit: unit,
+      context: context,
       order: _items.length,
+      createdBy: currentUser,
+      createdAt: now,
+      updatedBy: currentUser,
+      updatedAt: now,
     );
     await _db.collection('items').add(newItem.toMap());
   }
@@ -72,12 +105,16 @@ class ListProvider extends ChangeNotifier {
   }
   // 4. Delete item from the cloud
   Future<void> deleteItem(String id) async {
-    // Remove locally first for an instant UI response
+    // 1. Remove locally first for an instant UI response
     _items.removeWhere((item) => item.id == id);
     notifyListeners();
 
-    // Then delete from Firestore
-    await _db.collection('items').doc(id).delete();
+    // 2. Perform a SOFT DELETE in Firestore
+    await _db.collection('items').doc(id).update({
+      'isDeleted': true,
+      'deletedBy': 'Dhiraj', // Temporary placeholder
+      'deletedAt': Timestamp.now(),
+    });
   }
   // 5. Update quantity in the cloud
   Future<void> updateQuantity(String id, int newQuantity) async {

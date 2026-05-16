@@ -4,7 +4,9 @@ import '../services/list_provider.dart';
 import '../theme/app_theme.dart';
 
 class AddItemModal extends StatefulWidget {
-  const AddItemModal({super.key});
+  final String activeListType; // Receives the current tab from the Main Screen
+
+  const AddItemModal({required this.activeListType, super.key});
 
   @override
   State<AddItemModal> createState() => _AddItemModalState();
@@ -12,158 +14,246 @@ class AddItemModal extends StatefulWidget {
 
 class _AddItemModalState extends State<AddItemModal> {
   final TextEditingController _nameController = TextEditingController();
-  String _selectedCategory = 'Groceries'; // Default per your spec
+  final TextEditingController _locationController = TextEditingController();
+  final TextEditingController _contextController = TextEditingController();
 
-  // The available categories to choose from
-  final List<String> _categories = ['Groceries', 'Hardware', 'Pharmacy', 'Other'];
+  late String _selectedType;
+  late String _selectedCategory;
+
+  // Master Lists (Types)
+  final List<String> _types = ['Groceries', 'Hardware', 'Pharmacy', 'Clothing'];
+
+  // ---> THE MISSING PIECE: Dynamic Categories based on the selected Type <---
+  List<String> get _currentCategories {
+    switch (_selectedType) {
+      case 'Groceries': return ['Produce', 'Dairy', 'Bakery', 'Pantry', 'Frozen', 'Uncategorized'];
+      case 'Hardware': return ['Tools', 'Fasteners', 'Paint', 'Electrical', 'Uncategorized'];
+      case 'Clothing': return ['Kids', 'Adults', 'Winter', 'Uncategorized'];
+      default: return ['General', 'Uncategorized'];
+    }
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    // Smart Default Logic: Lock to the active tab, unless viewing "All Items"
+    if (widget.activeListType == 'All Items') {
+      _selectedType = 'Groceries';
+    } else {
+      _selectedType = widget.activeListType;
+    }
+    _selectedCategory = 'Uncategorized';
+  }
 
   @override
   void dispose() {
     _nameController.dispose();
+    _locationController.dispose();
+    _contextController.dispose();
     super.dispose();
   }
 
-  // Reuse your exact color logic for the selection tags
-  Color _getCategoryColor(String category) {
-    switch (category.toLowerCase()) {
+  Color _getTypeColor(String type) {
+    switch (type.toLowerCase()) {
       case 'groceries': return Colors.orange;
       case 'hardware': return Colors.blueGrey;
       case 'pharmacy': return Colors.redAccent;
+      case 'clothing': return Colors.purpleAccent;
       default: return AppTheme.primary;
     }
   }
 
   void _submit() {
     if (_nameController.text.trim().isNotEmpty) {
-      // Send the item AND category to Firestore
+      String rawLocations = _locationController.text.trim();
+      List<String> locationList = rawLocations.isEmpty
+          ? ['Anywhere']
+          : rawLocations.split(',').map((e) => e.trim()).where((e) => e.isNotEmpty).toList();
+
       context.read<ListProvider>().addItem(
-        _nameController.text.trim(),
-        _selectedCategory,
+        name: _nameController.text.trim(),
+        type: _selectedType,
+        category: _selectedCategory,
+        locations: locationList,
+        context: _contextController.text.trim(),
       );
-      Navigator.pop(context); // Close the slide-up sheet
+
+      Navigator.pop(context);
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    // This variable tracks the keyboard height so the modal slides up with it
     final bottomInset = MediaQuery.of(context).viewInsets.bottom;
+    final typeColor = _getTypeColor(_selectedType);
+    final isViewingAllItems = widget.activeListType == 'All Items';
 
     return Container(
+      constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.85),
       padding: EdgeInsets.only(
-        left: 20,
-        right: 20,
-        top: 24,
-        bottom: bottomInset + 24, // Adds padding for the keyboard
+        left: 20, right: 20, top: 24,
+        bottom: bottomInset > 0 ? bottomInset + 16 : 32,
       ),
       decoration: const BoxDecoration(
         color: AppTheme.background,
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min, // Wrap tightly around the content
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'Add New Item',
-            style: TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.w800,
-              color: Colors.black,
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Add New Item',
+              style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: Colors.black),
             ),
-          ),
-          const SizedBox(height: 16),
+            const SizedBox(height: 20),
 
-          // 1. The Text Input
-          TextField(
-            controller: _nameController,
-            autofocus: true, // Pops the keyboard open instantly
-            textInputAction: TextInputAction.done,
-            onSubmitted: (_) => _submit(),
-            decoration: InputDecoration(
-              hintText: 'e.g., Paper Towels',
-              filled: true,
-              fillColor: AppTheme.surface,
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: BorderSide.none,
+            // 1. Name Input
+            TextField(
+              controller: _nameController,
+              autofocus: true,
+              textInputAction: TextInputAction.next,
+              decoration: InputDecoration(
+                hintText: 'e.g., Paper Towels or Viaan\'s Snacks',
+                filled: true,
+                fillColor: AppTheme.surface,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none,
+                ),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
               ),
-              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
             ),
-          ),
-          const SizedBox(height: 20),
+            const SizedBox(height: 20),
 
-          // 2. The Category Tags
-          const Text(
-            'Category',
-            style: TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w600,
-              color: AppTheme.textSecondary,
-            ),
-          ),
-          const SizedBox(height: 12),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: _categories.map((category) {
-              final isSelected = _selectedCategory == category;
-              final categoryColor = _getCategoryColor(category);
+            // 2. Type (Master List) - ONLY shows if you are in the "All Items" view
+            if (isViewingAllItems) ...[
+              const Text('Master List', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: AppTheme.textSecondary)),
+              const SizedBox(height: 8),
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: _types.map((type) {
+                    final isSelected = _selectedType == type;
+                    return Padding(
+                      padding: const EdgeInsets.only(right: 8.0),
+                      child: ChoiceChip(
+                        label: Text(type),
+                        selected: isSelected,
+                        selectedColor: _getTypeColor(type),
+                        labelStyle: TextStyle(
+                          color: isSelected ? Colors.white : Colors.black87,
+                          fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                        ),
+                        onSelected: (selected) {
+                          if (selected) {
+                            setState(() {
+                              _selectedType = type;
+                              _selectedCategory = 'Uncategorized';
+                            });
+                          }
+                        },
+                      ),
+                    );
+                  }).toList(),
+                ),
+              ),
+              const SizedBox(height: 20),
+            ],
 
-              return GestureDetector(
-                onTap: () {
-                  setState(() {
-                    _selectedCategory = category;
-                  });
-                },
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 200),
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  decoration: BoxDecoration(
-                    color: isSelected ? categoryColor : AppTheme.surface,
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(
-                      color: isSelected ? categoryColor : AppTheme.border,
+            // 3. Category (Sub-group)
+            const Text('Category', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: AppTheme.textSecondary)),
+            const SizedBox(height: 8),
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: _currentCategories.map((category) {
+                  final isSelected = _selectedCategory == category;
+                  return Padding(
+                    padding: const EdgeInsets.only(right: 8.0),
+                    child: ChoiceChip(
+                      label: Text(category),
+                      selected: isSelected,
+                      selectedColor: typeColor.withValues(alpha: 0.2),
+                      labelStyle: TextStyle(
+                        color: isSelected ? typeColor : Colors.black87,
+                        fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                      ),
+                      onSelected: (selected) {
+                        if (selected) setState(() => _selectedCategory = category);
+                      },
                     ),
-                  ),
-                  child: Text(
-                    category,
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                      color: isSelected ? AppTheme.surface : AppTheme.textSecondary,
-                    ),
-                  ),
-                ),
-              );
-            }).toList(),
-          ),
-          const SizedBox(height: 24),
-
-          // 3. The Save Button
-          SizedBox(
-            width: double.infinity,
-            height: 50,
-            child: ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppTheme.primary,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                elevation: 0,
-              ),
-              onPressed: _submit,
-              child: const Text(
-                'Save Item',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w700,
-                  color: AppTheme.surface,
-                ),
+                  );
+                }).toList(),
               ),
             ),
-          ),
-        ],
+            const SizedBox(height: 20),
+
+            // 4. Location & Context (Notes)
+            Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('Stores', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: AppTheme.textSecondary)),
+                      const SizedBox(height: 8),
+                      TextField(
+                        controller: _locationController,
+                        textInputAction: TextInputAction.next,
+                        decoration: InputDecoration(
+                          hintText: 'Fresh Farms, Target...',
+                          filled: true,
+                          fillColor: AppTheme.surface,
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('Notes', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: AppTheme.textSecondary)),
+                      const SizedBox(height: 8),
+                      TextField(
+                        controller: _contextController,
+                        textInputAction: TextInputAction.done,
+                        onSubmitted: (_) => _submit(),
+                        decoration: InputDecoration(
+                          hintText: 'e.g., Low sodium',
+                          filled: true,
+                          fillColor: AppTheme.surface,
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 24),
+
+            // 5. Submit Button
+            SizedBox(
+              width: double.infinity,
+              height: 50,
+              child: ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppTheme.primary,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  elevation: 0,
+                ),
+                onPressed: _submit,
+                child: const Text('Save Item', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: AppTheme.surface)),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

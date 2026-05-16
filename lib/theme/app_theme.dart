@@ -33,7 +33,7 @@ class AppTheme {
     colorScheme: ColorScheme.fromSeed(
       seedColor: primary,
       surface: surface,
-      background: background,
+      // 'background' has been removed to resolve the Material 3 deprecation warning
     ),
   );
 }
