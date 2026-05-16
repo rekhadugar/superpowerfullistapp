@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "112096085918",
+    "project_id": "listicle-36491",
+    "storage_bucket": "listicle-36491.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:112096085918:android:e1fe1204ec720ed3f7b88f",
+        "android_client_info": {
+          "package_name": "com.example.listicle_v2"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDVsEQ11X-IgP1LqB60a8x8Hh67Y1xy7d0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
