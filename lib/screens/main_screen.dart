@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../components/add_item_modal.dart';
+import '../components/item_form_modal.dart';
 import '../components/section_header.dart';
 import '../models/list_item.dart';
 import '../services/list_provider.dart';
@@ -198,7 +198,7 @@ class _MainScreenState extends State<MainScreen> {
             context: context,
             isScrollControlled: true,
             backgroundColor: Colors.transparent,
-            builder: (context) => AddItemModal(activeListType: activeType),
+            builder: (context) => ItemFormModal(activeListType: activeType),
           );
         },
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(32)),

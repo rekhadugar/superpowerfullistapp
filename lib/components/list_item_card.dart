@@ -4,6 +4,7 @@ import 'package:flutter_slidable/flutter_slidable.dart';
 import '../models/list_item.dart';
 import '../services/list_provider.dart';
 import '../theme/app_theme.dart';
+import 'item_form_modal.dart';
 
 // 1. Upgraded to a StatefulWidget to handle our custom shrink animation
 class ListItemCard extends StatefulWidget {
@@ -116,7 +117,16 @@ class _ListItemCardState extends State<ListItemCard> {
               SlidableAction(
                 flex: 2,
                 onPressed: (context) {
-                  debugPrint('Edit tapped for ${widget.item.name}');
+                  showModalBottomSheet(
+                    context: context,
+                    isScrollControlled: true,
+                    backgroundColor: Colors.transparent,
+                    // Notice how we pass the item to trigger Edit Mode!
+                    builder: (context) => ItemFormModal(
+                      activeListType: context.read<ListProvider>().activeType,
+                      existingItem: widget.item,
+                    ),
+                  );
                 },
                 backgroundColor: Colors.blue,
                 foregroundColor: Colors.white,
