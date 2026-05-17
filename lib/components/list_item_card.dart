@@ -6,7 +6,6 @@ import '../services/list_provider.dart';
 import '../theme/app_theme.dart';
 import 'item_form_modal.dart';
 
-// 1. Upgraded to a StatefulWidget to handle our custom shrink animation
 class ListItemCard extends StatefulWidget {
   final ListItem item;
 
@@ -17,24 +16,52 @@ class ListItemCard extends StatefulWidget {
 }
 
 class _ListItemCardState extends State<ListItemCard> {
-  // The trigger for our smooth collapse
   bool _isShrinking = false;
 
-  // This handles the animation timing and database removal safely
   void _shrinkAndRemove(bool isDelete) {
     setState(() {
       _isShrinking = true;
     });
 
-    // Wait for the AnimatedSize to finish closing before nuking the data
+    final item = widget.item;
+    final bool wasCompleted = item.isCompleted;
+    final provider = context.read<ListProvider>();
+    final scaffoldMessenger = ScaffoldMessenger.of(context);
+
     Future.delayed(const Duration(milliseconds: 300), () {
-      if (mounted) {
-        if (isDelete) {
-          context.read<ListProvider>().deleteItem(widget.item.id);
-        } else {
-          context.read<ListProvider>().toggleItemStatus(widget.item.id, widget.item.isCompleted);
-        }
+      if (isDelete) {
+        provider.deleteItem(item.id);
+      } else {
+        provider.toggleItemStatus(item.id, wasCompleted);
       }
+
+      scaffoldMessenger.hideCurrentSnackBar();
+
+      final actionText = isDelete ? 'Deleted' : (wasCompleted ? 'Unchecked' : 'Checked');
+
+      scaffoldMessenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            '$actionText: "${item.name}"',
+            style: const TextStyle(fontWeight: FontWeight.w600, color: Colors.white),
+          ),
+          duration: const Duration(seconds: 5),
+          behavior: SnackBarBehavior.floating,
+          backgroundColor: Colors.black87,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          action: SnackBarAction(
+            label: 'UNDO',
+            textColor: AppTheme.primary,
+            onPressed: () {
+              if (isDelete) {
+                provider.restoreItem(item.id);
+              } else {
+                provider.toggleItemStatus(item.id, !wasCompleted);
+              }
+            },
+          ),
+        ),
+      );
     });
   }
 
@@ -67,11 +94,9 @@ class _ListItemCardState extends State<ListItemCard> {
 
   @override
   Widget build(BuildContext context) {
-    // 2. Wrap the entire card in AnimatedSize
     return AnimatedSize(
       duration: const Duration(milliseconds: 300),
       curve: Curves.easeInOut,
-      // When shrinking is triggered, it folds down to a height of 0
       child: _isShrinking
           ? const SizedBox(width: double.infinity, height: 0)
           : Padding(
@@ -79,37 +104,35 @@ class _ListItemCardState extends State<ListItemCard> {
         child: Slidable(
           key: ValueKey('slidable_${widget.item.id}'),
 
-          // 3. LEFT SWIPE (Complete)
           startActionPane: ActionPane(
             motion: const StretchMotion(),
             dismissible: DismissiblePane(
               onDismissed: () {},
-              // confirmDismiss intercepts the library's buggy teardown
               confirmDismiss: () async {
-                _shrinkAndRemove(false); // Trigger our custom animation
-                return false; // Prevent Slidable from crashing the list
+                _shrinkAndRemove(false);
+                return false;
               },
             ),
             children: [
               SlidableAction(
                 onPressed: (context) => _shrinkAndRemove(false),
-                backgroundColor: AppTheme.success,
+                // CHANGED: Dynamic Styling based on completed status
+                backgroundColor: widget.item.isCompleted ? Colors.orange : AppTheme.success,
                 foregroundColor: Colors.white,
-                icon: Icons.check,
-                label: 'Complete',
+                icon: widget.item.isCompleted ? Icons.restore : Icons.check,
+                label: widget.item.isCompleted ? 'Uncheck' : 'Complete',
                 borderRadius: BorderRadius.circular(12),
               ),
             ],
           ),
 
-          // 4. RIGHT SWIPE (Edit/Delete)
           endActionPane: ActionPane(
             motion: const StretchMotion(),
             extentRatio: 0.6,
             dismissible: DismissiblePane(
               onDismissed: () {},
               confirmDismiss: () async {
-                _shrinkAndRemove(true); // Safely animate deletion
+                _shrinkAndRemove(true);
                 return false;
               },
             ),
@@ -121,7 +144,6 @@ class _ListItemCardState extends State<ListItemCard> {
                     context: context,
                     isScrollControlled: true,
                     backgroundColor: Colors.transparent,
-                    // Notice how we pass the item to trigger Edit Mode!
                     builder: (context) => ItemFormModal(
                       activeListType: context.read<ListProvider>().activeType,
                       existingItem: widget.item,
@@ -149,7 +171,6 @@ class _ListItemCardState extends State<ListItemCard> {
             ],
           ),
 
-          // 5. The actual Card UI
           child: Container(
             decoration: BoxDecoration(
                 color: AppTheme.surface,

@@ -16,11 +16,9 @@ class ListProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  // CHANGED: Renamed to groupBy and added 4 specific states
-  String _groupBy = 'Category'; // 'Category', 'Store', 'List', 'None'
+  String _groupBy = 'Category';
   String get groupBy => _groupBy;
 
-  // NEW: Directly set the group state instead of toggling
   void setGroupBy(String method) {
     _groupBy = method;
     notifyListeners();
@@ -30,11 +28,9 @@ class ListProvider extends ChangeNotifier {
     _listenToItems();
   }
 
-  // --- DYNAMIC GROUPING ENGINE ---
   List<dynamic> get groupedAndSortedItems {
     final activeItems = _items.where((i) => !i.isCompleted && !i.isDeleted).toList();
 
-    // If 'None' (Custom Layout), just return the pure sorted items with NO headers
     if (_groupBy == 'None') {
       activeItems.sort((a, b) => a.order.compareTo(b.order));
       return activeItems;
@@ -59,7 +55,6 @@ class ListProvider extends ChangeNotifier {
         }
       }
     } else if (_groupBy == 'List') {
-      // NEW: Groups by the Master List Type (Groceries, Hardware, etc.)
       for (var item in activeItems) {
         groups.putIfAbsent(item.type, () => []).add(item);
       }
@@ -119,7 +114,14 @@ class ListProvider extends ChangeNotifier {
     await _db.collection('items').add(newItem.toMap());
   }
 
+  // CHANGED: Optimistic local update for instant UI feedback
   Future<void> toggleItemStatus(String id, bool currentStatus) async {
+    final index = _items.indexWhere((item) => item.id == id);
+    if (index != -1) {
+      _items[index].isCompleted = !currentStatus;
+      notifyListeners();
+    }
+
     await _db.collection('items').doc(id).update({
       'isCompleted': !currentStatus,
     });
@@ -142,14 +144,33 @@ class ListProvider extends ChangeNotifier {
     await batch.commit();
   }
 
+  // CHANGED: No longer wiped from local memory. Just flagged.
   Future<void> deleteItem(String id) async {
-    _items.removeWhere((item) => item.id == id);
-    notifyListeners();
+    final index = _items.indexWhere((item) => item.id == id);
+    if (index != -1) {
+      _items[index].isDeleted = true;
+      notifyListeners();
+    }
 
     await _db.collection('items').doc(id).update({
       'isDeleted': true,
       'deletedBy': 'Dhiraj',
       'deletedAt': Timestamp.now(),
+    });
+  }
+
+  // NEW: Instantly un-flags a deleted item
+  Future<void> restoreItem(String id) async {
+    final index = _items.indexWhere((item) => item.id == id);
+    if (index != -1) {
+      _items[index].isDeleted = false;
+      notifyListeners();
+    }
+
+    await _db.collection('items').doc(id).update({
+      'isDeleted': false,
+      'deletedBy': FieldValue.delete(),
+      'deletedAt': FieldValue.delete(),
     });
   }
 
@@ -170,12 +191,10 @@ class ListProvider extends ChangeNotifier {
   Future<void> reorderAndMoveItem(String itemId, String newGroup, List<ListItem> newlyOrderedItems) async {
     final draggedItem = newlyOrderedItems.firstWhere((i) => i.id == itemId);
 
-    // Auto-capitalize the header text before saving to DB
     String formattedGroup = newGroup.split(' ').map((word) =>
     word.isNotEmpty ? '${word[0].toUpperCase()}${word.substring(1).toLowerCase()}' : ''
     ).join(' ');
 
-    // UPDATED: Dynamically assign the dropped item to the correct field based on active grouping
     if (_groupBy == 'Store') {
       draggedItem.locations = [formattedGroup];
     } else if (_groupBy == 'Category') {

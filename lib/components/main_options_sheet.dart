@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../services/list_provider.dart';
 import '../theme/app_theme.dart';
+import '../screens/completed_items_screen.dart'; // IMPORT THE NEW SCREEN
 
 class MainOptionsSheet extends StatelessWidget {
   const MainOptionsSheet({super.key});
@@ -51,7 +52,6 @@ class MainOptionsSheet extends StatelessWidget {
 
           const Divider(height: 16),
 
-          // NEW: Interactive Group By Section
           const Padding(
             padding: EdgeInsets.symmetric(horizontal: 24, vertical: 8),
             child: Text('Group items by', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14, color: AppTheme.textSecondary)),
@@ -82,6 +82,21 @@ class MainOptionsSheet extends StatelessWidget {
               Navigator.pop(context);
             },
           ),
+
+          // NEW: Navigation to Checked Items Screen
+          _buildOptionTile(
+            context,
+            icon: Icons.playlist_add_check,
+            title: 'View checked items',
+            onTap: () {
+              Navigator.pop(context); // Close the bottom sheet
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const CompletedItemsScreen()),
+              );
+            },
+          ),
+
           _buildOptionTile(
             context,
             icon: Icons.delete_outline,
@@ -97,7 +112,6 @@ class MainOptionsSheet extends StatelessWidget {
     );
   }
 
-  // Helper widget to build the interactive chips
   Widget _buildChoiceChip(String value, ListProvider provider, {String? label}) {
     final isSelected = provider.groupBy == value;
     return ChoiceChip(
