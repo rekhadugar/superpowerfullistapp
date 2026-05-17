@@ -3,7 +3,6 @@ import '../theme/app_theme.dart';
 
 class TokenSearchEngine extends StatefulWidget {
   final String title;
-  final String subtitle;
   final bool isMultiSelect;
   final bool forceLowercase;
   final bool smallPills;
@@ -16,7 +15,6 @@ class TokenSearchEngine extends StatefulWidget {
 
   const TokenSearchEngine({
     required this.title,
-    required this.subtitle,
     required this.isMultiSelect,
     this.forceLowercase = false,
     this.smallPills = false,
@@ -51,10 +49,6 @@ class _TokenSearchEngineState extends State<TokenSearchEngine> {
       });
     });
 
-    // THE FIX: Centralized Focus Listener
-    // We bind the scroll math directly to the focus state instead of a tap gesture.
-    // Whether triggered by the '+' button or a manual tap after swiping down,
-    // this guarantees the scroll always fires when the keyboard is summoned.
     _focusNode.addListener(() {
       if (_focusNode.hasFocus) {
         Future.delayed(const Duration(milliseconds: 500), () {
@@ -76,7 +70,6 @@ class _TokenSearchEngineState extends State<TokenSearchEngine> {
     super.didUpdateWidget(oldWidget);
 
     if (widget.isExpanded && !oldWidget.isExpanded) {
-      // Just request focus. The listener in initState handles the scrolling automatically!
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) {
           _focusNode.requestFocus();
@@ -175,100 +168,113 @@ class _TokenSearchEngineState extends State<TokenSearchEngine> {
         border: Border.all(color: widget.isExpanded ? AppTheme.primary : AppTheme.border),
         borderRadius: BorderRadius.circular(12),
       ),
-      child: AnimatedCrossFade(
-        duration: const Duration(milliseconds: 200),
-        crossFadeState: widget.isExpanded ? CrossFadeState.showSecond : CrossFadeState.showFirst,
-
-        firstChild: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () => widget.onToggle(!widget.isExpanded),
+            child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(widget.title, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700)),
-                    if (_selectedTokens.isEmpty) Text(widget.subtitle, style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary)),
-                  ],
-                ),
-                IconButton(
-                  icon: const Icon(Icons.add_circle, color: AppTheme.primary, size: 28),
-                  padding: EdgeInsets.zero, constraints: const BoxConstraints(),
-                  onPressed: () => widget.onToggle(true),
+                Text(widget.title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+                Icon(
+                    widget.isExpanded ? Icons.remove_circle_outline : Icons.add_circle,
+                    color: AppTheme.primary,
+                    size: 28
                 ),
               ],
             ),
-            Builder(builder: (context) {
+          ),
+
+          AnimatedCrossFade(
+            duration: const Duration(milliseconds: 200),
+            crossFadeState: widget.isExpanded ? CrossFadeState.showSecond : CrossFadeState.showFirst,
+
+            // MINIMIZED STATE
+            firstChild: Builder(builder: (context) {
               final displayList = [
                 ..._selectedTokens,
                 ...widget.knownTokens.where((t) => !_selectedTokens.contains(t)),
               ];
 
-              if (displayList.isEmpty) return const SizedBox();
+              if (displayList.isEmpty) return const SizedBox(width: double.infinity, height: 0);
 
-              return Column(
+              return Padding(
+                padding: const EdgeInsets.only(top: 12.0),
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    children: displayList.map((t) => Padding(
+                      padding: const EdgeInsets.only(right: 8.0),
+                      child: _buildPill(t, isSelected: _selectedTokens.contains(t)),
+                    )).toList(),
+                  ),
+                ),
+              );
+            }),
+
+            // EXPANDED STATE
+            secondChild: Padding(
+              padding: const EdgeInsets.only(top: 12.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const SizedBox(height: 12),
-                  SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: Row(
-                      children: displayList.map((t) => Padding(
-                        padding: const EdgeInsets.only(right: 8.0),
-                        child: _buildPill(t, isSelected: _selectedTokens.contains(t)),
-                      )).toList(),
+                  TextField(
+                    controller: _searchController,
+                    focusNode: _focusNode,
+                    textInputAction: TextInputAction.done,
+                    onSubmitted: (_) => _handleDone(),
+                    decoration: InputDecoration(
+                        hintText: 'Search or add ${widget.title.toLowerCase()}...',
+                        isDense: true,
+                        border: InputBorder.none
                     ),
                   ),
-                ],
-              );
-            }),
-          ],
-        ),
+                  const Divider(height: 24),
 
-        secondChild: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            TextField(
-              controller: _searchController,
-              focusNode: _focusNode,
-              textInputAction: TextInputAction.done,
-              onSubmitted: (_) => _handleDone(),
-              // NO onTap REQUIRED HERE ANYMORE
-              decoration: InputDecoration(
-                  hintText: 'Search or add ${widget.title.toLowerCase()}...',
-                  isDense: true,
-                  border: InputBorder.none
+                  Builder(builder: (context) {
+                    // 1. Get known tokens that match the query
+                    final knownMatches = widget.knownTokens
+                        .where((t) => t.toLowerCase().contains(_currentQuery.toLowerCase()))
+                        .toList();
+
+                    // 2. THE FIX: Combine matching known tokens WITH all custom selected tokens
+                    // Using a Set prevents duplicates in case a known token is also selected
+                    final Set<String> displaySet = {
+                      ..._selectedTokens,
+                      ...knownMatches,
+                    };
+
+                    final matches = displaySet.toList();
+
+                    // 3. Sort so selected items (both custom and known) always float to the front
+                    matches.sort((a, b) {
+                      final aSelected = _selectedTokens.contains(a);
+                      final bSelected = _selectedTokens.contains(b);
+                      if (aSelected && !bSelected) return -1;
+                      if (!aSelected && bSelected) return 1;
+                      return 0;
+                    });
+
+                    // 4. Exact match check against the combined set
+                    final exactMatchExists = displaySet.any((t) => t.toLowerCase() == _currentQuery.toLowerCase());
+
+                    return Wrap(
+                      spacing: 8, runSpacing: 8,
+                      children: [
+                        if (_currentQuery.isNotEmpty && !exactMatchExists)
+                          _buildPill(_currentQuery, isCreate: true),
+
+                        ...matches.map((t) => _buildPill(t, isSelected: _selectedTokens.contains(t))),
+                      ],
+                    );
+                  }),
+                ],
               ),
             ),
-            const Divider(height: 24),
-
-            Builder(builder: (context) {
-              final matches = widget.knownTokens
-                  .where((t) => t.toLowerCase().contains(_currentQuery.toLowerCase()))
-                  .toList();
-
-              matches.sort((a, b) {
-                final aSelected = _selectedTokens.contains(a);
-                final bSelected = _selectedTokens.contains(b);
-                if (aSelected && !bSelected) return -1;
-                if (!aSelected && bSelected) return 1;
-                return 0;
-              });
-
-              final exactMatchExists = widget.knownTokens.any((t) => t.toLowerCase() == _currentQuery.toLowerCase());
-
-              return Wrap(
-                spacing: 8, runSpacing: 8,
-                children: [
-                  if (_currentQuery.isNotEmpty && !exactMatchExists)
-                    _buildPill(_currentQuery, isCreate: true),
-
-                  ...matches.map((t) => _buildPill(t, isSelected: _selectedTokens.contains(t))),
-                ],
-              );
-            }),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }

@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart'; // Required for ScrollDirection
+import 'package:flutter/rendering.dart';
 import 'package:provider/provider.dart';
 import '../models/list_item.dart';
 import '../services/list_provider.dart';
@@ -135,19 +135,10 @@ class _ItemFormModalState extends State<ItemFormModal> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            isEditMode ? 'Edit Item' : 'Add New Item',
-            style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: Colors.black),
-          ),
-          const SizedBox(height: 20),
-
           Expanded(
             child: NotificationListener<UserScrollNotification>(
               onNotification: (UserScrollNotification notification) {
                 if (_activeEngine != null) {
-                  // NATIVE UX FIX: Only dismiss the keyboard when pulling DOWN (reverse).
-                  // Pushing UP (forward) keeps the keyboard open so the user can scroll
-                  // into the runway and reach lower elements without the UI glitching.
                   if (notification.direction == ScrollDirection.reverse) {
                     FocusManager.instance.primaryFocus?.unfocus();
                     setState(() => _activeEngine = null);
@@ -160,21 +151,26 @@ class _ItemFormModalState extends State<ItemFormModal> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+
                     TextField(
                       controller: _nameController,
                       autofocus: !isEditMode,
                       textInputAction: TextInputAction.next,
+                      // CHANGED: Left-aligned text and cursor
+                      textAlign: TextAlign.left,
+                      style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w800, color: Colors.black),
                       onTap: () {
                         if (_activeEngine != null) {
                           setState(() => _activeEngine = null);
                         }
                       },
-                      decoration: InputDecoration(
-                        hintText: 'e.g., Paper Towels',
-                        filled: true,
-                        fillColor: AppTheme.surface,
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                      // CHANGED: Updated hintText and made the decoration const for performance
+                      decoration: const InputDecoration(
+                        hintText: 'Item Name',
+                        hintStyle: TextStyle(color: Colors.black26),
+                        filled: false,
+                        border: InputBorder.none,
+                        contentPadding: EdgeInsets.symmetric(vertical: 8),
                       ),
                     ),
                     const SizedBox(height: 16),
@@ -231,7 +227,6 @@ class _ItemFormModalState extends State<ItemFormModal> {
 
                     TokenSearchEngine(
                       title: 'Category',
-                      subtitle: 'Produce, Dairy...',
                       isMultiSelect: false,
                       knownTokens: const ['Produce', 'Dairy', 'Bakery', 'Pantry', 'Frozen', 'Tools', 'Fasteners', 'Kids'],
                       initialSelected: _selectedCategory != 'Uncategorized' ? [_selectedCategory] : [],
@@ -243,7 +238,6 @@ class _ItemFormModalState extends State<ItemFormModal> {
 
                     TokenSearchEngine(
                       title: 'Stores',
-                      subtitle: 'Costco, Target...',
                       isMultiSelect: true,
                       knownTokens: const ['Costco', 'Tonys', 'Woodmans', 'Target', 'Home Depot', 'Walgreens'],
                       initialSelected: _selectedLocations.where((loc) => loc != 'Anywhere').toList(),
@@ -255,7 +249,6 @@ class _ItemFormModalState extends State<ItemFormModal> {
 
                     TokenSearchEngine(
                       title: 'Tags',
-                      subtitle: 'vegan, urgent...',
                       isMultiSelect: true, forceLowercase: true, smallPills: true,
                       knownTokens: const ['vegan', 'urgent', 'bulk', 'low sodium', 'sale'],
                       initialSelected: _selectedTags,
