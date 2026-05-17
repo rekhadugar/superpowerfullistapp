@@ -115,6 +115,7 @@ class ListProvider extends ChangeNotifier {
   }
 
   // CHANGED: Optimistic local update for instant UI feedback
+  // CHANGED: Now pushes a fresh updatedAt timestamp so Checked Items can sort by time
   Future<void> toggleItemStatus(String id, bool currentStatus) async {
     final index = _items.indexWhere((item) => item.id == id);
     if (index != -1) {
@@ -124,6 +125,7 @@ class ListProvider extends ChangeNotifier {
 
     await _db.collection('items').doc(id).update({
       'isCompleted': !currentStatus,
+      'updatedAt': Timestamp.now(), // THIS IS THE MAGIC LINE
     });
   }
 

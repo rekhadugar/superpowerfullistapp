@@ -8,8 +8,9 @@ import 'item_form_modal.dart';
 
 class ListItemCard extends StatefulWidget {
   final ListItem item;
+  final bool isCompact; // NEW: Controls the collapsed view
 
-  const ListItemCard({required this.item, super.key});
+  const ListItemCard({required this.item, this.isCompact = false, super.key});
 
   @override
   State<ListItemCard> createState() => _ListItemCardState();
@@ -35,11 +36,11 @@ class _ListItemCardState extends State<ListItemCard> {
         provider.toggleItemStatus(item.id, wasCompleted);
       }
 
-      scaffoldMessenger.hideCurrentSnackBar();
+      scaffoldMessenger.clearSnackBars();
 
       final actionText = isDelete ? 'Deleted' : (wasCompleted ? 'Unchecked' : 'Checked');
 
-      scaffoldMessenger.showSnackBar(
+      final controller = scaffoldMessenger.showSnackBar(
         SnackBar(
           content: Text(
             '$actionText: "${item.name}"',
@@ -58,10 +59,15 @@ class _ListItemCardState extends State<ListItemCard> {
               } else {
                 provider.toggleItemStatus(item.id, !wasCompleted);
               }
+              scaffoldMessenger.hideCurrentSnackBar();
             },
           ),
         ),
       );
+
+      Future.delayed(const Duration(seconds: 5), () {
+        try { controller.close(); } catch (_) {}
+      });
     });
   }
 
@@ -116,7 +122,6 @@ class _ListItemCardState extends State<ListItemCard> {
             children: [
               SlidableAction(
                 onPressed: (context) => _shrinkAndRemove(false),
-                // CHANGED: Dynamic Styling based on completed status
                 backgroundColor: widget.item.isCompleted ? Colors.orange : AppTheme.success,
                 foregroundColor: Colors.white,
                 icon: widget.item.isCompleted ? Icons.restore : Icons.check,
@@ -181,7 +186,8 @@ class _ListItemCardState extends State<ListItemCard> {
                 ]
             ),
             child: Padding(
-              padding: const EdgeInsets.all(16.0),
+              // NEW: Tighter padding when in compact mode
+              padding: EdgeInsets.all(widget.isCompact ? 12.0 : 16.0),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
@@ -198,53 +204,58 @@ class _ListItemCardState extends State<ListItemCard> {
                             decoration: widget.item.isCompleted ? TextDecoration.lineThrough : null,
                           ),
                         ),
-                        const SizedBox(height: 8),
 
-                        Wrap(
-                          spacing: 6,
-                          runSpacing: 6,
-                          crossAxisAlignment: WrapCrossAlignment.center,
-                          children: [
-                            ...widget.item.locations.map((loc) => _buildPill(loc, isStore: true)),
-                            if (widget.item.category != 'Uncategorized')
-                              _buildPill(widget.item.category, isStore: false),
-                            if (widget.item.context.isNotEmpty)
-                              Text(
-                                  '• ${widget.item.context}',
-                                  style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary, fontWeight: FontWeight.w600)
-                              ),
-                          ],
-                        ),
+                        // NEW: Hide all pills if the card is in compact mode
+                        if (!widget.isCompact && (widget.item.locations.isNotEmpty || widget.item.category != 'Uncategorized' || widget.item.context.isNotEmpty)) ...[
+                          const SizedBox(height: 8),
+                          Wrap(
+                            spacing: 6,
+                            runSpacing: 6,
+                            crossAxisAlignment: WrapCrossAlignment.center,
+                            children: [
+                              ...widget.item.locations.map((loc) => _buildPill(loc, isStore: true)),
+                              if (widget.item.category != 'Uncategorized')
+                                _buildPill(widget.item.category, isStore: false),
+                              if (widget.item.context.isNotEmpty)
+                                Text(
+                                    '• ${widget.item.context}',
+                                    style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary, fontWeight: FontWeight.w600)
+                                ),
+                            ],
+                          ),
+                        ]
                       ],
                     ),
                   ),
 
-                  Container(
-                    height: 36,
-                    decoration: BoxDecoration(
-                      color: AppTheme.background,
-                      borderRadius: BorderRadius.circular(18),
+                  // NEW: Hide the quantity adjuster if the card is in compact mode
+                  if (!widget.isCompact)
+                    Container(
+                      height: 36,
+                      decoration: BoxDecoration(
+                        color: AppTheme.background,
+                        borderRadius: BorderRadius.circular(18),
+                      ),
+                      child: Row(
+                        children: [
+                          IconButton(
+                            icon: const Icon(Icons.remove, size: 16),
+                            color: AppTheme.textSecondary,
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(minWidth: 36),
+                            onPressed: () => context.read<ListProvider>().updateQuantity(widget.item.id, widget.item.quantity - 1),
+                          ),
+                          Text('${widget.item.quantity}', style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
+                          IconButton(
+                            icon: const Icon(Icons.add, size: 16),
+                            color: Colors.black,
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(minWidth: 36),
+                            onPressed: () => context.read<ListProvider>().updateQuantity(widget.item.id, widget.item.quantity + 1),
+                          ),
+                        ],
+                      ),
                     ),
-                    child: Row(
-                      children: [
-                        IconButton(
-                          icon: const Icon(Icons.remove, size: 16),
-                          color: AppTheme.textSecondary,
-                          padding: EdgeInsets.zero,
-                          constraints: const BoxConstraints(minWidth: 36),
-                          onPressed: () => context.read<ListProvider>().updateQuantity(widget.item.id, widget.item.quantity - 1),
-                        ),
-                        Text('${widget.item.quantity}', style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
-                        IconButton(
-                          icon: const Icon(Icons.add, size: 16),
-                          color: Colors.black,
-                          padding: EdgeInsets.zero,
-                          constraints: const BoxConstraints(minWidth: 36),
-                          onPressed: () => context.read<ListProvider>().updateQuantity(widget.item.id, widget.item.quantity + 1),
-                        ),
-                      ],
-                    ),
-                  ),
                 ],
               ),
             ),
