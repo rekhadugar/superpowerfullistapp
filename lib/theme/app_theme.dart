@@ -9,6 +9,7 @@ class AppTheme {
   static const Color textSecondary = Color(0xFF8E8E93); // Counts/Hints
   static const Color surface = Color(0xFFFFFFFF);    // Pure White
   static const Color border = Color(0xFFE5E5EA);     // Standard iOS border
+  static const Color error = Colors.red;
 
   // 2. Global Theme Configuration
   static final ThemeData lightTheme = ThemeData(

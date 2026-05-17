@@ -13,6 +13,10 @@ class TokenSearchEngine extends StatefulWidget {
   final bool isExpanded;
   final ValueChanged<bool> onToggle;
 
+  final bool hasError;
+  final String emptyPlaceholder;
+  final bool removable; // NEW: Controls if a selected item can be deselected
+
   const TokenSearchEngine({
     required this.title,
     required this.isMultiSelect,
@@ -23,6 +27,9 @@ class TokenSearchEngine extends StatefulWidget {
     required this.onChanged,
     required this.isExpanded,
     required this.onToggle,
+    this.hasError = false,
+    this.emptyPlaceholder = 'None',
+    this.removable = true, // Defaults to true for all standard tags
     super.key,
   });
 
@@ -94,18 +101,17 @@ class _TokenSearchEngineState extends State<TokenSearchEngine> {
     setState(() {
       if (widget.isMultiSelect) {
         if (_selectedTokens.contains(token)) {
-          _selectedTokens.remove(token);
+          if (widget.removable) _selectedTokens.remove(token);
         } else {
           _selectedTokens.add(token);
         }
-
         if (widget.isExpanded) {
           _searchController.clear();
           _focusNode.requestFocus();
         }
       } else {
         if (_selectedTokens.contains(token)) {
-          _selectedTokens.clear();
+          if (widget.removable) _selectedTokens.clear();
         } else {
           _selectedTokens = [token];
           widget.onToggle(false);
@@ -122,35 +128,59 @@ class _TokenSearchEngineState extends State<TokenSearchEngine> {
     widget.onToggle(false);
   }
 
-  Widget _buildPill(String text, {bool isSelected = false, bool isCreate = false}) {
+  Widget _buildPill(String text, {bool isSelected = false, bool isCreate = false, bool isPlaceholder = false}) {
+    // CHANGED: Slightly reduced pill text sizes for a cleaner look
     final double vPad = widget.smallPills ? 4.0 : 8.0;
     final double hPad = widget.smallPills ? 8.0 : 12.0;
-    final double fontSize = widget.smallPills ? 12.0 : 14.0;
+    final double fontSize = widget.smallPills ? 11.0 : 13.0;
+
+    Color bgColor;
+    Color borderColor;
+    Color textColor;
+
+    if (isPlaceholder) {
+      bgColor = Colors.transparent;
+      borderColor = AppTheme.primary;
+      textColor = AppTheme.primary;
+    } else if (isCreate) {
+      bgColor = AppTheme.primary.withValues(alpha: 0.1);
+      borderColor = AppTheme.primary;
+      textColor = AppTheme.primary;
+    } else if (isSelected) {
+      bgColor = AppTheme.primary;
+      borderColor = AppTheme.primary;
+      textColor = Colors.white;
+    } else {
+      bgColor = AppTheme.background;
+      borderColor = Colors.grey.shade300;
+      textColor = Colors.black87;
+    }
 
     return GestureDetector(
-      onTap: () => _toggleToken(text),
+      onTap: isPlaceholder ? null : () => _toggleToken(text),
       child: Container(
         padding: EdgeInsets.symmetric(horizontal: hPad, vertical: vPad),
         decoration: BoxDecoration(
-          color: isCreate ? AppTheme.primary.withValues(alpha: 0.1) : isSelected ? AppTheme.primary : AppTheme.background,
-          border: isCreate ? Border.all(color: AppTheme.primary, width: 1) : null,
+          color: bgColor,
+          border: Border.all(color: borderColor, width: 1),
           borderRadius: BorderRadius.circular(8),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            if (isCreate) ...[const Icon(Icons.add, size: 16, color: AppTheme.primary), const SizedBox(width: 4)],
+            if (isCreate) ...[const Icon(Icons.add, size: 14, color: AppTheme.primary), const SizedBox(width: 4)],
             Text(
               isCreate ? 'Create "$text"' : text,
               style: TextStyle(
                 fontSize: fontSize,
-                fontWeight: isSelected || isCreate ? FontWeight.w700 : FontWeight.w600,
-                color: isCreate ? AppTheme.primary : isSelected ? Colors.white : Colors.black87,
+                fontWeight: isSelected || isCreate || isPlaceholder ? FontWeight.w700 : FontWeight.w600,
+                color: textColor,
               ),
             ),
-            if (isSelected) ...[
+            // CHANGED: The 'x' only shows if the pill is selected AND it is allowed to be removed
+            if (isSelected && widget.removable) ...[
               const SizedBox(width: 6),
-              const Icon(Icons.close, size: 16, color: Colors.white),
+              const Icon(Icons.close, size: 14, color: Colors.white),
             ]
           ],
         ),
@@ -160,12 +190,16 @@ class _TokenSearchEngineState extends State<TokenSearchEngine> {
 
   @override
   Widget build(BuildContext context) {
+    final borderColor = widget.hasError
+        ? Colors.red
+        : (widget.isExpanded ? AppTheme.primary : AppTheme.border);
+
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: AppTheme.surface,
-        border: Border.all(color: widget.isExpanded ? AppTheme.primary : AppTheme.border),
+        border: Border.all(color: borderColor, width: widget.hasError ? 1.5 : 1.0),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Column(
@@ -177,10 +211,17 @@ class _TokenSearchEngineState extends State<TokenSearchEngine> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(widget.title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+                Text(
+                    widget.title,
+                    style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                        color: widget.hasError ? Colors.red : Colors.black
+                    )
+                ),
                 Icon(
                     widget.isExpanded ? Icons.remove_circle_outline : Icons.add_circle,
-                    color: AppTheme.primary,
+                    color: widget.hasError ? Colors.red : AppTheme.primary,
                     size: 28
                 ),
               ],
@@ -191,30 +232,47 @@ class _TokenSearchEngineState extends State<TokenSearchEngine> {
             duration: const Duration(milliseconds: 200),
             crossFadeState: widget.isExpanded ? CrossFadeState.showSecond : CrossFadeState.showFirst,
 
-            // MINIMIZED STATE
-            firstChild: Builder(builder: (context) {
-              final displayList = [
-                ..._selectedTokens,
-                ...widget.knownTokens.where((t) => !_selectedTokens.contains(t)),
-              ];
-
-              if (displayList.isEmpty) return const SizedBox(width: double.infinity, height: 0);
-
-              return Padding(
-                padding: const EdgeInsets.only(top: 12.0),
-                child: SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: Row(
-                    children: displayList.map((t) => Padding(
-                      padding: const EdgeInsets.only(right: 8.0),
-                      child: _buildPill(t, isSelected: _selectedTokens.contains(t)),
-                    )).toList(),
+            firstChild: Padding(
+              padding: const EdgeInsets.only(top: 12.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      children: _selectedTokens.isEmpty
+                          ? [_buildPill(widget.emptyPlaceholder, isPlaceholder: true)]
+                          : _selectedTokens.map((t) => Padding(
+                        padding: const EdgeInsets.only(right: 8.0),
+                        child: _buildPill(t, isSelected: true),
+                      )).toList(),
+                    ),
                   ),
-                ),
-              );
-            }),
 
-            // EXPANDED STATE
+                  Builder(builder: (context) {
+                    final availableTokens = widget.knownTokens
+                        .where((t) => !_selectedTokens.contains(t))
+                        .toList();
+
+                    if (availableTokens.isEmpty) return const SizedBox();
+
+                    return Padding(
+                      padding: const EdgeInsets.only(top: 12.0),
+                      child: SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: Row(
+                          children: availableTokens.map((t) => Padding(
+                            padding: const EdgeInsets.only(right: 8.0),
+                            child: _buildPill(t, isSelected: false),
+                          )).toList(),
+                        ),
+                      ),
+                    );
+                  }),
+                ],
+              ),
+            ),
+
             secondChild: Padding(
               padding: const EdgeInsets.only(top: 12.0),
               child: Column(
@@ -231,34 +289,26 @@ class _TokenSearchEngineState extends State<TokenSearchEngine> {
                         border: InputBorder.none
                     ),
                   ),
-                  const Divider(height: 24),
+                  const Divider(height: 16),
+
+                  Wrap(
+                    spacing: 8, runSpacing: 8,
+                    children: _selectedTokens.isEmpty
+                        ? [_buildPill(widget.emptyPlaceholder, isPlaceholder: true)]
+                        : _selectedTokens.map((t) => _buildPill(t, isSelected: true)).toList(),
+                  ),
+
+                  const SizedBox(height: 16),
+                  const Text('Available', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppTheme.textSecondary)),
+                  const SizedBox(height: 8),
 
                   Builder(builder: (context) {
-                    // 1. Get known tokens that match the query
                     final knownMatches = widget.knownTokens
-                        .where((t) => t.toLowerCase().contains(_currentQuery.toLowerCase()))
+                        .where((t) => t.toLowerCase().contains(_currentQuery.toLowerCase()) && !_selectedTokens.contains(t))
                         .toList();
 
-                    // 2. THE FIX: Combine matching known tokens WITH all custom selected tokens
-                    // Using a Set prevents duplicates in case a known token is also selected
-                    final Set<String> displaySet = {
-                      ..._selectedTokens,
-                      ...knownMatches,
-                    };
-
-                    final matches = displaySet.toList();
-
-                    // 3. Sort so selected items (both custom and known) always float to the front
-                    matches.sort((a, b) {
-                      final aSelected = _selectedTokens.contains(a);
-                      final bSelected = _selectedTokens.contains(b);
-                      if (aSelected && !bSelected) return -1;
-                      if (!aSelected && bSelected) return 1;
-                      return 0;
-                    });
-
-                    // 4. Exact match check against the combined set
-                    final exactMatchExists = displaySet.any((t) => t.toLowerCase() == _currentQuery.toLowerCase());
+                    final exactMatchExists = widget.knownTokens.any((t) => t.toLowerCase() == _currentQuery.toLowerCase()) ||
+                        _selectedTokens.any((t) => t.toLowerCase() == _currentQuery.toLowerCase());
 
                     return Wrap(
                       spacing: 8, runSpacing: 8,
@@ -266,7 +316,7 @@ class _TokenSearchEngineState extends State<TokenSearchEngine> {
                         if (_currentQuery.isNotEmpty && !exactMatchExists)
                           _buildPill(_currentQuery, isCreate: true),
 
-                        ...matches.map((t) => _buildPill(t, isSelected: _selectedTokens.contains(t))),
+                        ...knownMatches.map((t) => _buildPill(t, isSelected: false)),
                       ],
                     );
                   }),

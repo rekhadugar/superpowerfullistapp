@@ -3,13 +3,12 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/list_item.dart';
 
 class ListProvider extends ChangeNotifier {
-  // Connect directly to your Listicle Firestore database
   final FirebaseFirestore _db = FirebaseFirestore.instance;
 
   List<ListItem> _items = [];
-  // --- ADD THIS TO THE TOP OF YOUR PROVIDER VARIABLES ---
-  String _activeType = 'All Items';
+  List<ListItem> get items => _items;
 
+  String _activeType = 'All Items';
   String get activeType => _activeType;
 
   void setActiveType(String type) {
@@ -17,47 +16,80 @@ class ListProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  bool _groupByStore = false;
-  bool get groupByStore => _groupByStore;
+  // CHANGED: Renamed to groupBy and added 4 specific states
+  String _groupBy = 'Category'; // 'Category', 'Store', 'List', 'None'
+  String get groupBy => _groupBy;
 
-  void toggleGroupBy() {
-    _groupByStore = !_groupByStore;
+  // NEW: Directly set the group state instead of toggling
+  void setGroupBy(String method) {
+    _groupBy = method;
     notifyListeners();
   }
 
-  // When the provider boots up, start listening to the cloud immediately
   ListProvider() {
-
     _listenToItems();
   }
 
+  // --- DYNAMIC GROUPING ENGINE ---
+  List<dynamic> get groupedAndSortedItems {
+    final activeItems = _items.where((i) => !i.isCompleted && !i.isDeleted).toList();
 
-
-  List<ListItem> get items {
-    // We now filter out BOTH deleted AND completed items from the active view
-    final activeItems = _items.where((item) => !item.isDeleted && !item.isCompleted).toList();
-
-    if (_activeType == 'All Items') {
+    // If 'None' (Custom Layout), just return the pure sorted items with NO headers
+    if (_groupBy == 'None') {
+      activeItems.sort((a, b) => a.order.compareTo(b.order));
       return activeItems;
     }
-    return activeItems.where((item) => item.type == _activeType).toList();
+
+    final Map<String, List<ListItem>> groups = {};
+
+    if (_groupBy == 'Category') {
+      for (var item in activeItems) {
+        groups.putIfAbsent(item.category, () => []).add(item);
+      }
+    } else if (_groupBy == 'Store') {
+      for (var item in activeItems) {
+        if (item.locations.isEmpty || (item.locations.length == 1 && item.locations.first == 'Anywhere')) {
+          groups.putIfAbsent('Anywhere', () => []).add(item);
+        } else {
+          for (var loc in item.locations) {
+            if (loc != 'Anywhere') {
+              groups.putIfAbsent(loc, () => []).add(item);
+            }
+          }
+        }
+      }
+    } else if (_groupBy == 'List') {
+      // NEW: Groups by the Master List Type (Groceries, Hardware, etc.)
+      for (var item in activeItems) {
+        groups.putIfAbsent(item.type, () => []).add(item);
+      }
+    }
+
+    final List<dynamic> flattenedList = [];
+    final sortedGroupNames = groups.keys.toList()..sort();
+
+    for (var groupName in sortedGroupNames) {
+      flattenedList.add(groupName.toUpperCase());
+
+      final itemsInGroup = groups[groupName]!;
+      itemsInGroup.sort((a, b) => a.order.compareTo(b.order));
+
+      flattenedList.addAll(itemsInGroup);
+    }
+
+    return flattenedList;
   }
 
-  // THE MAGIC: A real-time stream that watches the 'items' collection
   void _listenToItems() {
     _db.collection('items').orderBy('order').snapshots().listen((snapshot) {
       _items = snapshot.docs
           .map((doc) => ListItem.fromMap(doc.data(), doc.id))
-      // Client-side filter: only keep items that are NOT soft-deleted
           .where((item) => !item.isDeleted)
           .toList();
       notifyListeners();
     });
   }
 
-  // --- ACTIONS ---
-
-  // 1. Add a new item to the cloud
   Future<void> addItem({
     required String name,
     required String type,
@@ -65,10 +97,10 @@ class ListProvider extends ChangeNotifier {
     required List<String> locations,
     required String context,
     int quantity = 1,
-    String unit = 'pcs', // ADDED THIS
+    String unit = 'pcs',
   }) async {
     final now = Timestamp.now();
-    final currentUser = 'Dhiraj'; // Temporary placeholder until we build Authentication
+    final currentUser = 'Dhiraj';
 
     final newItem = ListItem(
       id: '',
@@ -87,25 +119,21 @@ class ListProvider extends ChangeNotifier {
     await _db.collection('items').add(newItem.toMap());
   }
 
-  // 2. Toggle completion status in the cloud
   Future<void> toggleItemStatus(String id, bool currentStatus) async {
     await _db.collection('items').doc(id).update({
       'isCompleted': !currentStatus,
     });
   }
 
-  // 3. Save drag-and-drop positions to the cloud
   Future<void> reorderItems(int oldIndex, int newIndex) async {
     if (oldIndex < newIndex) {
       newIndex -= 1;
     }
 
-    // Move the item locally first so the UI feels instant
     final ListItem movedItem = _items.removeAt(oldIndex);
     _items.insert(newIndex, movedItem);
     notifyListeners();
 
-    // Create a batch write to update all the new order numbers in Firebase at once
     WriteBatch batch = _db.batch();
     for (int i = 0; i < _items.length; i++) {
       DocumentReference docRef = _db.collection('items').doc(_items[i].id);
@@ -113,65 +141,69 @@ class ListProvider extends ChangeNotifier {
     }
     await batch.commit();
   }
-  // 4. Delete item from the cloud
+
   Future<void> deleteItem(String id) async {
-    // 1. Remove locally first for an instant UI response
     _items.removeWhere((item) => item.id == id);
     notifyListeners();
 
-    // 2. Perform a SOFT DELETE in Firestore
     await _db.collection('items').doc(id).update({
       'isDeleted': true,
-      'deletedBy': 'Dhiraj', // Temporary placeholder
+      'deletedBy': 'Dhiraj',
       'deletedAt': Timestamp.now(),
     });
   }
-  // 5. Update quantity in the cloud
-  Future<void> updateQuantity(String id, int newQuantity) async {
-    if (newQuantity < 1) return; // Prevent quantity from dropping below 1
 
-    // Update locally for instant UI response
+  Future<void> updateQuantity(String id, int newQuantity) async {
+    if (newQuantity < 1) return;
+
     final index = _items.indexWhere((item) => item.id == id);
     if (index != -1) {
       _items[index].quantity = newQuantity;
       notifyListeners();
     }
 
-    // Push to Firestore
     await _db.collection('items').doc(id).update({
       'quantity': newQuantity,
     });
   }
 
-  // This handles the magic of changing an item's store/category via drag-and-drop
   Future<void> reorderAndMoveItem(String itemId, String newGroup, List<ListItem> newlyOrderedItems) async {
-    // 1. Update the dragged item's group locally
     final draggedItem = newlyOrderedItems.firstWhere((i) => i.id == itemId);
-    if (_groupByStore) {
-      draggedItem.locations = [newGroup];
-    } else {
-      draggedItem.category = newGroup;
+
+    // Auto-capitalize the header text before saving to DB
+    String formattedGroup = newGroup.split(' ').map((word) =>
+    word.isNotEmpty ? '${word[0].toUpperCase()}${word.substring(1).toLowerCase()}' : ''
+    ).join(' ');
+
+    // UPDATED: Dynamically assign the dropped item to the correct field based on active grouping
+    if (_groupBy == 'Store') {
+      draggedItem.locations = [formattedGroup];
+    } else if (_groupBy == 'Category') {
+      draggedItem.category = formattedGroup;
+    } else if (_groupBy == 'List') {
+      draggedItem.type = formattedGroup;
     }
 
-    // 2. Reassign the 'order' integer for every item based on its new visual position
     for (int i = 0; i < newlyOrderedItems.length; i++) {
       newlyOrderedItems[i].order = i;
     }
 
-    // 3. Update the UI instantly
     _items = newlyOrderedItems;
     notifyListeners();
 
-    // 4. Perform a Firestore Batch Update so we only make 1 network call instead of 50
     final batch = _db.batch();
     for (var item in newlyOrderedItems) {
       final docRef = _db.collection('items').doc(item.id);
-      batch.update(docRef, {
-        'order': item.order,
-        // Only update the group field for the item we actually dragged
-        if (item.id == itemId)
-          if (_groupByStore) 'locations': [newGroup] else 'category': newGroup,
-      });
+
+      Map<String, dynamic> updates = {'order': item.order};
+
+      if (item.id == itemId) {
+        if (_groupBy == 'Store') updates['locations'] = [formattedGroup];
+        if (_groupBy == 'Category') updates['category'] = formattedGroup;
+        if (_groupBy == 'List') updates['type'] = formattedGroup;
+      }
+
+      batch.update(docRef, updates);
     }
     await batch.commit();
   }
@@ -184,9 +216,8 @@ class ListProvider extends ChangeNotifier {
     required List<String> locations,
     required String contextString,
     required int quantity,
-    required String unit, // ADDED THIS
+    required String unit,
   }) async {
-    // 1. Optimistic Local Update (Replacing the whole object to bypass 'final' error)
     final index = _items.indexWhere((item) => item.id == id);
     if (index != -1) {
       final oldItem = _items[index];
@@ -198,15 +229,18 @@ class ListProvider extends ChangeNotifier {
         locations: locations,
         context: contextString,
         quantity: quantity,
-        unit: unit, // ADDED THIS
-        order: oldItem.order, // Preserve existing background data
+        unit: unit,
+        order: oldItem.order,
         isCompleted: oldItem.isCompleted,
         isDeleted: oldItem.isDeleted,
+        createdBy: oldItem.createdBy,
+        createdAt: oldItem.createdAt,
+        updatedBy: oldItem.updatedBy,
+        updatedAt: oldItem.updatedAt,
       );
       notifyListeners();
     }
 
-    // 2. Firestore Network Update
     try {
       await _db.collection('items').doc(id).update({
         'name': name,
@@ -215,7 +249,7 @@ class ListProvider extends ChangeNotifier {
         'locations': locations,
         'context': contextString,
         'quantity': quantity,
-        'unit': unit, // ADDED THIS
+        'unit': unit,
         'updatedAt': Timestamp.now(),
       });
     } catch (e) {

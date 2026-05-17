@@ -33,18 +33,11 @@ class _ItemFormModalState extends State<ItemFormModal> {
   final List<String> _unitOptions = ['pcs', 'lbs', 'kg', 'oz', 'gal', 'pk', 'box'];
 
   String? _activeEngine;
-  bool _isNameValid = false;
+  bool _showValidationErrors = false;
 
   @override
   void initState() {
     super.initState();
-
-    _nameController.addListener(() {
-      final isValid = _nameController.text.trim().isNotEmpty;
-      if (_isNameValid != isValid) {
-        setState(() => _isNameValid = isValid);
-      }
-    });
 
     if (widget.existingItem != null) {
       final item = widget.existingItem!;
@@ -59,12 +52,11 @@ class _ItemFormModalState extends State<ItemFormModal> {
 
       _quantity = item.quantity;
       _unit = 'pcs';
-      _isNameValid = true;
     }
     else {
       _selectedType = widget.activeListType == 'All Items' ? 'Groceries' : widget.activeListType;
-      _selectedCategory = 'Uncategorized';
-      _selectedLocations = ['Anywhere'];
+      _selectedCategory = '';
+      _selectedLocations = [];
       _selectedTags = [];
     }
   }
@@ -86,27 +78,32 @@ class _ItemFormModalState extends State<ItemFormModal> {
   }
 
   void _submit() {
-    if (_nameController.text.trim().isEmpty) return;
+    final name = _nameController.text.trim();
+
+    if (name.isEmpty) {
+      setState(() => _showValidationErrors = true);
+      return;
+    }
 
     final provider = context.read<ListProvider>();
 
     if (widget.existingItem != null) {
       provider.updateItem(
         id: widget.existingItem!.id,
-        name: _nameController.text.trim(),
+        name: name,
         type: _selectedType,
-        category: _selectedCategory,
-        locations: _selectedLocations,
+        category: _selectedCategory.isEmpty ? 'Uncategorized' : _selectedCategory,
+        locations: _selectedLocations.isEmpty ? ['Anywhere'] : _selectedLocations,
         contextString: _selectedTags.join(', '),
         quantity: _quantity,
         unit: _unit,
       );
     } else {
       provider.addItem(
-        name: _nameController.text.trim(),
+        name: name,
         type: _selectedType,
-        category: _selectedCategory,
-        locations: _selectedLocations,
+        category: _selectedCategory.isEmpty ? 'Uncategorized' : _selectedCategory,
+        locations: _selectedLocations.isEmpty ? ['Anywhere'] : _selectedLocations,
         context: _selectedTags.join(', '),
         quantity: _quantity,
         unit: _unit,
@@ -120,6 +117,9 @@ class _ItemFormModalState extends State<ItemFormModal> {
   Widget build(BuildContext context) {
     final bottomInset = MediaQuery.of(context).viewInsets.bottom;
     final isEditMode = widget.existingItem != null;
+
+    final hasNameError = _showValidationErrors && _nameController.text.trim().isEmpty;
+    final showListSelector = widget.activeListType == 'All Items' || isEditMode;
 
     return Container(
       constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.9),
@@ -156,21 +156,39 @@ class _ItemFormModalState extends State<ItemFormModal> {
                       controller: _nameController,
                       autofocus: !isEditMode,
                       textInputAction: TextInputAction.next,
-                      // CHANGED: Left-aligned text and cursor
                       textAlign: TextAlign.left,
-                      style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w800, color: Colors.black),
+                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: Colors.black),
+                      onChanged: (_) {
+                        if (hasNameError) setState(() {});
+                      },
                       onTap: () {
                         if (_activeEngine != null) {
                           setState(() => _activeEngine = null);
                         }
                       },
-                      // CHANGED: Updated hintText and made the decoration const for performance
-                      decoration: const InputDecoration(
-                        hintText: 'Item Name',
-                        hintStyle: TextStyle(color: Colors.black26),
-                        filled: false,
-                        border: InputBorder.none,
-                        contentPadding: EdgeInsets.symmetric(vertical: 8),
+                      // CHANGED: Styled to look like a distinct, rounded text box
+                      decoration: InputDecoration(
+                        hintText: hasNameError ? 'Item Name is required' : 'Item Name',
+                        hintStyle: TextStyle(color: hasNameError ? Colors.red.shade400 : Colors.black45),
+                        filled: true,
+                        fillColor: AppTheme.surface,
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide.none,
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: hasNameError
+                              ? const BorderSide(color: Colors.red, width: 1.5)
+                              : BorderSide.none,
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: hasNameError
+                              ? const BorderSide(color: Colors.red, width: 1.5)
+                              : const BorderSide(color: AppTheme.primary, width: 1.5),
+                        ),
                       ),
                     ),
                     const SizedBox(height: 16),
@@ -227,10 +245,11 @@ class _ItemFormModalState extends State<ItemFormModal> {
 
                     TokenSearchEngine(
                       title: 'Category',
+                      emptyPlaceholder: 'None',
                       isMultiSelect: false,
                       knownTokens: const ['Produce', 'Dairy', 'Bakery', 'Pantry', 'Frozen', 'Tools', 'Fasteners', 'Kids'],
-                      initialSelected: _selectedCategory != 'Uncategorized' ? [_selectedCategory] : [],
-                      onChanged: (tokens) => setState(() => _selectedCategory = tokens.isNotEmpty ? tokens.first : 'Uncategorized'),
+                      initialSelected: _selectedCategory.isNotEmpty ? [_selectedCategory] : [],
+                      onChanged: (tokens) => setState(() => _selectedCategory = tokens.isNotEmpty ? tokens.first : ''),
                       isExpanded: _activeEngine == 'Category',
                       onToggle: (isOpen) => _handleEngineToggle('Category', isOpen),
                     ),
@@ -238,10 +257,11 @@ class _ItemFormModalState extends State<ItemFormModal> {
 
                     TokenSearchEngine(
                       title: 'Stores',
+                      emptyPlaceholder: 'Any',
                       isMultiSelect: true,
                       knownTokens: const ['Costco', 'Tonys', 'Woodmans', 'Target', 'Home Depot', 'Walgreens'],
-                      initialSelected: _selectedLocations.where((loc) => loc != 'Anywhere').toList(),
-                      onChanged: (tokens) => setState(() => _selectedLocations = tokens.isNotEmpty ? tokens : ['Anywhere']),
+                      initialSelected: _selectedLocations,
+                      onChanged: (tokens) => setState(() => _selectedLocations = tokens),
                       isExpanded: _activeEngine == 'Stores',
                       onToggle: (isOpen) => _handleEngineToggle('Stores', isOpen),
                     ),
@@ -249,6 +269,7 @@ class _ItemFormModalState extends State<ItemFormModal> {
 
                     TokenSearchEngine(
                       title: 'Tags',
+                      emptyPlaceholder: 'None',
                       isMultiSelect: true, forceLowercase: true, smallPills: true,
                       knownTokens: const ['vegan', 'urgent', 'bulk', 'low sodium', 'sale'],
                       initialSelected: _selectedTags,
@@ -256,6 +277,20 @@ class _ItemFormModalState extends State<ItemFormModal> {
                       isExpanded: _activeEngine == 'Tags',
                       onToggle: (isOpen) => _handleEngineToggle('Tags', isOpen),
                     ),
+
+                    if (showListSelector) ...[
+                      const SizedBox(height: 16),
+                      TokenSearchEngine(
+                        title: 'Save to List',
+                        removable: false,
+                        isMultiSelect: false,
+                        knownTokens: const ['Groceries', 'Hardware', 'Pharmacy', 'Clothing'],
+                        initialSelected: [_selectedType],
+                        onChanged: (tokens) => setState(() => _selectedType = tokens.isNotEmpty ? tokens.first : 'Groceries'),
+                        isExpanded: _activeEngine == 'List',
+                        onToggle: (isOpen) => _handleEngineToggle('List', isOpen),
+                      ),
+                    ],
 
                     AnimatedContainer(
                       duration: const Duration(milliseconds: 300),
@@ -275,17 +310,16 @@ class _ItemFormModalState extends State<ItemFormModal> {
               child: ElevatedButton(
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppTheme.primary,
-                  disabledBackgroundColor: AppTheme.textSecondary.withValues(alpha: 0.2),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   elevation: 0,
                 ),
-                onPressed: _isNameValid ? _submit : null,
+                onPressed: _submit,
                 child: Text(
                     isEditMode ? 'Update Item' : 'Save Item',
-                    style: TextStyle(
+                    style: const TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.w700,
-                      color: _isNameValid ? AppTheme.surface : AppTheme.textSecondary,
+                      color: AppTheme.surface,
                     )
                 ),
               ),
