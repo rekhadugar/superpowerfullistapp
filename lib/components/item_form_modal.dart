@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:listicle_v2/components/token_search_engine.dart';
 import 'package:provider/provider.dart';
 import '../models/list_item.dart';
 import '../services/list_provider.dart';
 import '../theme/app_theme.dart';
+import 'token_search_engine.dart';
 
 class ItemFormModal extends StatefulWidget {
   final String activeListType;
@@ -25,18 +25,25 @@ class _ItemFormModalState extends State<ItemFormModal> {
   late String _selectedType;
   late String _selectedCategory;
   late List<String> _selectedLocations;
-  late List<String> _selectedTags; // Replaced Notes Controller
-  bool _isSearchActive = false; // Tracks if ANY engine is currently open
+  late List<String> _selectedTags;
 
   int _quantity = 1;
   String _unit = 'pcs';
   final List<String> _unitOptions = ['pcs', 'lbs', 'kg', 'oz', 'gal', 'pk', 'box'];
 
-  final List<String> _types = ['Groceries', 'Hardware', 'Pharmacy', 'Clothing'];
+  String? _activeEngine;
+  bool _isNameValid = false;
 
   @override
   void initState() {
     super.initState();
+
+    _nameController.addListener(() {
+      final isValid = _nameController.text.trim().isNotEmpty;
+      if (_isNameValid != isValid) {
+        setState(() => _isNameValid = isValid);
+      }
+    });
 
     if (widget.existingItem != null) {
       final item = widget.existingItem!;
@@ -45,13 +52,13 @@ class _ItemFormModalState extends State<ItemFormModal> {
       _selectedCategory = item.category;
       _selectedLocations = List.from(item.locations);
 
-      // Parse legacy context (Notes) into lowercase tags safely
       _selectedTags = item.context.isNotEmpty
           ? item.context.split(',').map((e) => e.trim().toLowerCase()).where((e) => e.isNotEmpty).toList()
           : [];
 
       _quantity = item.quantity;
       _unit = 'pcs';
+      _isNameValid = true;
     }
     else {
       _selectedType = widget.activeListType == 'All Items' ? 'Groceries' : widget.activeListType;
@@ -65,6 +72,16 @@ class _ItemFormModalState extends State<ItemFormModal> {
   void dispose() {
     _nameController.dispose();
     super.dispose();
+  }
+
+  void _handleEngineToggle(String engineName, bool isOpen) {
+    setState(() {
+      _activeEngine = isOpen ? engineName : null;
+    });
+
+    if (!isOpen) {
+      FocusScope.of(context).unfocus();
+    }
   }
 
   void _submit() {
@@ -81,7 +98,6 @@ class _ItemFormModalState extends State<ItemFormModal> {
         type: _selectedType,
         category: _selectedCategory,
         locations: _selectedLocations,
-        // Join the tags back into a string to match your current database model
         context: _selectedTags.join(', '),
       );
     }
@@ -119,7 +135,6 @@ class _ItemFormModalState extends State<ItemFormModal> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // 1. Name Input
                   TextField(
                     controller: _nameController,
                     autofocus: !isEditMode,
@@ -134,7 +149,6 @@ class _ItemFormModalState extends State<ItemFormModal> {
                   ),
                   const SizedBox(height: 16),
 
-                  // 2. Quantity & Unit
                   Row(
                     children: [
                       Container(
@@ -191,13 +205,9 @@ class _ItemFormModalState extends State<ItemFormModal> {
                     isMultiSelect: false,
                     knownTokens: const ['Produce', 'Dairy', 'Bakery', 'Pantry', 'Frozen', 'Tools', 'Fasteners', 'Kids'],
                     initialSelected: _selectedCategory != 'Uncategorized' ? [_selectedCategory] : [],
-                    onChanged: (tokens) {
-                      setState(() {
-                        _selectedCategory = tokens.isNotEmpty ? tokens.first : 'Uncategorized';
-                      });
-                    },
-                    // Tell the modal to hide the main Save button
-                    onSearchToggled: (isOpen) => setState(() => _isSearchActive = isOpen),
+                    onChanged: (tokens) => setState(() => _selectedCategory = tokens.isNotEmpty ? tokens.first : 'Uncategorized'),
+                    isExpanded: _activeEngine == 'Category',
+                    onToggle: (isOpen) => _handleEngineToggle('Category', isOpen),
                   ),
                   const SizedBox(height: 16),
 
@@ -207,82 +217,54 @@ class _ItemFormModalState extends State<ItemFormModal> {
                     isMultiSelect: true,
                     knownTokens: const ['Costco', 'Tonys', 'Woodmans', 'Target', 'Home Depot', 'Walgreens'],
                     initialSelected: _selectedLocations.where((loc) => loc != 'Anywhere').toList(),
-                    onChanged: (tokens) {
-                      setState(() {
-                        _selectedLocations = tokens.isNotEmpty ? tokens : ['Anywhere'];
-                      });
-                    },
-                    onSearchToggled: (isOpen) => setState(() => _isSearchActive = isOpen),
+                    onChanged: (tokens) => setState(() => _selectedLocations = tokens.isNotEmpty ? tokens : ['Anywhere']),
+                    isExpanded: _activeEngine == 'Stores',
+                    onToggle: (isOpen) => _handleEngineToggle('Stores', isOpen),
                   ),
                   const SizedBox(height: 16),
 
                   TokenSearchEngine(
                     title: 'Tags',
                     subtitle: 'vegan, urgent...',
-                    isMultiSelect: true,
-                    forceLowercase: true,
-                    smallPills: true,
+                    isMultiSelect: true, forceLowercase: true, smallPills: true,
                     knownTokens: const ['vegan', 'urgent', 'bulk', 'low sodium', 'sale'],
                     initialSelected: _selectedTags,
-                    onChanged: (tokens) {
-                      setState(() {
-                        _selectedTags = tokens;
-                      });
-                    },
-                    onSearchToggled: (isOpen) => setState(() => _isSearchActive = isOpen),
+                    onChanged: (tokens) => setState(() => _selectedTags = tokens),
+                    isExpanded: _activeEngine == 'Tags',
+                    onToggle: (isOpen) => _handleEngineToggle('Tags', isOpen),
                   ),
+
+                  // THE FIX: The Runway Buffer.
+                  // If an engine is open, give the scroll view 300px of empty space at the bottom
+                  // so the engine can be successfully pushed up above the keyboard.
+                  SizedBox(height: _activeEngine != null ? 300 : 24),
                 ],
               ),
             ),
           ),
 
-          // Submit Button
-          // Only show the main Save button if NO engines are actively searching
-          if (!_isSearchActive)
+          if (_activeEngine == null)
             SizedBox(
               width: double.infinity,
               height: 50,
               child: ElevatedButton(
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppTheme.primary,
+                  disabledBackgroundColor: AppTheme.textSecondary.withValues(alpha: 0.2),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   elevation: 0,
                 ),
-                onPressed: _submit,
+                onPressed: _isNameValid ? _submit : null,
                 child: Text(
                     isEditMode ? 'Update Item' : 'Save Item',
-                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: AppTheme.surface)
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                      color: _isNameValid ? AppTheme.surface : AppTheme.textSecondary,
+                    )
                 ),
               ),
             ),
-        ],
-      ),
-    );
-  }
-
-  // Temporary helper to visualize where our new engines will go
-  Widget _buildPlaceholderEngine(String title, String subtitle) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppTheme.surface,
-        border: Border.all(color: Colors.blue.withValues(alpha: 0.3)),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
-
-              const Icon(Icons.add_circle, color: Colors.blue),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Text('Engine: $subtitle', style: const TextStyle(color: Colors.blue, fontSize: 12)),
         ],
       ),
     );

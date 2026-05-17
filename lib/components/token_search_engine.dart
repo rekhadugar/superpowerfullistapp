@@ -11,8 +11,8 @@ class TokenSearchEngine extends StatefulWidget {
   final List<String> initialSelected;
   final ValueChanged<List<String>> onChanged;
 
-  // NEW: Tells the parent modal when to hide the "Save Item" button
-  final ValueChanged<bool>? onSearchToggled;
+  final bool isExpanded;
+  final ValueChanged<bool> onToggle;
 
   const TokenSearchEngine({
     required this.title,
@@ -23,7 +23,8 @@ class TokenSearchEngine extends StatefulWidget {
     required this.knownTokens,
     required this.initialSelected,
     required this.onChanged,
-    this.onSearchToggled,
+    required this.isExpanded,
+    required this.onToggle,
     super.key,
   });
 
@@ -32,9 +33,7 @@ class TokenSearchEngine extends StatefulWidget {
 }
 
 class _TokenSearchEngineState extends State<TokenSearchEngine> {
-  bool _isSearching = false;
   late List<String> _selectedTokens;
-
   final TextEditingController _searchController = TextEditingController();
   final FocusNode _focusNode = FocusNode();
   String _currentQuery = '';
@@ -54,48 +53,60 @@ class _TokenSearchEngineState extends State<TokenSearchEngine> {
   }
 
   @override
+  void didUpdateWidget(TokenSearchEngine oldWidget) {
+    super.didUpdateWidget(oldWidget);
+
+    if (widget.isExpanded && !oldWidget.isExpanded) {
+
+      // STEP 1: THE WAKE-UP DELAY (50ms)
+      // Gives AnimatedCrossFade time to remove the ExcludeFocus lock from the TextField.
+      // Fast enough to bypass OS popup blockers, but slow enough to guarantee the cursor attaches.
+      Future.delayed(const Duration(milliseconds: 50), () {
+        if (mounted) {
+          _focusNode.requestFocus();
+        }
+      });
+
+      // STEP 2: THE RUNWAY SCROLL (500ms)
+      // Waits for both the 200ms UI expansion and the ~350ms OS Keyboard deployment
+      // to completely finish before calculating the final scroll position.
+      Future.delayed(const Duration(milliseconds: 500), () {
+        if (mounted) {
+          Scrollable.ensureVisible(
+            context,
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeOutCubic,
+            alignment: 0.9,
+          );
+        }
+      });
+    }
+    else if (!widget.isExpanded && oldWidget.isExpanded) {
+      // Cleanly wipe memory when closing
+      _focusNode.unfocus();
+      _searchController.clear();
+      setState(() => _currentQuery = '');
+    }
+  }
+
+  @override
   void dispose() {
     _searchController.dispose();
     _focusNode.dispose();
     super.dispose();
   }
 
-  // --- LOGIC ---
-
-  void _toggleSearch(bool open) {
-    setState(() {
-      _isSearching = open;
-      if (_isSearching) {
-        _searchController.clear();
-        // FIX 1 & 2: By delaying the focus by 150ms, we let the AnimatedCrossFade
-        // physically open FIRST. This guarantees the cursor catches, AND it
-        // forces Flutter's scroll engine to calculate the correct keyboard height!
-        Future.delayed(const Duration(milliseconds: 150), () {
-          if (mounted) _focusNode.requestFocus();
-        });
-      } else {
-        _focusNode.unfocus();
-        _searchController.clear();
-        _currentQuery = '';
-      }
-    });
-    // Tell the parent modal to hide/show the main Save button
-    widget.onSearchToggled?.call(_isSearching);
-  }
-
   void _selectToken(String token) {
     setState(() {
       if (widget.isMultiSelect) {
-        if (!_selectedTokens.contains(token)) {
-          _selectedTokens.add(token);
-        }
-        if (_isSearching) {
+        if (!_selectedTokens.contains(token)) _selectedTokens.add(token);
+        if (widget.isExpanded) {
           _searchController.clear();
           _focusNode.requestFocus();
         }
       } else {
         _selectedTokens = [token];
-        _toggleSearch(false);
+        widget.onToggle(false);
       }
     });
     widget.onChanged(_selectedTokens);
@@ -112,10 +123,8 @@ class _TokenSearchEngineState extends State<TokenSearchEngine> {
     if (_currentQuery.trim().isNotEmpty) {
       _selectToken(_currentQuery.trim());
     }
-    _toggleSearch(false); // Close the engine
+    widget.onToggle(false);
   }
-
-  // --- UI BUILDERS ---
 
   Widget _buildPill(String text, {bool isSelected = false, bool isCreate = false, VoidCallback? onTap, VoidCallback? onRemove}) {
     final double vPad = widget.smallPills ? 4.0 : 8.0;
@@ -127,19 +136,14 @@ class _TokenSearchEngineState extends State<TokenSearchEngine> {
       child: Container(
         padding: EdgeInsets.symmetric(horizontal: hPad, vertical: vPad),
         decoration: BoxDecoration(
-          color: isCreate
-              ? AppTheme.primary.withValues(alpha: 0.1)
-              : isSelected ? AppTheme.primary : AppTheme.background,
+          color: isCreate ? AppTheme.primary.withValues(alpha: 0.1) : isSelected ? AppTheme.primary : AppTheme.background,
           border: isCreate ? Border.all(color: AppTheme.primary, width: 1) : null,
           borderRadius: BorderRadius.circular(8),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            if (isCreate) ...[
-              const Icon(Icons.add, size: 16, color: AppTheme.primary),
-              const SizedBox(width: 4),
-            ],
+            if (isCreate) ...[const Icon(Icons.add, size: 16, color: AppTheme.primary), const SizedBox(width: 4)],
             Text(
               isCreate ? 'Create "$text"' : text,
               style: TextStyle(
@@ -150,10 +154,7 @@ class _TokenSearchEngineState extends State<TokenSearchEngine> {
             ),
             if (onRemove != null) ...[
               const SizedBox(width: 6),
-              GestureDetector(
-                onTap: onRemove,
-                child: Icon(Icons.close, size: 16, color: isSelected ? Colors.white : Colors.black54),
-              ),
+              GestureDetector(onTap: onRemove, child: Icon(Icons.close, size: 16, color: isSelected ? Colors.white : Colors.black54)),
             ]
           ],
         ),
@@ -168,16 +169,13 @@ class _TokenSearchEngineState extends State<TokenSearchEngine> {
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: AppTheme.surface,
-        border: Border.all(color: _isSearching ? AppTheme.primary : AppTheme.border),
+        border: Border.all(color: widget.isExpanded ? AppTheme.primary : AppTheme.border),
         borderRadius: BorderRadius.circular(12),
       ),
       child: AnimatedCrossFade(
         duration: const Duration(milliseconds: 200),
-        crossFadeState: _isSearching ? CrossFadeState.showSecond : CrossFadeState.showFirst,
+        crossFadeState: widget.isExpanded ? CrossFadeState.showSecond : CrossFadeState.showFirst,
 
-        // ==========================================
-        // STATE 1: VIEW MODE (Quick Select)
-        // ==========================================
         firstChild: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -188,20 +186,16 @@ class _TokenSearchEngineState extends State<TokenSearchEngine> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(widget.title, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700)),
-                    if (_selectedTokens.isEmpty)
-                      Text(widget.subtitle, style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary)),
+                    if (_selectedTokens.isEmpty) Text(widget.subtitle, style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary)),
                   ],
                 ),
                 IconButton(
                   icon: const Icon(Icons.add_circle, color: AppTheme.primary, size: 28),
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(),
-                  onPressed: () => _toggleSearch(true),
+                  padding: EdgeInsets.zero, constraints: const BoxConstraints(),
+                  onPressed: () => widget.onToggle(true),
                 ),
               ],
             ),
-
-            // 1A. Show Active Selections
             if (_selectedTokens.isNotEmpty) ...[
               const SizedBox(height: 12),
               Wrap(
@@ -209,40 +203,31 @@ class _TokenSearchEngineState extends State<TokenSearchEngine> {
                 children: _selectedTokens.map((t) => _buildPill(
                   t, isSelected: true,
                   onRemove: widget.isMultiSelect ? () => _removeToken(t) : null,
-                  onTap: () => _toggleSearch(true),
+                  onTap: () => widget.onToggle(true),
                 )).toList(),
               ),
             ],
-
-            // 1B. FIX 4: The Quick-Select Scrollable List
-            Builder(
-                builder: (context) {
-                  // Find all known tokens that haven't been selected yet
-                  final availableTokens = widget.knownTokens.where((t) => !_selectedTokens.contains(t)).toList();
-                  if (availableTokens.isEmpty) return const SizedBox();
-
-                  return Column(
-                    children: [
-                      const SizedBox(height: 12),
-                      SingleChildScrollView(
-                        scrollDirection: Axis.horizontal,
-                        child: Row(
-                          children: availableTokens.map((t) => Padding(
-                            padding: const EdgeInsets.only(right: 8.0),
-                            child: _buildPill(t, onTap: () => _selectToken(t)), // Tapping instantly selects it
-                          )).toList(),
-                        ),
-                      ),
-                    ],
-                  );
-                }
-            ),
+            Builder(builder: (context) {
+              final availableTokens = widget.knownTokens.where((t) => !_selectedTokens.contains(t)).toList();
+              if (availableTokens.isEmpty) return const SizedBox();
+              return Column(
+                children: [
+                  const SizedBox(height: 12),
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      children: availableTokens.map((t) => Padding(
+                        padding: const EdgeInsets.only(right: 8.0),
+                        child: _buildPill(t, onTap: () => _selectToken(t)),
+                      )).toList(),
+                    ),
+                  ),
+                ],
+              );
+            }),
           ],
         ),
 
-        // ==========================================
-        // STATE 2: SEARCH MODE (Active Keyboard)
-        // ==========================================
         secondChild: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -253,53 +238,36 @@ class _TokenSearchEngineState extends State<TokenSearchEngine> {
               ),
               const SizedBox(height: 12),
             ],
-
             TextField(
-              controller: _searchController,
-              focusNode: _focusNode,
-              textInputAction: TextInputAction.done,
-              onSubmitted: (_) => _handleDone(),
-              decoration: InputDecoration(
-                hintText: 'Search or add ${widget.title.toLowerCase()}...',
-                isDense: true, border: InputBorder.none,
-              ),
+              controller: _searchController, focusNode: _focusNode,
+              textInputAction: TextInputAction.done, onSubmitted: (_) => _handleDone(),
+              decoration: InputDecoration(hintText: 'Search or add ${widget.title.toLowerCase()}...', isDense: true, border: InputBorder.none),
             ),
             const Divider(height: 24),
-
-            Builder(
-                builder: (context) {
-                  final matches = widget.knownTokens
-                      .where((t) => t.toLowerCase().contains(_currentQuery.toLowerCase()))
-                      .where((t) => !_selectedTokens.contains(t)).toList();
-                  final exactMatchExists = widget.knownTokens.any((t) => t.toLowerCase() == _currentQuery.toLowerCase());
-
-                  return Wrap(
-                    spacing: 8, runSpacing: 8,
-                    children: [
-                      if (_currentQuery.isNotEmpty && !exactMatchExists)
-                        _buildPill(_currentQuery, isCreate: true, onTap: () => _selectToken(_currentQuery)),
-                      ...matches.map((t) => _buildPill(t, onTap: () => _selectToken(t))),
-                    ],
-                  );
-                }
-            ),
+            Builder(builder: (context) {
+              final matches = widget.knownTokens.where((t) => t.toLowerCase().contains(_currentQuery.toLowerCase())).where((t) => !_selectedTokens.contains(t)).toList();
+              final exactMatchExists = widget.knownTokens.any((t) => t.toLowerCase() == _currentQuery.toLowerCase());
+              return Wrap(
+                spacing: 8, runSpacing: 8,
+                children: [
+                  if (_currentQuery.isNotEmpty && !exactMatchExists) _buildPill(_currentQuery, isCreate: true, onTap: () => _selectToken(_currentQuery)),
+                  ...matches.map((t) => _buildPill(t, onTap: () => _selectToken(t))),
+                ],
+              );
+            }),
             const SizedBox(height: 16),
-
-            // FIX 3: Context-Aware Cancel & Done Buttons
             Row(
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
                 TextButton(
-                  onPressed: () => _toggleSearch(false),
+                  onPressed: () => widget.onToggle(false),
                   child: const Text('Cancel', style: TextStyle(color: AppTheme.textSecondary, fontWeight: FontWeight.w600)),
                 ),
                 const SizedBox(width: 8),
                 ElevatedButton(
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: AppTheme.success,
-                    elevation: 0,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    backgroundColor: AppTheme.success, elevation: 0,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)), padding: const EdgeInsets.symmetric(horizontal: 16),
                   ),
                   onPressed: _handleDone,
                   child: const Text('Done', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
