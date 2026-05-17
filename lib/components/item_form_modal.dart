@@ -90,15 +90,27 @@ class _ItemFormModalState extends State<ItemFormModal> {
     final provider = context.read<ListProvider>();
 
     if (widget.existingItem != null) {
-      // TODO: Build the 'updateItem' function in ListProvider
-      debugPrint('Update Item: ${_nameController.text}');
+      // Execute the Update
+      provider.updateItem(
+        id: widget.existingItem!.id,
+        name: _nameController.text.trim(),
+        type: _selectedType,
+        category: _selectedCategory,
+        locations: _selectedLocations,
+        contextString: _selectedTags.join(', '),
+        quantity: _quantity,
+        unit: _unit, // ADDED THIS
+      );
     } else {
+      // Execute the Add
       provider.addItem(
         name: _nameController.text.trim(),
         type: _selectedType,
         category: _selectedCategory,
         locations: _selectedLocations,
         context: _selectedTags.join(', '),
+        quantity: _quantity,
+        unit: _unit, // ADDED THIS
       );
     }
 
@@ -139,6 +151,12 @@ class _ItemFormModalState extends State<ItemFormModal> {
                     controller: _nameController,
                     autofocus: !isEditMode,
                     textInputAction: TextInputAction.next,
+                    // NEW: Tapping the main name box instantly closes any open token engines
+                    onTap: () {
+                      if (_activeEngine != null) {
+                        setState(() => _activeEngine = null);
+                      }
+                    },
                     decoration: InputDecoration(
                       hintText: 'e.g., Paper Towels',
                       filled: true,

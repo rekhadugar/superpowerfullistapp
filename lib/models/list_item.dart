@@ -3,12 +3,13 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 class ListItem {
   final String id;
   final String name;
+
   bool isCompleted;
   int order;
 
   // Quantifiable Fields
   int quantity;
-  String unit;
+  final String unit;
 
   // Relational Fields
   String type;
@@ -31,7 +32,7 @@ class ListItem {
     this.isCompleted = false,
     this.order = 0,
     this.quantity = 1,
-    this.unit = '',
+    this.unit = 'pcs',
     this.type = 'Groceries',
     this.category = 'Uncategorized',
     this.locations = const ['Anywhere'],

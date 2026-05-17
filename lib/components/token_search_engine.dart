@@ -126,6 +126,21 @@ class _TokenSearchEngineState extends State<TokenSearchEngine> {
     widget.onToggle(false);
   }
 
+  void _handleTextFieldTap() {
+    // If they tap the text box directly (e.g., bringing a minimized keyboard back up)
+    // Give the OS keyboard time to rise, then re-calculate the scroll
+    Future.delayed(const Duration(milliseconds: 400), () {
+      if (mounted) {
+        Scrollable.ensureVisible(
+          context,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeOutCubic,
+          alignment: 0.9,
+        );
+      }
+    });
+  }
+
   Widget _buildPill(String text, {bool isSelected = false, bool isCreate = false, VoidCallback? onTap, VoidCallback? onRemove}) {
     final double vPad = widget.smallPills ? 4.0 : 8.0;
     final double hPad = widget.smallPills ? 8.0 : 12.0;
@@ -241,6 +256,7 @@ class _TokenSearchEngineState extends State<TokenSearchEngine> {
             TextField(
               controller: _searchController, focusNode: _focusNode,
               textInputAction: TextInputAction.done, onSubmitted: (_) => _handleDone(),
+              onTap: _handleTextFieldTap, // NEW: Fires scroll logic on direct tap
               decoration: InputDecoration(hintText: 'Search or add ${widget.title.toLowerCase()}...', isDense: true, border: InputBorder.none),
             ),
             const Divider(height: 24),

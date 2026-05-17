@@ -62,9 +62,10 @@ class ListProvider extends ChangeNotifier {
     required String name,
     required String type,
     required String category,
-    List<String> locations = const ['Anywhere'],
-    String unit = '',
-    String context = '',
+    required List<String> locations,
+    required String context,
+    int quantity = 1,
+    String unit = 'pcs', // ADDED THIS
   }) async {
     final now = Timestamp.now();
     final currentUser = 'Dhiraj'; // Temporary placeholder until we build Authentication
@@ -173,5 +174,52 @@ class ListProvider extends ChangeNotifier {
       });
     }
     await batch.commit();
+  }
+
+  Future<void> updateItem({
+    required String id,
+    required String name,
+    required String type,
+    required String category,
+    required List<String> locations,
+    required String contextString,
+    required int quantity,
+    required String unit, // ADDED THIS
+  }) async {
+    // 1. Optimistic Local Update (Replacing the whole object to bypass 'final' error)
+    final index = _items.indexWhere((item) => item.id == id);
+    if (index != -1) {
+      final oldItem = _items[index];
+      _items[index] = ListItem(
+        id: oldItem.id,
+        name: name,
+        type: type,
+        category: category,
+        locations: locations,
+        context: contextString,
+        quantity: quantity,
+        unit: unit, // ADDED THIS
+        order: oldItem.order, // Preserve existing background data
+        isCompleted: oldItem.isCompleted,
+        isDeleted: oldItem.isDeleted,
+      );
+      notifyListeners();
+    }
+
+    // 2. Firestore Network Update
+    try {
+      await _db.collection('items').doc(id).update({
+        'name': name,
+        'type': type,
+        'category': category,
+        'locations': locations,
+        'context': contextString,
+        'quantity': quantity,
+        'unit': unit, // ADDED THIS
+        'updatedAt': Timestamp.now(),
+      });
+    } catch (e) {
+      debugPrint('Error updating item $id: $e');
+    }
   }
 }
