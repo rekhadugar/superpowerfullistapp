@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart'; // Required for ScrollDirection
 import 'package:provider/provider.dart';
 import '../models/list_item.dart';
 import '../services/list_provider.dart';
@@ -80,7 +81,7 @@ class _ItemFormModalState extends State<ItemFormModal> {
     });
 
     if (!isOpen) {
-      FocusScope.of(context).unfocus();
+      FocusManager.instance.primaryFocus?.unfocus();
     }
   }
 
@@ -90,7 +91,6 @@ class _ItemFormModalState extends State<ItemFormModal> {
     final provider = context.read<ListProvider>();
 
     if (widget.existingItem != null) {
-      // Execute the Update
       provider.updateItem(
         id: widget.existingItem!.id,
         name: _nameController.text.trim(),
@@ -99,10 +99,9 @@ class _ItemFormModalState extends State<ItemFormModal> {
         locations: _selectedLocations,
         contextString: _selectedTags.join(', '),
         quantity: _quantity,
-        unit: _unit, // ADDED THIS
+        unit: _unit,
       );
     } else {
-      // Execute the Add
       provider.addItem(
         name: _nameController.text.trim(),
         type: _selectedType,
@@ -110,7 +109,7 @@ class _ItemFormModalState extends State<ItemFormModal> {
         locations: _selectedLocations,
         context: _selectedTags.join(', '),
         quantity: _quantity,
-        unit: _unit, // ADDED THIS
+        unit: _unit,
       );
     }
 
@@ -143,120 +142,135 @@ class _ItemFormModalState extends State<ItemFormModal> {
           const SizedBox(height: 20),
 
           Expanded(
-            child: SingleChildScrollView(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  TextField(
-                    controller: _nameController,
-                    autofocus: !isEditMode,
-                    textInputAction: TextInputAction.next,
-                    // NEW: Tapping the main name box instantly closes any open token engines
-                    onTap: () {
-                      if (_activeEngine != null) {
-                        setState(() => _activeEngine = null);
-                      }
-                    },
-                    decoration: InputDecoration(
-                      hintText: 'e.g., Paper Towels',
-                      filled: true,
-                      fillColor: AppTheme.surface,
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-
-                  Row(
-                    children: [
-                      Container(
-                        height: 48,
-                        decoration: BoxDecoration(color: AppTheme.surface, borderRadius: BorderRadius.circular(12)),
-                        child: Row(
-                          children: [
-                            IconButton(
-                              icon: const Icon(Icons.remove),
-                              onPressed: () => setState(() => _quantity = _quantity > 1 ? _quantity - 1 : 1),
-                            ),
-                            SizedBox(
-                              width: 30,
-                              child: Text('$_quantity', textAlign: TextAlign.center, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
-                            ),
-                            IconButton(
-                              icon: const Icon(Icons.add),
-                              onPressed: () => setState(() => _quantity++),
-                            ),
-                          ],
-                        ),
+            child: NotificationListener<UserScrollNotification>(
+              onNotification: (UserScrollNotification notification) {
+                if (_activeEngine != null) {
+                  // NATIVE UX FIX: Only dismiss the keyboard when pulling DOWN (reverse).
+                  // Pushing UP (forward) keeps the keyboard open so the user can scroll
+                  // into the runway and reach lower elements without the UI glitching.
+                  if (notification.direction == ScrollDirection.reverse) {
+                    FocusManager.instance.primaryFocus?.unfocus();
+                    setState(() => _activeEngine = null);
+                  }
+                }
+                return false;
+              },
+              child: SingleChildScrollView(
+                keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    TextField(
+                      controller: _nameController,
+                      autofocus: !isEditMode,
+                      textInputAction: TextInputAction.next,
+                      onTap: () {
+                        if (_activeEngine != null) {
+                          setState(() => _activeEngine = null);
+                        }
+                      },
+                      decoration: InputDecoration(
+                        hintText: 'e.g., Paper Towels',
+                        filled: true,
+                        fillColor: AppTheme.surface,
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                       ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Container(
+                    ),
+                    const SizedBox(height: 16),
+
+                    Row(
+                      children: [
+                        Container(
                           height: 48,
-                          padding: const EdgeInsets.symmetric(horizontal: 16),
                           decoration: BoxDecoration(color: AppTheme.surface, borderRadius: BorderRadius.circular(12)),
-                          child: DropdownButtonHideUnderline(
-                            child: DropdownButton<String>(
-                              value: _unit,
-                              isExpanded: true,
-                              icon: const Icon(Icons.keyboard_arrow_down, color: AppTheme.textSecondary),
-                              items: _unitOptions.map((String unit) {
-                                return DropdownMenuItem<String>(
-                                  value: unit,
-                                  child: Text(unit, style: const TextStyle(fontWeight: FontWeight.w600)),
-                                );
-                              }).toList(),
-                              onChanged: (String? newValue) {
-                                if (newValue != null) setState(() => _unit = newValue);
-                              },
+                          child: Row(
+                            children: [
+                              IconButton(
+                                icon: const Icon(Icons.remove),
+                                onPressed: () => setState(() => _quantity = _quantity > 1 ? _quantity - 1 : 1),
+                              ),
+                              SizedBox(
+                                width: 30,
+                                child: Text('$_quantity', textAlign: TextAlign.center, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+                              ),
+                              IconButton(
+                                icon: const Icon(Icons.add),
+                                onPressed: () => setState(() => _quantity++),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Container(
+                            height: 48,
+                            padding: const EdgeInsets.symmetric(horizontal: 16),
+                            decoration: BoxDecoration(color: AppTheme.surface, borderRadius: BorderRadius.circular(12)),
+                            child: DropdownButtonHideUnderline(
+                              child: DropdownButton<String>(
+                                value: _unit,
+                                isExpanded: true,
+                                icon: const Icon(Icons.keyboard_arrow_down, color: AppTheme.textSecondary),
+                                items: _unitOptions.map((String unit) {
+                                  return DropdownMenuItem<String>(
+                                    value: unit,
+                                    child: Text(unit, style: const TextStyle(fontWeight: FontWeight.w600)),
+                                  );
+                                }).toList(),
+                                onChanged: (String? newValue) {
+                                  if (newValue != null) setState(() => _unit = newValue);
+                                },
+                              ),
                             ),
                           ),
                         ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 24),
+                      ],
+                    ),
+                    const SizedBox(height: 24),
 
-                  TokenSearchEngine(
-                    title: 'Category',
-                    subtitle: 'Produce, Dairy...',
-                    isMultiSelect: false,
-                    knownTokens: const ['Produce', 'Dairy', 'Bakery', 'Pantry', 'Frozen', 'Tools', 'Fasteners', 'Kids'],
-                    initialSelected: _selectedCategory != 'Uncategorized' ? [_selectedCategory] : [],
-                    onChanged: (tokens) => setState(() => _selectedCategory = tokens.isNotEmpty ? tokens.first : 'Uncategorized'),
-                    isExpanded: _activeEngine == 'Category',
-                    onToggle: (isOpen) => _handleEngineToggle('Category', isOpen),
-                  ),
-                  const SizedBox(height: 16),
+                    TokenSearchEngine(
+                      title: 'Category',
+                      subtitle: 'Produce, Dairy...',
+                      isMultiSelect: false,
+                      knownTokens: const ['Produce', 'Dairy', 'Bakery', 'Pantry', 'Frozen', 'Tools', 'Fasteners', 'Kids'],
+                      initialSelected: _selectedCategory != 'Uncategorized' ? [_selectedCategory] : [],
+                      onChanged: (tokens) => setState(() => _selectedCategory = tokens.isNotEmpty ? tokens.first : 'Uncategorized'),
+                      isExpanded: _activeEngine == 'Category',
+                      onToggle: (isOpen) => _handleEngineToggle('Category', isOpen),
+                    ),
+                    const SizedBox(height: 16),
 
-                  TokenSearchEngine(
-                    title: 'Stores',
-                    subtitle: 'Costco, Target...',
-                    isMultiSelect: true,
-                    knownTokens: const ['Costco', 'Tonys', 'Woodmans', 'Target', 'Home Depot', 'Walgreens'],
-                    initialSelected: _selectedLocations.where((loc) => loc != 'Anywhere').toList(),
-                    onChanged: (tokens) => setState(() => _selectedLocations = tokens.isNotEmpty ? tokens : ['Anywhere']),
-                    isExpanded: _activeEngine == 'Stores',
-                    onToggle: (isOpen) => _handleEngineToggle('Stores', isOpen),
-                  ),
-                  const SizedBox(height: 16),
+                    TokenSearchEngine(
+                      title: 'Stores',
+                      subtitle: 'Costco, Target...',
+                      isMultiSelect: true,
+                      knownTokens: const ['Costco', 'Tonys', 'Woodmans', 'Target', 'Home Depot', 'Walgreens'],
+                      initialSelected: _selectedLocations.where((loc) => loc != 'Anywhere').toList(),
+                      onChanged: (tokens) => setState(() => _selectedLocations = tokens.isNotEmpty ? tokens : ['Anywhere']),
+                      isExpanded: _activeEngine == 'Stores',
+                      onToggle: (isOpen) => _handleEngineToggle('Stores', isOpen),
+                    ),
+                    const SizedBox(height: 16),
 
-                  TokenSearchEngine(
-                    title: 'Tags',
-                    subtitle: 'vegan, urgent...',
-                    isMultiSelect: true, forceLowercase: true, smallPills: true,
-                    knownTokens: const ['vegan', 'urgent', 'bulk', 'low sodium', 'sale'],
-                    initialSelected: _selectedTags,
-                    onChanged: (tokens) => setState(() => _selectedTags = tokens),
-                    isExpanded: _activeEngine == 'Tags',
-                    onToggle: (isOpen) => _handleEngineToggle('Tags', isOpen),
-                  ),
+                    TokenSearchEngine(
+                      title: 'Tags',
+                      subtitle: 'vegan, urgent...',
+                      isMultiSelect: true, forceLowercase: true, smallPills: true,
+                      knownTokens: const ['vegan', 'urgent', 'bulk', 'low sodium', 'sale'],
+                      initialSelected: _selectedTags,
+                      onChanged: (tokens) => setState(() => _selectedTags = tokens),
+                      isExpanded: _activeEngine == 'Tags',
+                      onToggle: (isOpen) => _handleEngineToggle('Tags', isOpen),
+                    ),
 
-                  // THE FIX: The Runway Buffer.
-                  // If an engine is open, give the scroll view 300px of empty space at the bottom
-                  // so the engine can be successfully pushed up above the keyboard.
-                  SizedBox(height: _activeEngine != null ? 300 : 24),
-                ],
+                    AnimatedContainer(
+                      duration: const Duration(milliseconds: 300),
+                      curve: Curves.easeOutCubic,
+                      height: _activeEngine != null ? 300 : 24,
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
