@@ -1,3 +1,4 @@
+import 'dart:math' as math; // <-- Add this import at the top
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../components/item_form_modal.dart';
@@ -8,6 +9,9 @@ import '../services/list_provider.dart';
 import '../components/list_item_card.dart';
 import '../theme/app_theme.dart';
 
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+
 class MainScreen extends StatefulWidget {
   const MainScreen({super.key});
 
@@ -16,23 +20,136 @@ class MainScreen extends StatefulWidget {
 }
 
 class _MainScreenState extends State<MainScreen> {
+  final ValueNotifier<StickyHeaderState> _headerState = ValueNotifier(
+    StickyHeaderState(title: ''),
+  );
+
+  final Map<String, GlobalKey> _headerKeys = {};
+  final GlobalKey _stackKey = GlobalKey();
+
+  // THE FIX: A GPS tracker for the floating App Bar
+  final GlobalKey _appBarKey = GlobalKey();
+
+  final GlobalKey _phantomHeaderKey = GlobalKey();
+
+  // THE FIX: The invisible bumper at the very end of the items
+  final GlobalKey _endOfListKey = GlobalKey();
+
   final TextEditingController _controller = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    // Run the math once immediately after the first frame draws to set the initial header
+    WidgetsBinding.instance.addPostFrameCallback((_) => _calculateStickyPhysics());
+  }
 
   @override
   void dispose() {
     _controller.dispose();
+    _headerState.dispose();
     super.dispose();
+  }
+
+  void _calculateStickyPhysics() {
+    if (!mounted || _stackKey.currentContext == null) return;
+
+    final RenderBox stackBox = _stackKey.currentContext!.findRenderObject() as RenderBox;
+    final double stackTopY = stackBox.localToGlobal(Offset.zero).dy;
+
+    double appBarBottomY = stackTopY;
+    if (_appBarKey.currentContext != null) {
+      final RenderBox appBarBox = _appBarKey.currentContext!.findRenderObject() as RenderBox;
+      appBarBottomY = appBarBox.localToGlobal(Offset.zero).dy;
+    }
+
+    final double pinY = math.max(stackTopY, appBarBottomY);
+
+    // --- THE FIX: Sliver-Immune Logical Tracking ---
+    final listProvider = context.read<ListProvider>();
+    final List<String> allHeaders = listProvider.groupedAndSortedItems.whereType<String>().toList();
+
+    if (allHeaders.isEmpty) {
+      if (_headerState.value.title.isNotEmpty) {
+        _headerState.value = StickyHeaderState(title: '');
+      }
+      return;
+    }
+
+    String activeHeader = '';
+    String? nextHeader;
+    double nextHeaderY = double.infinity;
+    int lastSeenAboveIndex = -1;
+
+    for (int i = 0; i < allHeaders.length; i++) {
+      final String headerTitle = allHeaders[i];
+      final GlobalKey? key = _headerKeys[headerTitle];
+
+      // Only check headers that are currently rendered on screen
+      if (key != null && key.currentContext != null) {
+        final RenderBox box = key.currentContext!.findRenderObject() as RenderBox;
+        final dy = box.localToGlobal(Offset.zero).dy;
+
+        if (dy <= pinY + 1.0) {
+          lastSeenAboveIndex = i; // We saw this header above the pin line
+        } else {
+          // Found the very first visible header BELOW the pin line
+          nextHeader = headerTitle;
+          nextHeaderY = dy;
+          // The active header MUST logically be the one right before this one!
+          if (i > 0) activeHeader = allHeaders[i - 1];
+          break;
+        }
+      }
+    }
+
+    // Fallback: If no headers are below the line, but we saw one above it, it's the active one.
+    if (nextHeader == null && lastSeenAboveIndex != -1) {
+      activeHeader = allHeaders[lastSeenAboveIndex];
+    }
+
+    // --- THE FIX: Dynamic Sub-Pixel Height Measurement ---
+    // --- THE FIX: Dynamic Sub-Pixel Height & Bumper Push ---
+    double pushOffset = 0.0;
+    double stickyHeight = 56.0;
+    if (_phantomHeaderKey.currentContext != null) {
+      stickyHeight = (_phantomHeaderKey.currentContext!.findRenderObject() as RenderBox).size.height;
+    }
+
+    if (nextHeader != null && nextHeaderY < pinY + stickyHeight) {
+      // Normal collision with the next category header
+      pushOffset = nextHeaderY - (pinY + stickyHeight);
+    } else if (nextHeader == null && _endOfListKey.currentContext != null) {
+      // THE BUMPER: If there's no next header, the bottom of the list pushes it off!
+      final RenderBox endBox = _endOfListKey.currentContext!.findRenderObject() as RenderBox;
+      final double endDy = endBox.localToGlobal(Offset.zero).dy;
+      if (endDy < pinY + stickyHeight) {
+        pushOffset = endDy - (pinY + stickyHeight);
+      }
+    }
+
+    final double dockY = pinY - stackTopY;
+
+    if (_headerState.value.title != activeHeader ||
+        _headerState.value.dockY != dockY ||
+        _headerState.value.pushOffset != pushOffset) {
+      _headerState.value = StickyHeaderState(
+          title: activeHeader,
+          dockY: dockY,
+          pushOffset: pushOffset
+      );
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     final listProvider = context.watch<ListProvider>();
     final activeType = listProvider.activeType;
-
-    // THE FIX: Directly fetch the pre-sorted array from the Provider engine
     final List<dynamic> flatList = listProvider.groupedAndSortedItems;
 
-    // Helper to count items dynamically based on the current flatList array
+    // NEW: Get the total screen height
+    final double screenHeight = MediaQuery.of(context).size.height;
+
     int getGroupCount(String group) {
       int count = 0;
       bool inGroup = false;
@@ -41,7 +158,7 @@ class _MainScreenState extends State<MainScreen> {
           if (row == group) {
             inGroup = true;
           } else if (inGroup) {
-            break; // Reached the next header, stop counting
+            break;
           }
         } else if (row is ListItem && inGroup) {
           count++;
@@ -50,9 +167,15 @@ class _MainScreenState extends State<MainScreen> {
       return count;
     }
 
+    for (var row in flatList) {
+      if (row is String) {
+        _headerKeys.putIfAbsent(row, () => GlobalKey(debugLabel: row));
+      }
+    }
+    _headerKeys.removeWhere((key, _) => !flatList.contains(key));
+
     return Scaffold(
       backgroundColor: AppTheme.background,
-
       drawer: Drawer(
         backgroundColor: AppTheme.surface,
         child: SafeArea(
@@ -74,87 +197,143 @@ class _MainScreenState extends State<MainScreen> {
           ),
         ),
       ),
-
       body: SafeArea(
         bottom: false,
-        child: CustomScrollView(
-          slivers: [
-            SliverAppBar(
-              floating: true,
-              snap: true,
-              pinned: false,
-              elevation: 0,
-              centerTitle: true,
-              backgroundColor: AppTheme.background,
-              title: Text(
-                activeType,
-                style: const TextStyle(color: Colors.black, fontSize: 24, fontWeight: FontWeight.w800, letterSpacing: 0.5),
+        child: NotificationListener<ScrollNotification>(
+          onNotification: (ScrollNotification notification) {
+            _calculateStickyPhysics();
+            return false;
+          },
+          // THE FIX: Wrapped in a Stack to float the phantom header OUTSIDE the slivers!
+          child: Stack(
+            key: _stackKey,
+            children: [
+              CustomScrollView(
+                slivers: [
+                  SliverAppBar(
+                    floating: true,
+                    snap: true,
+                    pinned: false,
+                    elevation: 0,
+                    // THE FIX: Turn off Material 3 scroll-tinting!
+                    scrolledUnderElevation: 0,
+                    surfaceTintColor: Colors.transparent,
+                    // ------------------------------------------
+                    centerTitle: true,
+                    backgroundColor: AppTheme.background,
+                    title: Text(
+                      activeType,
+                      style: const TextStyle(color: Colors.black, fontSize: 24, fontWeight: FontWeight.w800, letterSpacing: 0.5),
+                    ),
+                    bottom: PreferredSize(
+                      preferredSize: const Size.fromHeight(0),
+                      child: SizedBox(key: _appBarKey),
+                    ),
+                    actions: [
+                      IconButton(
+                        icon: const Icon(Icons.more_vert),
+                        onPressed: () {
+                          showModalBottomSheet(
+                            context: context,
+                            backgroundColor: Colors.transparent,
+                            builder: (context) => const MainOptionsSheet(),
+                          );
+                        },
+                      ),
+                    ],
+                  ),
+
+                  SliverPadding(
+                    // Remove the massive bottom padding here, just keep it tight to the items
+                    padding: const EdgeInsets.only(left: 16, right: 16, bottom: 0, top: 8),
+                    sliver: SliverReorderableList(
+                      itemCount: flatList.length,
+                      itemBuilder: (context, index) {
+                        // ... (Keep your item builder code exactly the same) ...
+                        final row = flatList[index];
+
+                        if (row is String) {
+                          return Container(
+                            key: _headerKeys[row],
+                            child: SectionHeader(
+                              title: row,
+                              itemCount: getGroupCount(row),
+                            ),
+                          );
+                        }
+
+                        final item = row as ListItem;
+                        return ReorderableDelayedDragStartListener(
+                          key: ValueKey(item.id),
+                          index: index,
+                          child: ListItemCard(item: item),
+                        );
+                      },
+                      onReorder: (int oldIndex, int newIndex) {
+                        if (flatList[oldIndex] is String) return;
+                        if (oldIndex < newIndex) newIndex -= 1;
+
+                        final simulatedList = List.from(flatList);
+                        final draggedItem = simulatedList.removeAt(oldIndex) as ListItem;
+                        simulatedList.insert(newIndex, draggedItem);
+
+                        String newGroup = 'Uncategorized';
+                        for (int i = newIndex - 1; i >= 0; i--) {
+                          if (simulatedList[i] is String) {
+                            newGroup = simulatedList[i] as String;
+                            break;
+                          }
+                        }
+
+                        final reorderedItems = simulatedList.whereType<ListItem>().toList();
+                        context.read<ListProvider>().reorderAndMoveItem(draggedItem.id, newGroup, reorderedItems);
+                      },
+                    ),
+                  ),
+                  // THE FIX: The Invisible Bumper & Sensible Runway
+                  SliverToBoxAdapter(
+                    child: SizedBox(
+                      key: _endOfListKey, // Plant the tracker exactly where the items end
+                      height: 160.0, // A native-feeling overscroll to clear the floating action button
+                    ),
+                  ),
+                ],
               ),
-              actions: [
-                IconButton(
-                  icon: const Icon(Icons.more_vert),
-                  onPressed: () {
-                    showModalBottomSheet(
-                      context: context,
-                      backgroundColor: Colors.transparent,
-                      builder: (context) => const MainOptionsSheet(),
-                    );
-                  },
-                ),
-              ],
-            ),
-            SliverPadding(
-              padding: const EdgeInsets.only(left: 16, right: 16, bottom: 120, top: 8),
-              sliver: SliverReorderableList(
-                itemCount: flatList.length,
-                itemBuilder: (context, index) {
-                  final row = flatList[index];
 
-                  if (row is String) {
-                    return Container(
-                      key: ValueKey('header_$row'),
-                      child: SectionHeader(title: row, itemCount: getGroupCount(row)),
-                    );
-                  }
+              // The Floating Phantom Header
+              ValueListenableBuilder<StickyHeaderState>(
+                valueListenable: _headerState,
+                builder: (context, state, child) {
+                  if (state.title.isEmpty) return const SizedBox.shrink();
 
-                  final item = row as ListItem;
-                  return ReorderableDelayedDragStartListener(
-                    key: ValueKey(item.id),
-                    index: index,
-                    child: ListItemCard(item: item),
+                  return Positioned(
+                    // 1. Permanently parked at the bottom of the App Bar
+                    top: state.dockY,
+                    left: 0,
+                    right: 0,
+                    // 2. THE MASK: Chops off anything that tries to render above the docking line
+                    child: ClipRect(
+                      // 3. THE SLIDE: Animates the visual text upward inside the masked box
+                      child: Transform.translate(
+                        offset: Offset(0, state.pushOffset),
+                        child: Container(
+                          key: _phantomHeaderKey,
+                          padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                          color: AppTheme.background,
+                          child: SectionHeader(
+                            title: state.title,
+                            itemCount: getGroupCount(state.title),
+                          ),
+                        ),
+                      ),
+                    ),
                   );
                 },
-                onReorder: (int oldIndex, int newIndex) {
-                  if (flatList[oldIndex] is String) return;
-
-                  if (oldIndex < newIndex) newIndex -= 1;
-
-                  final simulatedList = List.from(flatList);
-                  final draggedItem = simulatedList.removeAt(oldIndex) as ListItem;
-                  simulatedList.insert(newIndex, draggedItem);
-
-                  String newGroup = 'Uncategorized';
-                  for (int i = newIndex - 1; i >= 0; i--) {
-                    if (simulatedList[i] is String) {
-                      newGroup = simulatedList[i] as String;
-                      break;
-                    }
-                  }
-
-                  final reorderedItems = simulatedList.whereType<ListItem>().toList();
-
-                  context.read<ListProvider>().reorderAndMoveItem(
-                      draggedItem.id,
-                      newGroup,
-                      reorderedItems
-                  );
-                },
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
-
       floatingActionButton: FloatingActionButton(
         onPressed: () {
           showModalBottomSheet(
@@ -189,4 +368,17 @@ class _MainScreenState extends State<MainScreen> {
       },
     );
   }
+}
+
+
+class StickyHeaderState {
+  final String title;
+  final double dockY;
+  final double pushOffset;
+
+  StickyHeaderState({
+    required this.title,
+    this.dockY = 0.0,
+    this.pushOffset = 0.0
+  });
 }
