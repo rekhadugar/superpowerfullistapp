@@ -194,7 +194,7 @@ lib/
 4. **Smart Item Suggestions:** Upgrade the `ItemFormModal` Name input to utilize historical data to auto-fill categories, stores, and tags based on the item name.
 5. **Authentication:** Integrate Firebase Auth and apply `userId` filtering to all Firestore queries to support multi-user shared lists.
 
-# AI Developer System Rules for Listille
+# AI Developer System Rules for ListiCle
 
 ## 1. Immutable Design System
 * **NEVER hardcode colors, paddings, margins, border radii, or text styles in the UI.**

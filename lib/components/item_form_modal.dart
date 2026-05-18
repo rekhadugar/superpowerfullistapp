@@ -3,6 +3,7 @@ import 'package:flutter/rendering.dart';
 import 'package:provider/provider.dart';
 import '../models/list_item.dart';
 import '../services/list_provider.dart';
+import '../theme/app_constants.dart';
 import '../theme/app_theme.dart';
 import 'token_search_engine.dart';
 
@@ -34,6 +35,7 @@ class _ItemFormModalState extends State<ItemFormModal> {
 
   String? _activeEngine;
   bool _showValidationErrors = false;
+  bool _isHandlingScrollCollapse = false;
 
   @override
   void initState() {
@@ -124,30 +126,50 @@ class _ItemFormModalState extends State<ItemFormModal> {
     return Container(
       constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.9),
       padding: EdgeInsets.only(
-        left: 20, right: 20, top: 24,
+        left: 20, right: 20,
+        top: 12, // Adjusted to accommodate the handle
         bottom: bottomInset > 0 ? bottomInset + 16 : 32,
       ),
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         color: AppTheme.background,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        borderRadius: AppConstants.modalRadius, // Parameterized
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // NEW: The visual drag handle
+          Center(
+            child: Container(
+              width: 40,
+              height: 4,
+              margin: const EdgeInsets.only(bottom: 24),
+              decoration: BoxDecoration(
+                color: Colors.grey.shade300,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+          ),
+
           Expanded(
-            child: NotificationListener<UserScrollNotification>(
-              onNotification: (UserScrollNotification notification) {
+            child: GestureDetector(
+              onVerticalDragUpdate: (details) {
+                // Manually catch swipes to dismiss without triggering scroll layout math
                 if (_activeEngine != null) {
-                  if (notification.direction == ScrollDirection.reverse) {
+                  if (details.primaryDelta != null && details.primaryDelta!.abs() > 2) {
                     FocusManager.instance.primaryFocus?.unfocus();
-                    setState(() => _activeEngine = null);
+                    setState(() {
+                      _activeEngine = null;
+                      _isHandlingScrollCollapse = false;
+                    });
                   }
                 }
-                return false;
               },
               child: SingleChildScrollView(
-                keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+                // Lock the scroll when an engine is focused to prevent layout thrashing
+                physics: _activeEngine != null
+                    ? const NeverScrollableScrollPhysics()
+                    : const BouncingScrollPhysics(),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -166,7 +188,6 @@ class _ItemFormModalState extends State<ItemFormModal> {
                           setState(() => _activeEngine = null);
                         }
                       },
-                      // CHANGED: Styled to look like a distinct, rounded text box
                       decoration: InputDecoration(
                         hintText: hasNameError ? 'Item Name is required' : 'Item Name',
                         hintStyle: TextStyle(color: hasNameError ? Colors.red.shade400 : Colors.black45),
@@ -293,7 +314,8 @@ class _ItemFormModalState extends State<ItemFormModal> {
                     ],
 
                     AnimatedContainer(
-                      duration: const Duration(milliseconds: 300),
+                      // NEW: Slowed down closing animation using AppConstants
+                      duration: AppConstants.animStandard,
                       curve: Curves.easeOutCubic,
                       height: _activeEngine != null ? 300 : 24,
                     ),
