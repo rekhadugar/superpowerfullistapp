@@ -186,8 +186,11 @@ class _ListItemCardState extends State<ListItemCard> {
                 ]
             ),
             child: Padding(
-              // NEW: Tighter padding when in compact mode
-              padding: EdgeInsets.all(widget.isCompact ? 12.0 : 16.0),
+              // FIX: Only shrink the vertical padding so the left edge stays perfectly aligned at 16px
+              padding: EdgeInsets.symmetric(
+                  horizontal: 16.0,
+                  vertical: widget.isCompact ? 12.0 : 16.0
+              ),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
