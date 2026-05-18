@@ -1,4 +1,3 @@
-import 'dart:math' as math; // <-- Add this import at the top
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../components/item_form_modal.dart';
@@ -6,11 +5,10 @@ import '../components/main_options_sheet.dart';
 import '../components/section_header.dart';
 import '../models/list_item.dart';
 import '../services/list_provider.dart';
+import '../services/sticky_header_engine.dart'; // NEW IMPORT
 import '../components/list_item_card.dart';
 import '../theme/app_theme.dart';
-
-import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
+import '../theme/app_constants.dart'; // NEW IMPORT
 
 class MainScreen extends StatefulWidget {
   const MainScreen({super.key});
@@ -26,119 +24,53 @@ class _MainScreenState extends State<MainScreen> {
 
   final Map<String, GlobalKey> _headerKeys = {};
   final GlobalKey _stackKey = GlobalKey();
-
-  // THE FIX: A GPS tracker for the floating App Bar
   final GlobalKey _appBarKey = GlobalKey();
-
   final GlobalKey _phantomHeaderKey = GlobalKey();
-
-  // THE FIX: The invisible bumper at the very end of the items
   final GlobalKey _endOfListKey = GlobalKey();
 
   final TextEditingController _controller = TextEditingController();
 
+  // THE FIX: Tracks the elastic displacement
+  double _currentOverscroll = 0.0;
+
+  // THE FIX: The Bulletproofing Listener. Reacts to data changes without scrolling!
+  void _onDataChanged() {
+    if (mounted) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _runPhysicsEngine());
+    }
+  }
+
+  void _runPhysicsEngine() {
+    StickyHeaderEngine.calculate(
+      context: context,
+      isMounted: mounted,
+      stackKey: _stackKey,
+      appBarKey: _appBarKey,
+      phantomHeaderKey: _phantomHeaderKey,
+      endOfListKey: _endOfListKey,
+      headerKeys: _headerKeys,
+      headerState: _headerState,
+      overscrollY: _currentOverscroll, // <-- Pass it here
+    );
+  }
+
   @override
   void initState() {
     super.initState();
-    // Run the math once immediately after the first frame draws to set the initial header
-    WidgetsBinding.instance.addPostFrameCallback((_) => _calculateStickyPhysics());
+    WidgetsBinding.instance.addPostFrameCallback((_) => _runPhysicsEngine());
+
+    // Bind the engine to the app state so it survives layout mutations
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<ListProvider>().addListener(_onDataChanged);
+    });
   }
 
   @override
   void dispose() {
+    context.read<ListProvider>().removeListener(_onDataChanged);
     _controller.dispose();
     _headerState.dispose();
     super.dispose();
-  }
-
-  void _calculateStickyPhysics() {
-    if (!mounted || _stackKey.currentContext == null) return;
-
-    final RenderBox stackBox = _stackKey.currentContext!.findRenderObject() as RenderBox;
-    final double stackTopY = stackBox.localToGlobal(Offset.zero).dy;
-
-    double appBarBottomY = stackTopY;
-    if (_appBarKey.currentContext != null) {
-      final RenderBox appBarBox = _appBarKey.currentContext!.findRenderObject() as RenderBox;
-      appBarBottomY = appBarBox.localToGlobal(Offset.zero).dy;
-    }
-
-    final double pinY = math.max(stackTopY, appBarBottomY);
-
-    // --- THE FIX: Sliver-Immune Logical Tracking ---
-    final listProvider = context.read<ListProvider>();
-    final List<String> allHeaders = listProvider.groupedAndSortedItems.whereType<String>().toList();
-
-    if (allHeaders.isEmpty) {
-      if (_headerState.value.title.isNotEmpty) {
-        _headerState.value = StickyHeaderState(title: '');
-      }
-      return;
-    }
-
-    String activeHeader = '';
-    String? nextHeader;
-    double nextHeaderY = double.infinity;
-    int lastSeenAboveIndex = -1;
-
-    for (int i = 0; i < allHeaders.length; i++) {
-      final String headerTitle = allHeaders[i];
-      final GlobalKey? key = _headerKeys[headerTitle];
-
-      // Only check headers that are currently rendered on screen
-      if (key != null && key.currentContext != null) {
-        final RenderBox box = key.currentContext!.findRenderObject() as RenderBox;
-        final dy = box.localToGlobal(Offset.zero).dy;
-
-        if (dy <= pinY + 1.0) {
-          lastSeenAboveIndex = i; // We saw this header above the pin line
-        } else {
-          // Found the very first visible header BELOW the pin line
-          nextHeader = headerTitle;
-          nextHeaderY = dy;
-          // The active header MUST logically be the one right before this one!
-          if (i > 0) activeHeader = allHeaders[i - 1];
-          break;
-        }
-      }
-    }
-
-    // Fallback: If no headers are below the line, but we saw one above it, it's the active one.
-    if (nextHeader == null && lastSeenAboveIndex != -1) {
-      activeHeader = allHeaders[lastSeenAboveIndex];
-    }
-
-    // --- THE FIX: Dynamic Sub-Pixel Height Measurement ---
-    // --- THE FIX: Dynamic Sub-Pixel Height & Bumper Push ---
-    double pushOffset = 0.0;
-    double stickyHeight = 56.0;
-    if (_phantomHeaderKey.currentContext != null) {
-      stickyHeight = (_phantomHeaderKey.currentContext!.findRenderObject() as RenderBox).size.height;
-    }
-
-    if (nextHeader != null && nextHeaderY < pinY + stickyHeight) {
-      // Normal collision with the next category header
-      pushOffset = nextHeaderY - (pinY + stickyHeight);
-    } else if (nextHeader == null && _endOfListKey.currentContext != null) {
-      // THE BUMPER: If there's no next header, the bottom of the list pushes it off!
-      final RenderBox endBox = _endOfListKey.currentContext!.findRenderObject() as RenderBox;
-      final double endDy = endBox.localToGlobal(Offset.zero).dy;
-      if (endDy < pinY + stickyHeight) {
-        pushOffset = endDy - (pinY + stickyHeight);
-      }
-    }
-
-    final double dockY = pinY - stackTopY;
-
-    if (_headerState.value.title != activeHeader ||
-        _headerState.value.dockY != dockY ||
-        _headerState.value.pushOffset != pushOffset) {
-      _headerState.value = StickyHeaderState(
-          title: activeHeader,
-          dockY: dockY,
-          pushOffset: pushOffset
-      );
-    }
   }
 
   @override
@@ -146,9 +78,6 @@ class _MainScreenState extends State<MainScreen> {
     final listProvider = context.watch<ListProvider>();
     final activeType = listProvider.activeType;
     final List<dynamic> flatList = listProvider.groupedAndSortedItems;
-
-    // NEW: Get the total screen height
-    final double screenHeight = MediaQuery.of(context).size.height;
 
     int getGroupCount(String group) {
       int count = 0;
@@ -183,7 +112,7 @@ class _MainScreenState extends State<MainScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const Padding(
-                padding: EdgeInsets.all(20.0),
+                padding: EdgeInsets.all(AppConstants.padLarge),
                 child: Text('My Lists', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w800)),
               ),
               const Divider(height: 1),
@@ -201,10 +130,18 @@ class _MainScreenState extends State<MainScreen> {
         bottom: false,
         child: NotificationListener<ScrollNotification>(
           onNotification: (ScrollNotification notification) {
-            _calculateStickyPhysics();
+            // THE FIX: Mathematically capture the exact stretch of the bounce!
+            if (notification.metrics.pixels < notification.metrics.minScrollExtent) {
+              _currentOverscroll = -(notification.metrics.pixels - notification.metrics.minScrollExtent);
+            } else if (notification.metrics.pixels > notification.metrics.maxScrollExtent) {
+              _currentOverscroll = -(notification.metrics.pixels - notification.metrics.maxScrollExtent);
+            } else {
+              _currentOverscroll = 0.0;
+            }
+
+            _runPhysicsEngine();
             return false;
           },
-          // THE FIX: Wrapped in a Stack to float the phantom header OUTSIDE the slivers!
           child: Stack(
             key: _stackKey,
             children: [
@@ -215,10 +152,8 @@ class _MainScreenState extends State<MainScreen> {
                     snap: true,
                     pinned: false,
                     elevation: 0,
-                    // THE FIX: Turn off Material 3 scroll-tinting!
                     scrolledUnderElevation: 0,
                     surfaceTintColor: Colors.transparent,
-                    // ------------------------------------------
                     centerTitle: true,
                     backgroundColor: AppTheme.background,
                     title: Text(
@@ -244,12 +179,16 @@ class _MainScreenState extends State<MainScreen> {
                   ),
 
                   SliverPadding(
-                    // Remove the massive bottom padding here, just keep it tight to the items
-                    padding: const EdgeInsets.only(left: 16, right: 16, bottom: 0, top: 8),
+                    padding: const EdgeInsets.only(
+                      left: AppConstants.padMedium,
+                      right: AppConstants.padMedium,
+                      bottom: 0,
+                      // THE FIX: Remove the 8px offset so the first header aligns perfectly!
+                      top: 0,
+                    ),
                     sliver: SliverReorderableList(
                       itemCount: flatList.length,
                       itemBuilder: (context, index) {
-                        // ... (Keep your item builder code exactly the same) ...
                         final row = flatList[index];
 
                         if (row is String) {
@@ -290,35 +229,31 @@ class _MainScreenState extends State<MainScreen> {
                       },
                     ),
                   ),
-                  // THE FIX: The Invisible Bumper & Sensible Runway
+
                   SliverToBoxAdapter(
                     child: SizedBox(
-                      key: _endOfListKey, // Plant the tracker exactly where the items end
-                      height: 160.0, // A native-feeling overscroll to clear the floating action button
+                      key: _endOfListKey,
+                      height: AppConstants.endOfListRunway,
                     ),
                   ),
                 ],
               ),
 
-              // The Floating Phantom Header
               ValueListenableBuilder<StickyHeaderState>(
                 valueListenable: _headerState,
                 builder: (context, state, child) {
                   if (state.title.isEmpty) return const SizedBox.shrink();
 
                   return Positioned(
-                    // 1. Permanently parked at the bottom of the App Bar
                     top: state.dockY,
                     left: 0,
                     right: 0,
-                    // 2. THE MASK: Chops off anything that tries to render above the docking line
                     child: ClipRect(
-                      // 3. THE SLIDE: Animates the visual text upward inside the masked box
                       child: Transform.translate(
                         offset: Offset(0, state.pushOffset),
                         child: Container(
                           key: _phantomHeaderKey,
-                          padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                          padding: const EdgeInsets.symmetric(horizontal: AppConstants.padMedium),
                           color: AppTheme.background,
                           child: SectionHeader(
                             title: state.title,
@@ -368,17 +303,4 @@ class _MainScreenState extends State<MainScreen> {
       },
     );
   }
-}
-
-
-class StickyHeaderState {
-  final String title;
-  final double dockY;
-  final double pushOffset;
-
-  StickyHeaderState({
-    required this.title,
-    this.dockY = 0.0,
-    this.pushOffset = 0.0
-  });
 }
