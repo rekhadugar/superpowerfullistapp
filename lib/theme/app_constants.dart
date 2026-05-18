@@ -1,8 +1,10 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/cupertino.dart';
 
 class AppConstants {
   // --- Padding & Spacing ---
+  static const double padTiny = 6.0;   // NEW: For wrap spacing
   static const double padSmall = 8.0;
+  static const double padCompact = 12.0; // NEW: For compact modes/inner padding
   static const double padMedium = 16.0;
   static const double padLarge = 24.0;
   static const double padXLarge = 32.0;
@@ -16,10 +18,10 @@ class AppConstants {
   static final BorderRadius pillRadius = BorderRadius.circular(8.0);
 
   // --- Animation Timings ---
-  static const Duration animQuick = Duration(milliseconds: 400);
-  static const Duration animStandard = Duration(milliseconds: 500);
+  static const Duration animQuick = Duration(milliseconds: 300);
+  static const Duration animStandard = Duration(milliseconds: 400);
 
-  // NEW: Parameterized and slowed down layout physics
-  static const Duration layoutDuration = Duration(milliseconds: 500); // Slowed down from 200ms
-  static const Curve layoutCurve = Curves.easeInOutQuart; // More natural acceleration/deceleration
+  // Parameterized and slowed down layout physics
+  static const Duration layoutDuration = Duration(milliseconds: 300);
+  static const Curve layoutCurve = Curves.easeInOutQuart;
 }

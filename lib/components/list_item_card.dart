@@ -125,14 +125,13 @@ class _ListItemCardState extends State<ListItemCard> {
         widget.onPointerDown?.call(event.localPosition.dy);
       },
       child: AnimatedSize(
-        // Outer AnimatedSize strictly handles the teardown/deletion shrink
         duration: AppConstants.layoutDuration,
         curve: AppConstants.layoutCurve,
         alignment: Alignment.topCenter,
         child: _isShrinking
             ? const SizedBox(width: double.infinity, height: 0)
             : Padding(
-          padding: const EdgeInsets.only(bottom: 12),
+          padding: const EdgeInsets.only(bottom: AppConstants.padCompact), // Parameterized
           child: Slidable(
             key: ValueKey('slidable_${widget.item.id}'),
 
@@ -152,7 +151,7 @@ class _ListItemCardState extends State<ListItemCard> {
                   foregroundColor: Colors.white,
                   icon: widget.item.isCompleted ? Icons.restore : Icons.check,
                   label: widget.item.isCompleted ? 'Uncheck' : 'Complete',
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: AppConstants.cardRadius, // Parameterized
                 ),
               ],
             ),
@@ -185,8 +184,9 @@ class _ListItemCardState extends State<ListItemCard> {
                   foregroundColor: Colors.white,
                   icon: Icons.edit,
                   label: 'Tap to Edit',
-                  borderRadius: const BorderRadius.only(
-                      topLeft: Radius.circular(12), bottomLeft: Radius.circular(12)
+                  borderRadius: BorderRadius.only(
+                      topLeft: AppConstants.cardRadius.topLeft, // Parameterized
+                      bottomLeft: AppConstants.cardRadius.bottomLeft
                   ),
                 ),
                 SlidableAction(
@@ -195,8 +195,9 @@ class _ListItemCardState extends State<ListItemCard> {
                   backgroundColor: Colors.red,
                   foregroundColor: Colors.white,
                   icon: Icons.delete,
-                  borderRadius: const BorderRadius.only(
-                      topRight: Radius.circular(12), bottomRight: Radius.circular(12)
+                  borderRadius: BorderRadius.only(
+                      topRight: AppConstants.cardRadius.topRight, // Parameterized
+                      bottomRight: AppConstants.cardRadius.bottomRight
                   ),
                 ),
               ],
@@ -207,7 +208,7 @@ class _ListItemCardState extends State<ListItemCard> {
               child: Container(
                 decoration: BoxDecoration(
                     color: AppTheme.surface,
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: AppConstants.cardRadius, // Parameterized
                     border: Border.all(color: AppTheme.border),
                     boxShadow: [
                       if (!widget.isDraggingProxy)
@@ -216,15 +217,16 @@ class _ListItemCardState extends State<ListItemCard> {
                         BoxShadow(color: Colors.black.withValues(alpha: 0.12), blurRadius: 16, offset: const Offset(0, 8))
                     ]
                 ),
-                // NEW: Inner AnimatedSize forces the Container to dynamically hug the content
                 child: AnimatedSize(
                   duration: AppConstants.layoutDuration,
                   curve: AppConstants.layoutCurve,
                   alignment: Alignment.topCenter,
                   child: Padding(
-                    padding: EdgeInsets.symmetric(
-                        horizontal: 16.0,
-                        vertical: isActuallyCompact ? 12.0 : 16.0
+                    padding: EdgeInsets.only(
+                      left: AppConstants.padMedium, // Parameterized
+                      right: AppConstants.padMedium,
+                      top: AppConstants.padMedium,
+                      bottom: isActuallyCompact ? AppConstants.padCompact : AppConstants.padMedium,
                     ),
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.center,
@@ -244,10 +246,10 @@ class _ListItemCardState extends State<ListItemCard> {
                               ),
 
                               if (!isActuallyCompact && (widget.item.locations.isNotEmpty || widget.item.category != 'Uncategorized' || widget.item.context.isNotEmpty)) ...[
-                                const SizedBox(height: 8),
+                                const SizedBox(height: AppConstants.padSmall), // Parameterized
                                 Wrap(
-                                  spacing: 6,
-                                  runSpacing: 6,
+                                  spacing: AppConstants.padTiny, // Parameterized
+                                  runSpacing: AppConstants.padTiny, // Parameterized
                                   crossAxisAlignment: WrapCrossAlignment.center,
                                   children: [
                                     ...widget.item.locations.map((loc) => _buildPill(loc, isStore: true)),
@@ -294,7 +296,7 @@ class _ListItemCardState extends State<ListItemCard> {
                             height: 36,
                             decoration: BoxDecoration(
                               color: AppTheme.background,
-                              borderRadius: BorderRadius.circular(18),
+                              borderRadius: BorderRadius.circular(18), // Kept hardcoded as it's specifically for a 36px circle
                             ),
                             child: Row(
                               mainAxisSize: MainAxisSize.min,
