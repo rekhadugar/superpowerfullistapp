@@ -5,10 +5,8 @@ import '../components/main_options_sheet.dart';
 import '../components/section_header.dart';
 import '../models/list_item.dart';
 import '../services/list_provider.dart';
-import '../services/sticky_header_engine.dart'; // NEW IMPORT
 import '../components/list_item_card.dart';
 import '../theme/app_theme.dart';
-import '../theme/app_constants.dart'; // NEW IMPORT
 
 class MainScreen extends StatefulWidget {
   const MainScreen({super.key});
@@ -33,13 +31,6 @@ class _MainScreenState extends State<MainScreen> {
         _headerKeys.putIfAbsent(row, () => GlobalKey());
       }
     }
-
-    for (var row in flatList) {
-      if (row is String) {
-        _headerKeys.putIfAbsent(row, () => GlobalKey(debugLabel: row));
-      }
-    }
-    _headerKeys.removeWhere((key, _) => !flatList.contains(key));
 
     return Scaffold(
       backgroundColor: AppTheme.background,
@@ -82,8 +73,8 @@ class _MainScreenState extends State<MainScreen> {
                 },
                 onReorder: (int oldIndex, int newIndex) { /* ... same as before ... */ },
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
