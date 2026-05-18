@@ -119,6 +119,7 @@ class _ListItemCardState extends State<ListItemCard> {
     final provider = context.watch<ListProvider>();
     final isLocallyExpanded = !widget.isDraggingProxy && provider.expandedItemId == widget.item.id;
     final isActuallyCompact = widget.isCompact && !isLocallyExpanded;
+    final hasExtraDetails = widget.item.locations.isNotEmpty || widget.item.category != 'Uncategorized' || widget.item.context.isNotEmpty;
 
     return Listener(
       onPointerDown: (event) {
@@ -131,7 +132,7 @@ class _ListItemCardState extends State<ListItemCard> {
         child: _isShrinking
             ? const SizedBox(width: double.infinity, height: 0)
             : Padding(
-          padding: const EdgeInsets.only(bottom: AppConstants.padCompact), // Parameterized
+          padding: const EdgeInsets.only(bottom: AppConstants.padCompact),
           child: Slidable(
             key: ValueKey('slidable_${widget.item.id}'),
 
@@ -151,7 +152,7 @@ class _ListItemCardState extends State<ListItemCard> {
                   foregroundColor: Colors.white,
                   icon: widget.item.isCompleted ? Icons.restore : Icons.check,
                   label: widget.item.isCompleted ? 'Uncheck' : 'Complete',
-                  borderRadius: AppConstants.cardRadius, // Parameterized
+                  borderRadius: AppConstants.cardRadius,
                 ),
               ],
             ),
@@ -185,7 +186,7 @@ class _ListItemCardState extends State<ListItemCard> {
                   icon: Icons.edit,
                   label: 'Tap to Edit',
                   borderRadius: BorderRadius.only(
-                      topLeft: AppConstants.cardRadius.topLeft, // Parameterized
+                      topLeft: AppConstants.cardRadius.topLeft,
                       bottomLeft: AppConstants.cardRadius.bottomLeft
                   ),
                 ),
@@ -196,7 +197,7 @@ class _ListItemCardState extends State<ListItemCard> {
                   foregroundColor: Colors.white,
                   icon: Icons.delete,
                   borderRadius: BorderRadius.only(
-                      topRight: AppConstants.cardRadius.topRight, // Parameterized
+                      topRight: AppConstants.cardRadius.topRight,
                       bottomRight: AppConstants.cardRadius.bottomRight
                   ),
                 ),
@@ -208,7 +209,7 @@ class _ListItemCardState extends State<ListItemCard> {
               child: Container(
                 decoration: BoxDecoration(
                     color: AppTheme.surface,
-                    borderRadius: AppConstants.cardRadius, // Parameterized
+                    borderRadius: AppConstants.cardRadius,
                     border: Border.all(color: AppTheme.border),
                     boxShadow: [
                       if (!widget.isDraggingProxy)
@@ -223,7 +224,7 @@ class _ListItemCardState extends State<ListItemCard> {
                   alignment: Alignment.topCenter,
                   child: Padding(
                     padding: EdgeInsets.only(
-                      left: AppConstants.padMedium, // Parameterized
+                      left: AppConstants.padMedium,
                       right: AppConstants.padMedium,
                       top: AppConstants.padMedium,
                       bottom: isActuallyCompact ? AppConstants.padCompact : AppConstants.padMedium,
@@ -245,30 +246,49 @@ class _ListItemCardState extends State<ListItemCard> {
                                 ),
                               ),
 
-                              if (!isActuallyCompact && (widget.item.locations.isNotEmpty || widget.item.category != 'Uncategorized' || widget.item.context.isNotEmpty)) ...[
-                                const SizedBox(height: AppConstants.padSmall), // Parameterized
-                                Wrap(
-                                  spacing: AppConstants.padTiny, // Parameterized
-                                  runSpacing: AppConstants.padTiny, // Parameterized
-                                  crossAxisAlignment: WrapCrossAlignment.center,
+                              // NEW: Encapsulated the tags in their own AnimatedSize
+                              AnimatedSize(
+                                duration: AppConstants.layoutDuration,
+                                curve: AppConstants.layoutCurve,
+                                alignment: Alignment.topCenter,
+                                child: (!isActuallyCompact && hasExtraDetails)
+                                    ? Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    ...widget.item.locations.map((loc) => _buildPill(loc, isStore: true)),
-                                    if (widget.item.category != 'Uncategorized')
-                                      _buildPill(widget.item.category, isStore: false),
-                                    if (widget.item.context.isNotEmpty)
-                                      Text(
-                                          '• ${widget.item.context}',
-                                          style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary, fontWeight: FontWeight.w600)
-                                      ),
+                                    const SizedBox(height: AppConstants.padSmall),
+                                    Wrap(
+                                      spacing: AppConstants.padTiny,
+                                      runSpacing: AppConstants.padTiny,
+                                      crossAxisAlignment: WrapCrossAlignment.center,
+                                      children: [
+                                        ...widget.item.locations.map((loc) => _buildPill(loc, isStore: true)),
+                                        if (widget.item.category != 'Uncategorized')
+                                          _buildPill(widget.item.category, isStore: false),
+                                        if (widget.item.context.isNotEmpty)
+                                          Text(
+                                              '• ${widget.item.context}',
+                                              style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary, fontWeight: FontWeight.w600)
+                                          ),
+                                      ],
+                                    ),
                                   ],
-                                ),
-                              ]
+                                )
+                                    : const SizedBox(width: double.infinity, height: 0),
+                              ),
                             ],
                           ),
                         ),
 
-                        if (isActuallyCompact && widget.item.quantity > 0)
-                          Row(
+                        // NEW: Cross-fading the quantity display to ensure smooth transition and gliding
+                        AnimatedCrossFade(
+                          duration: AppConstants.layoutDuration,
+                          firstCurve: AppConstants.layoutCurve,
+                          secondCurve: AppConstants.layoutCurve,
+                          sizeCurve: AppConstants.layoutCurve,
+                          crossFadeState: isActuallyCompact ? CrossFadeState.showFirst : CrossFadeState.showSecond,
+                          alignment: Alignment.center,
+                          firstChild: widget.item.quantity > 0
+                              ? Row(
                             mainAxisSize: MainAxisSize.min,
                             crossAxisAlignment: CrossAxisAlignment.center,
                             children: [
@@ -291,12 +311,12 @@ class _ListItemCardState extends State<ListItemCard> {
                               ),
                             ],
                           )
-                        else if (!isActuallyCompact)
-                          Container(
+                              : const SizedBox(width: 100, height: 36), // Preserves a stable 100px width when hidden
+                          secondChild: Container(
                             height: 36,
                             decoration: BoxDecoration(
                               color: AppTheme.background,
-                              borderRadius: BorderRadius.circular(18), // Kept hardcoded as it's specifically for a 36px circle
+                              borderRadius: BorderRadius.circular(18),
                             ),
                             child: Row(
                               mainAxisSize: MainAxisSize.min,
@@ -332,6 +352,7 @@ class _ListItemCardState extends State<ListItemCard> {
                               ],
                             ),
                           ),
+                        ),
                       ],
                     ),
                   ),
