@@ -3,28 +3,24 @@ import 'package:provider/provider.dart';
 import '../models/list_item.dart';
 import '../services/list_provider.dart';
 import '../components/list_item_card.dart';
-import '../components/section_header.dart'; // We can reuse your beautiful headers!
+import '../components/section_header.dart';
 import '../theme/app_theme.dart';
 
 class CompletedItemsScreen extends StatelessWidget {
   const CompletedItemsScreen({super.key});
 
-  // Helper function to safely extract a DateTime object from Firestore Timestamp or Native DateTime
   DateTime _extractDate(ListItem item) {
     try {
-      // Assuming your model stores it as a Firestore Timestamp
       return (item as dynamic).updatedAt.toDate();
     } catch (_) {
       try {
-        // Fallback if it's already a DateTime object
         return (item as dynamic).updatedAt as DateTime;
       } catch (_) {
-        return DateTime.now(); // Failsafe
+        return DateTime.now();
       }
     }
   }
 
-  // The Time Grouping Engine
   String _getTimeGroup(DateTime date) {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
@@ -43,7 +39,6 @@ class CompletedItemsScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final provider = context.watch<ListProvider>();
 
-    // 1. Get completed items and sort them newest to oldest
     final List<ListItem> completedItems = provider.items
         .where((item) => item.isCompleted && !item.isDeleted)
         .toList();
@@ -51,10 +46,9 @@ class CompletedItemsScreen extends StatelessWidget {
     completedItems.sort((a, b) {
       final dateA = _extractDate(a);
       final dateB = _extractDate(b);
-      return dateB.compareTo(dateA); // Descending order
+      return dateB.compareTo(dateA);
     });
 
-    // 2. Flatten into an array of Strings (Headers) and ListItems (Cards)
     final List<dynamic> flatList = [];
     String currentGroup = '';
 
@@ -68,13 +62,6 @@ class CompletedItemsScreen extends StatelessWidget {
       flatList.add(item);
     }
 
-    // Helper to count items per time group
-    int getGroupCount(String group) {
-      return completedItems.where((item) {
-        return _getTimeGroup(_extractDate(item)).toUpperCase() == group;
-      }).length;
-    }
-
     return Scaffold(
       backgroundColor: AppTheme.background,
       body: SafeArea(
@@ -86,6 +73,7 @@ class CompletedItemsScreen extends StatelessWidget {
               snap: true,
               pinned: true,
               elevation: 0,
+              centerTitle: true,
               backgroundColor: AppTheme.background,
               leading: IconButton(
                 icon: const Icon(Icons.arrow_back, color: Colors.black),
@@ -93,7 +81,7 @@ class CompletedItemsScreen extends StatelessWidget {
               ),
               title: const Text(
                 'Checked Items',
-                style: TextStyle(color: Colors.black, fontSize: 20, fontWeight: FontWeight.w800),
+                style: TextStyle(color: Colors.black, fontSize: 24, fontWeight: FontWeight.w800, letterSpacing: 0.5),
               ),
             ),
 
@@ -119,10 +107,9 @@ class CompletedItemsScreen extends StatelessWidget {
                       final row = flatList[index];
 
                       if (row is String) {
-                        return SectionHeader(title: row, itemCount: getGroupCount(row));
+                        return SectionHeader(title: row); // CHANGED: Removed the item count
                       }
 
-                      // Pass isCompact: true to render the minimal version!
                       return ListItemCard(item: row as ListItem, isCompact: true);
                     },
                     childCount: flatList.length,

@@ -29,26 +29,7 @@ class _MainScreenState extends State<MainScreen> {
     final listProvider = context.watch<ListProvider>();
     final activeType = listProvider.activeType;
 
-    // THE FIX: Directly fetch the pre-sorted array from the Provider engine
     final List<dynamic> flatList = listProvider.groupedAndSortedItems;
-
-    // Helper to count items dynamically based on the current flatList array
-    int getGroupCount(String group) {
-      int count = 0;
-      bool inGroup = false;
-      for (var row in flatList) {
-        if (row is String) {
-          if (row == group) {
-            inGroup = true;
-          } else if (inGroup) {
-            break; // Reached the next header, stop counting
-          }
-        } else if (row is ListItem && inGroup) {
-          count++;
-        }
-      }
-      return count;
-    }
 
     return Scaffold(
       backgroundColor: AppTheme.background,
@@ -113,7 +94,7 @@ class _MainScreenState extends State<MainScreen> {
                   if (row is String) {
                     return Container(
                       key: ValueKey('header_$row'),
-                      child: SectionHeader(title: row, itemCount: getGroupCount(row)),
+                      child: SectionHeader(title: row), // CHANGED: Removed the item count
                     );
                   }
 
