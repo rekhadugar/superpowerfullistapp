@@ -16,6 +16,7 @@ class ListProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  // RESTORED: Advanced grouping states for the Choice Chips Menu
   String _groupBy = 'Category';
   String get groupBy => _groupBy;
 
@@ -28,6 +29,7 @@ class ListProvider extends ChangeNotifier {
     _listenToItems();
   }
 
+  // RESTORED: Advanced data flattener
   List<dynamic> get groupedAndSortedItems {
     final activeItems = _items.where((i) => !i.isCompleted && !i.isDeleted).toList();
 
@@ -114,8 +116,6 @@ class ListProvider extends ChangeNotifier {
     await _db.collection('items').add(newItem.toMap());
   }
 
-  // CHANGED: Optimistic local update for instant UI feedback
-  // CHANGED: Now pushes a fresh updatedAt timestamp so Checked Items can sort by time
   Future<void> toggleItemStatus(String id, bool currentStatus) async {
     final index = _items.indexWhere((item) => item.id == id);
     if (index != -1) {
@@ -125,7 +125,7 @@ class ListProvider extends ChangeNotifier {
 
     await _db.collection('items').doc(id).update({
       'isCompleted': !currentStatus,
-      'updatedAt': Timestamp.now(), // THIS IS THE MAGIC LINE
+      'updatedAt': Timestamp.now(),
     });
   }
 
@@ -146,7 +146,6 @@ class ListProvider extends ChangeNotifier {
     await batch.commit();
   }
 
-  // CHANGED: No longer wiped from local memory. Just flagged.
   Future<void> deleteItem(String id) async {
     final index = _items.indexWhere((item) => item.id == id);
     if (index != -1) {
@@ -161,7 +160,6 @@ class ListProvider extends ChangeNotifier {
     });
   }
 
-  // NEW: Instantly un-flags a deleted item
   Future<void> restoreItem(String id) async {
     final index = _items.indexWhere((item) => item.id == id);
     if (index != -1) {
