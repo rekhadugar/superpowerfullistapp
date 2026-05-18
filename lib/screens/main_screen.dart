@@ -257,8 +257,8 @@ class _MainScreenState extends State<MainScreen> {
                         width: double.infinity,
                         alignment: Alignment.bottomLeft,
                         padding: const EdgeInsets.only(
-                          left: AppConstants.padMedium,
-                          right: AppConstants.padMedium,
+                          left: AppConstants.padMedium * 2,
+                          right: AppConstants.padMedium * 2,
                           bottom: AppConstants.padSmall,
                         ),
                         decoration: const BoxDecoration(color: AppTheme.background),

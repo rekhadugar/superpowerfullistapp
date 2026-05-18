@@ -16,7 +16,10 @@ class AppConstants {
   static final BorderRadius pillRadius = BorderRadius.circular(8.0);
 
   // --- Animation Timings ---
-  static const Duration animQuick = Duration(milliseconds: 200);
-  static const Duration animStandard = Duration(milliseconds: 300);
-  static const Curve defaultCurve = Curves.easeOutCubic;
+  static const Duration animQuick = Duration(milliseconds: 300);
+  static const Duration animStandard = Duration(milliseconds: 400);
+
+  // NEW: Parameterized and slowed down layout physics
+  static const Duration layoutDuration = Duration(milliseconds: 300); // Slowed down from 200ms
+  static const Curve layoutCurve = Curves.easeInOutQuart; // More natural acceleration/deceleration
 }
