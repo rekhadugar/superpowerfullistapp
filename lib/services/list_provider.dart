@@ -21,12 +21,10 @@ class ListProvider extends ChangeNotifier {
 
   void toggleGlobalCompactMode() {
     _isGlobalCompactMode = !_isGlobalCompactMode;
-    // Reset expanded state when toggling modes
     _expandedItemId = null;
     notifyListeners();
   }
 
-  // NEW: Track which card is temporarily expanded in compact mode
   String? _expandedItemId;
   String? get expandedItemId => _expandedItemId;
 
@@ -51,7 +49,7 @@ class ListProvider extends ChangeNotifier {
 
   void setGroupBy(String method) {
     _groupBy = method;
-    _expandedItemId = null; // NEW: Collapse any expanded card when grouping changes
+    _expandedItemId = null;
     notifyListeners();
   }
 
@@ -59,11 +57,31 @@ class ListProvider extends ChangeNotifier {
     _listenToItems();
   }
 
+  // ==========================================
+  // --- MODULAR SORTING HOOKS ---
+  // ==========================================
+
+  /// Determines the display order of the group headers.
+  /// Phase 4 Prep: Hook this into a custom user-defined array for "Manage Shops/Categories".
+  List<String> _getSortedGroupNames(Iterable<String> unsortedGroups) {
+    final groups = unsortedGroups.toList();
+    groups.sort(); // Currently defaults to alphabetical
+    return groups;
+  }
+
+  /// Determines the display order of items within a specific group.
+  void _sortItemsWithinGroup(List<ListItem> items) {
+    // Items strictly respect their manual drag-and-drop integer.
+    items.sort((a, b) => a.order.compareTo(b.order));
+  }
+
+  // ==========================================
+
   List<dynamic> get groupedAndSortedItems {
     final activeItems = _items.where((i) => !i.isCompleted && !i.isDeleted).toList();
 
     if (_groupBy == 'None') {
-      activeItems.sort((a, b) => a.order.compareTo(b.order));
+      _sortItemsWithinGroup(activeItems);
       return activeItems;
     }
 
@@ -92,13 +110,13 @@ class ListProvider extends ChangeNotifier {
     }
 
     final List<dynamic> flattenedList = [];
-    final sortedGroupNames = groups.keys.toList()..sort();
+    final sortedGroupNames = _getSortedGroupNames(groups.keys);
 
     for (var groupName in sortedGroupNames) {
       flattenedList.add(groupName.toUpperCase());
 
       final itemsInGroup = groups[groupName]!;
-      itemsInGroup.sort((a, b) => a.order.compareTo(b.order));
+      _sortItemsWithinGroup(itemsInGroup);
 
       flattenedList.addAll(itemsInGroup);
     }
@@ -158,20 +176,76 @@ class ListProvider extends ChangeNotifier {
     });
   }
 
+  // FIXED: Reorder logic now operates purely on the flat array to guarantee precise placements
+  // across boundaries and assigns global, continuous integers.
   Future<void> reorderItems(int oldIndex, int newIndex) async {
     if (oldIndex < newIndex) {
       newIndex -= 1;
     }
 
-    final ListItem movedItem = _items.removeAt(oldIndex);
-    _items.insert(newIndex, movedItem);
-    notifyListeners();
+    final flatList = List<dynamic>.from(groupedAndSortedItems);
+    if (oldIndex >= flatList.length || newIndex >= flatList.length) return;
 
+    final draggedElement = flatList[oldIndex];
+    if (draggedElement is String) return; // Prevent dragging headers
+
+    final draggedItem = draggedElement as ListItem;
+
+    // 1. Visually reorder the flat array in local memory
+    flatList.removeAt(oldIndex);
+    flatList.insert(newIndex, draggedItem);
+
+    // 2. Sweep the modified list, update local properties, and queue batch updates
     WriteBatch batch = _db.batch();
-    for (int i = 0; i < _items.length; i++) {
-      DocumentReference docRef = _db.collection('items').doc(_items[i].id);
-      batch.update(docRef, {'order': i});
+    String currentGroupName = 'Uncategorized';
+    int currentOrderIndex = 0;
+
+    for (var element in flatList) {
+      if (element is String) {
+        currentGroupName = element;
+      } else if (element is ListItem) {
+        final item = element;
+        bool needsUpdate = false;
+        Map<String, dynamic> updates = {};
+
+        // Force a continuous global order parameter
+        if (item.order != currentOrderIndex) {
+          item.order = currentOrderIndex;
+          updates['order'] = currentOrderIndex;
+          needsUpdate = true;
+        }
+
+        // Check if the item was dropped under a new header
+        if (item.id == draggedItem.id && _groupBy != 'None') {
+          String formattedGroup = currentGroupName.split(' ').map((word) =>
+          word.isNotEmpty ? '${word[0].toUpperCase()}${word.substring(1).toLowerCase()}' : ''
+          ).join(' ');
+
+          if (_groupBy == 'Store' && !item.locations.contains(formattedGroup)) {
+            item.locations = [formattedGroup];
+            updates['locations'] = item.locations;
+            needsUpdate = true;
+          } else if (_groupBy == 'Category' && item.category != formattedGroup) {
+            item.category = formattedGroup;
+            updates['category'] = item.category;
+            needsUpdate = true;
+          } else if (_groupBy == 'List' && item.type != formattedGroup) {
+            item.type = formattedGroup;
+            updates['type'] = item.type;
+            needsUpdate = true;
+          }
+        }
+
+        if (needsUpdate) {
+          batch.update(_db.collection('items').doc(item.id), updates);
+        }
+
+        currentOrderIndex++;
+      }
     }
+
+    // Trigger optimistic UI update so items snap instantly before Firestore acknowledges
+    notifyListeners();
     await batch.commit();
   }
 
@@ -215,45 +289,6 @@ class ListProvider extends ChangeNotifier {
     await _db.collection('items').doc(id).update({
       'quantity': newQuantity,
     });
-  }
-
-  Future<void> reorderAndMoveItem(String itemId, String newGroup, List<ListItem> newlyOrderedItems) async {
-    final draggedItem = newlyOrderedItems.firstWhere((i) => i.id == itemId);
-
-    String formattedGroup = newGroup.split(' ').map((word) =>
-    word.isNotEmpty ? '${word[0].toUpperCase()}${word.substring(1).toLowerCase()}' : ''
-    ).join(' ');
-
-    if (_groupBy == 'Store') {
-      draggedItem.locations = [formattedGroup];
-    } else if (_groupBy == 'Category') {
-      draggedItem.category = formattedGroup;
-    } else if (_groupBy == 'List') {
-      draggedItem.type = formattedGroup;
-    }
-
-    for (int i = 0; i < newlyOrderedItems.length; i++) {
-      newlyOrderedItems[i].order = i;
-    }
-
-    _items = newlyOrderedItems;
-    notifyListeners();
-
-    final batch = _db.batch();
-    for (var item in newlyOrderedItems) {
-      final docRef = _db.collection('items').doc(item.id);
-
-      Map<String, dynamic> updates = {'order': item.order};
-
-      if (item.id == itemId) {
-        if (_groupBy == 'Store') updates['locations'] = [formattedGroup];
-        if (_groupBy == 'Category') updates['category'] = formattedGroup;
-        if (_groupBy == 'List') updates['type'] = formattedGroup;
-      }
-
-      batch.update(docRef, updates);
-    }
-    await batch.commit();
   }
 
   Future<void> updateItem({
