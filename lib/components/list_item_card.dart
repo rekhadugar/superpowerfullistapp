@@ -125,7 +125,7 @@ class _ListItemCardState extends State<ListItemCard> {
         widget.onPointerDown?.call(event.localPosition.dy);
       },
       child: AnimatedSize(
-        // FIXED: Shifted to global modular parameters
+        // Outer AnimatedSize strictly handles the teardown/deletion shrink
         duration: AppConstants.layoutDuration,
         curve: AppConstants.layoutCurve,
         alignment: Alignment.topCenter,
@@ -216,116 +216,122 @@ class _ListItemCardState extends State<ListItemCard> {
                         BoxShadow(color: Colors.black.withValues(alpha: 0.12), blurRadius: 16, offset: const Offset(0, 8))
                     ]
                 ),
-                child: Padding(
-                  padding: EdgeInsets.symmetric(
-                      horizontal: 16.0,
-                      vertical: isActuallyCompact ? 12.0 : 16.0
-                  ),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              widget.item.name,
-                              style: TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.w600,
-                                color: widget.item.isCompleted ? AppTheme.textSecondary : Colors.black,
-                                decoration: widget.item.isCompleted ? TextDecoration.lineThrough : null,
-                              ),
-                            ),
-
-                            if (!isActuallyCompact && (widget.item.locations.isNotEmpty || widget.item.category != 'Uncategorized' || widget.item.context.isNotEmpty)) ...[
-                              const SizedBox(height: 8),
-                              Wrap(
-                                spacing: 6,
-                                runSpacing: 6,
-                                crossAxisAlignment: WrapCrossAlignment.center,
-                                children: [
-                                  ...widget.item.locations.map((loc) => _buildPill(loc, isStore: true)),
-                                  if (widget.item.category != 'Uncategorized')
-                                    _buildPill(widget.item.category, isStore: false),
-                                  if (widget.item.context.isNotEmpty)
-                                    Text(
-                                        '• ${widget.item.context}',
-                                        style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary, fontWeight: FontWeight.w600)
-                                    ),
-                                ],
-                              ),
-                            ]
-                          ],
-                        ),
-                      ),
-
-                      if (isActuallyCompact && widget.item.quantity > 0)
-                        Row(
-                          mainAxisSize: MainAxisSize.min,
-                          crossAxisAlignment: CrossAxisAlignment.center,
-                          children: [
-                            const SizedBox(width: 36),
-                            SizedBox(
-                              width: 28,
-                              child: Text(
-                                '${widget.item.quantity}',
-                                textAlign: TextAlign.center,
-                                style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16, color: Colors.black87),
-                              ),
-                            ),
-                            SizedBox(
-                              width: 36,
-                              child: Text(
-                                widget.item.unit,
-                                textAlign: TextAlign.center,
-                                style: const TextStyle(fontWeight: FontWeight.w600, color: AppTheme.textSecondary, fontSize: 14),
-                              ),
-                            ),
-                          ],
-                        )
-                      else if (!isActuallyCompact)
-                        Container(
-                          height: 36,
-                          decoration: BoxDecoration(
-                            color: AppTheme.background,
-                            borderRadius: BorderRadius.circular(18),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
+                // NEW: Inner AnimatedSize forces the Container to dynamically hug the content
+                child: AnimatedSize(
+                  duration: AppConstants.layoutDuration,
+                  curve: AppConstants.layoutCurve,
+                  alignment: Alignment.topCenter,
+                  child: Padding(
+                    padding: EdgeInsets.symmetric(
+                        horizontal: 16.0,
+                        vertical: isActuallyCompact ? 12.0 : 16.0
+                    ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              SizedBox(
-                                width: 36, height: 36,
-                                child: IconButton(
-                                  icon: const Icon(Icons.remove, size: 16),
-                                  color: AppTheme.textSecondary,
-                                  padding: EdgeInsets.zero,
-                                  splashRadius: 18,
-                                  onPressed: () => context.read<ListProvider>().updateQuantity(widget.item.id, widget.item.quantity - 1),
+                              Text(
+                                widget.item.name,
+                                style: TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.w600,
+                                  color: widget.item.isCompleted ? AppTheme.textSecondary : Colors.black,
+                                  decoration: widget.item.isCompleted ? TextDecoration.lineThrough : null,
                                 ),
                               ),
-                              SizedBox(
-                                width: 28,
-                                child: Text(
-                                    '${widget.item.quantity}',
-                                    textAlign: TextAlign.center,
-                                    style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16)
+
+                              if (!isActuallyCompact && (widget.item.locations.isNotEmpty || widget.item.category != 'Uncategorized' || widget.item.context.isNotEmpty)) ...[
+                                const SizedBox(height: 8),
+                                Wrap(
+                                  spacing: 6,
+                                  runSpacing: 6,
+                                  crossAxisAlignment: WrapCrossAlignment.center,
+                                  children: [
+                                    ...widget.item.locations.map((loc) => _buildPill(loc, isStore: true)),
+                                    if (widget.item.category != 'Uncategorized')
+                                      _buildPill(widget.item.category, isStore: false),
+                                    if (widget.item.context.isNotEmpty)
+                                      Text(
+                                          '• ${widget.item.context}',
+                                          style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary, fontWeight: FontWeight.w600)
+                                      ),
+                                  ],
                                 ),
-                              ),
-                              SizedBox(
-                                width: 36, height: 36,
-                                child: IconButton(
-                                  icon: const Icon(Icons.add, size: 16),
-                                  color: Colors.black,
-                                  padding: EdgeInsets.zero,
-                                  splashRadius: 18,
-                                  onPressed: () => context.read<ListProvider>().updateQuantity(widget.item.id, widget.item.quantity + 1),
-                                ),
-                              ),
+                              ]
                             ],
                           ),
                         ),
-                    ],
+
+                        if (isActuallyCompact && widget.item.quantity > 0)
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.center,
+                            children: [
+                              const SizedBox(width: 36),
+                              SizedBox(
+                                width: 28,
+                                child: Text(
+                                  '${widget.item.quantity}',
+                                  textAlign: TextAlign.center,
+                                  style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16, color: Colors.black87),
+                                ),
+                              ),
+                              SizedBox(
+                                width: 36,
+                                child: Text(
+                                  widget.item.unit,
+                                  textAlign: TextAlign.center,
+                                  style: const TextStyle(fontWeight: FontWeight.w600, color: AppTheme.textSecondary, fontSize: 14),
+                                ),
+                              ),
+                            ],
+                          )
+                        else if (!isActuallyCompact)
+                          Container(
+                            height: 36,
+                            decoration: BoxDecoration(
+                              color: AppTheme.background,
+                              borderRadius: BorderRadius.circular(18),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                SizedBox(
+                                  width: 36, height: 36,
+                                  child: IconButton(
+                                    icon: const Icon(Icons.remove, size: 16),
+                                    color: AppTheme.textSecondary,
+                                    padding: EdgeInsets.zero,
+                                    splashRadius: 18,
+                                    onPressed: () => context.read<ListProvider>().updateQuantity(widget.item.id, widget.item.quantity - 1),
+                                  ),
+                                ),
+                                SizedBox(
+                                  width: 28,
+                                  child: Text(
+                                      '${widget.item.quantity}',
+                                      textAlign: TextAlign.center,
+                                      style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16)
+                                  ),
+                                ),
+                                SizedBox(
+                                  width: 36, height: 36,
+                                  child: IconButton(
+                                    icon: const Icon(Icons.add, size: 16),
+                                    color: Colors.black,
+                                    padding: EdgeInsets.zero,
+                                    splashRadius: 18,
+                                    onPressed: () => context.read<ListProvider>().updateQuantity(widget.item.id, widget.item.quantity + 1),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                      ],
+                    ),
                   ),
                 ),
               ),
