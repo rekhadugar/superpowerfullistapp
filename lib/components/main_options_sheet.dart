@@ -74,6 +74,33 @@ class MainOptionsSheet extends StatelessWidget {
 
           const Divider(height: 16),
 
+          // NEW: Compact Mode Toggle
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 4),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Row(
+                  children: [
+                    Icon(Icons.view_compact_alt_outlined, color: Colors.black54, size: 24),
+                    SizedBox(width: 16),
+                    Text(
+                      'Compact view',
+                      style: TextStyle(fontWeight: FontWeight.w600, fontSize: 16, color: Colors.black87),
+                    ),
+                  ],
+                ),
+                Switch(
+                  value: provider.isGlobalCompactMode,
+                  activeColor: AppTheme.primary,
+                  onChanged: (bool value) {
+                    provider.toggleGlobalCompactMode();
+                  },
+                ),
+              ],
+            ),
+          ),
+
           _buildOptionTile(
             context,
             icon: Icons.checklist,
@@ -83,13 +110,12 @@ class MainOptionsSheet extends StatelessWidget {
             },
           ),
 
-          // NEW: Navigation to Checked Items Screen
           _buildOptionTile(
             context,
             icon: Icons.playlist_add_check,
             title: 'View checked items',
             onTap: () {
-              Navigator.pop(context); // Close the bottom sheet
+              Navigator.pop(context);
               Navigator.push(
                 context,
                 MaterialPageRoute(builder: (context) => const CompletedItemsScreen()),

@@ -44,7 +44,6 @@ class _MainScreenState extends State<MainScreen> {
 
   bool _onScroll(ScrollNotification notification) {
     if (notification is ScrollUpdateNotification) {
-      // FIXED: Restored the precise overscroll stretch tracking
       if (notification.metrics.pixels < notification.metrics.minScrollExtent) {
         _overscrollY = -(notification.metrics.pixels - notification.metrics.minScrollExtent);
       } else if (notification.metrics.pixels > notification.metrics.maxScrollExtent) {
@@ -54,6 +53,16 @@ class _MainScreenState extends State<MainScreen> {
       }
       _runPhysics();
     }
+
+    if (notification is ScrollStartNotification) {
+      final provider = context.read<ListProvider>();
+      if (provider.expandedItemId != null) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          provider.clearExpandedItem();
+        });
+      }
+    }
+
     return false;
   }
 
@@ -143,7 +152,16 @@ class _MainScreenState extends State<MainScreen> {
 
                     actions: [
                       IconButton(
-                        icon: const Icon(Icons.more_horiz),
+                        icon: Icon(
+                          listProvider.isGlobalCompactMode
+                              ? Icons.view_headline
+                              : Icons.view_compact_alt_outlined,
+                          color: listProvider.isGlobalCompactMode ? AppTheme.primary : Colors.black,
+                        ),
+                        onPressed: () => listProvider.toggleGlobalCompactMode(),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.more_horiz, color: Colors.black),
                         onPressed: _openOptionsSheet,
                       ),
                     ],
@@ -155,7 +173,6 @@ class _MainScreenState extends State<MainScreen> {
                   ),
 
                   SliverPadding(
-                    // FIXED: Eliminated the entry-level calculation jump with pure 0 top padding
                     padding: const EdgeInsets.only(
                       left: AppConstants.padMedium,
                       right: AppConstants.padMedium,
@@ -164,24 +181,50 @@ class _MainScreenState extends State<MainScreen> {
                     ),
                     sliver: SliverReorderableList(
                       itemCount: flatList.length,
+                      proxyDecorator: (Widget child, int index, Animation<double> animation) {
+                        final row = flatList[index];
+                        if (row is String) return child;
+                        return Container(
+                          // FIXED: This forces the instantly shrunken card to suspend itself perfectly
+                          // in the center of the original drag snapshot constraints, keeping it under your thumb!
+                          alignment: Alignment.center,
+                          child: Material(
+                            color: Colors.transparent,
+                            child: ListItemCard(
+                              item: row as ListItem,
+                              isCompact: listProvider.isGlobalCompactMode,
+                              isDraggingProxy: true,
+                            ),
+                          ),
+                        );
+                      },
                       itemBuilder: (context, index) {
                         final row = flatList[index];
 
                         if (row is String) {
                           return Container(
                             key: _headerKeys[row],
-                            child: SectionHeader(title: row),
+                            child: SectionHeader(
+                                title: row,
+                                isCompact: listProvider.isGlobalCompactMode
+                            ),
                           );
                         }
 
                         return ReorderableDelayedDragStartListener(
                           key: ValueKey((row as ListItem).id),
                           index: index,
-                          child: ListItemCard(item: row),
+                          child: ListItemCard(
+                            item: row,
+                            isCompact: listProvider.isGlobalCompactMode,
+                          ),
                         );
                       },
                       onReorder: (int oldIndex, int newIndex) {
                         listProvider.reorderItems(oldIndex, newIndex);
+                      },
+                      onReorderStart: (int index) {
+                        listProvider.clearExpandedItem();
                       },
                     ),
                   ),
@@ -210,11 +253,11 @@ class _MainScreenState extends State<MainScreen> {
                       offset: Offset(0, state.pushOffset),
                       child: Container(
                         key: _phantomHeaderKey,
-                        height: AppConstants.stickyHeaderHeight,
+                        height: listProvider.isGlobalCompactMode ? 36.0 : 56.0,
                         width: double.infinity,
                         alignment: Alignment.bottomLeft,
                         padding: const EdgeInsets.only(
-                          left: AppConstants.padXLarge,
+                          left: AppConstants.padMedium,
                           right: AppConstants.padMedium,
                           bottom: AppConstants.padSmall,
                         ),

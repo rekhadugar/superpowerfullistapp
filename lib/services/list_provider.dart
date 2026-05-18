@@ -16,12 +16,42 @@ class ListProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  // RESTORED: Advanced grouping states for the Choice Chips Menu
+  bool _isGlobalCompactMode = false;
+  bool get isGlobalCompactMode => _isGlobalCompactMode;
+
+  void toggleGlobalCompactMode() {
+    _isGlobalCompactMode = !_isGlobalCompactMode;
+    // Reset expanded state when toggling modes
+    _expandedItemId = null;
+    notifyListeners();
+  }
+
+  // NEW: Track which card is temporarily expanded in compact mode
+  String? _expandedItemId;
+  String? get expandedItemId => _expandedItemId;
+
+  void toggleExpandedItem(String id) {
+    if (_expandedItemId == id) {
+      _expandedItemId = null;
+    } else {
+      _expandedItemId = id;
+    }
+    notifyListeners();
+  }
+
+  void clearExpandedItem() {
+    if (_expandedItemId != null) {
+      _expandedItemId = null;
+      notifyListeners();
+    }
+  }
+
   String _groupBy = 'Category';
   String get groupBy => _groupBy;
 
   void setGroupBy(String method) {
     _groupBy = method;
+    _expandedItemId = null; // NEW: Collapse any expanded card when grouping changes
     notifyListeners();
   }
 
@@ -29,7 +59,6 @@ class ListProvider extends ChangeNotifier {
     _listenToItems();
   }
 
-  // RESTORED: Advanced data flattener
   List<dynamic> get groupedAndSortedItems {
     final activeItems = _items.where((i) => !i.isCompleted && !i.isDeleted).toList();
 
