@@ -26,19 +26,18 @@ class StickyHeaderEngine {
     required GlobalKey endOfListKey,
     required Map<String, GlobalKey> headerKeys,
     required ValueNotifier<StickyHeaderState> headerState,
-    required double overscrollY, // THE FIX: Feed the elastic displacement into the engine
+    required double overscrollY,
   }) {
     if (!isMounted || stackKey.currentContext == null) return;
 
     final RenderBox stackBox = stackKey.currentContext!.findRenderObject() as RenderBox;
     final double stackTopY = stackBox.localToGlobal(Offset.zero).dy;
 
-    // THE FIX: Add the overscrollY to perfectly track the bouncing App Bar
     double appBarBottomY = stackTopY;
     if (appBarKey.currentContext != null) {
       final RenderBox appBarBox = appBarKey.currentContext!.findRenderObject() as RenderBox;
-      const double opticalNudge = 0
-      ; // (Keep your fine-tuned decimal here)
+      // FIXED: Applied the -1.0 logical pixel overlap to mask underlying DPR grid rounding errors
+      const double opticalNudge = -1.0;
       appBarBottomY = appBarBox.localToGlobal(Offset.zero).dy + opticalNudge + overscrollY;
     }
 
@@ -65,7 +64,6 @@ class StickyHeaderEngine {
 
       if (key != null && key.currentContext != null) {
         final RenderBox box = key.currentContext!.findRenderObject() as RenderBox;
-        // THE FIX: Add the overscrollY to perfectly track the bouncing inline headers
         final dy = box.localToGlobal(Offset.zero).dy + overscrollY;
 
         if (dy <= pinY + 1.0) {
@@ -93,7 +91,6 @@ class StickyHeaderEngine {
       pushOffset = nextHeaderY - (pinY + stickyHeight);
     } else if (nextHeader == null && endOfListKey.currentContext != null) {
       final RenderBox endBox = endOfListKey.currentContext!.findRenderObject() as RenderBox;
-      // THE FIX: Add the overscrollY to perfectly track the bouncing end bumper
       final double endDy = endBox.localToGlobal(Offset.zero).dy + overscrollY;
       if (endDy < pinY + stickyHeight) {
         pushOffset = endDy - (pinY + stickyHeight);
