@@ -31,7 +31,6 @@ class _MainScreenState extends State<MainScreen> with SingleTickerProviderStateM
   final ValueNotifier<StickyHeaderState> _headerState = ValueNotifier<StickyHeaderState>(StickyHeaderState(title: ''));
   final ScrollController _scrollController = ScrollController();
 
-  // NEW: Decoupled App Bar Controller
   late AnimationController _appBarController;
 
   bool _isSnapping = false;
@@ -41,16 +40,14 @@ class _MainScreenState extends State<MainScreen> with SingleTickerProviderStateM
   @override
   void initState() {
     super.initState();
-    // The App Bar operates between Y = -76.0 (hidden) and Y = 0.0 (visible)
     _appBarController = AnimationController(
       vsync: this,
       lowerBound: -76.0,
       upperBound: 0.0,
       value: 0.0,
-      duration: const Duration(milliseconds: 250),
+      duration: const Duration(milliseconds: 150), // Tightened for serial animation
     );
 
-    // Automatically trigger layout physics anytime the App Bar moves
     _appBarController.addListener(() {
       _runPhysics();
     });
@@ -85,7 +82,6 @@ class _MainScreenState extends State<MainScreen> with SingleTickerProviderStateM
     _activeSnapId++;
     _isSnapping = false;
 
-    // Instantly freeze the App Bar if touched mid-animation
     if (_appBarController.isAnimating) {
       _appBarController.stop();
     }
@@ -97,15 +93,17 @@ class _MainScreenState extends State<MainScreen> with SingleTickerProviderStateM
         _lastUserScrollDirection = _scrollController.position.userScrollDirection;
       }
 
-      // MANUALLY TRACK APP BAR VISIBILITY
+      // FIX: Ensure slow scrolls are perfectly captured without delta loss
       if (notification.scrollDelta != null && !_isSnapping) {
-        if (notification.metrics.pixels > 0.0) {
-          double newY = (_appBarController.value - notification.scrollDelta!).clamp(-76.0, 0.0);
-          _appBarController.value = newY; // Instantly translates the decoupled app bar
-        } else if (notification.metrics.pixels <= 0.0) {
-          _appBarController.value = 0.0; // Force reveal at absolute top
-        }
+        double newY = (_appBarController.value - notification.scrollDelta!).clamp(-76.0, 0.0);
+        _appBarController.value = newY;
       }
+
+      // Absolute top boundary lock
+      if (_scrollController.hasClients && _scrollController.offset <= 0.0 && !_isSnapping) {
+        _appBarController.value = 0.0;
+      }
+
       _runPhysics();
     }
 
@@ -119,65 +117,57 @@ class _MainScreenState extends State<MainScreen> with SingleTickerProviderStateM
     }
 
     if (notification is ScrollEndNotification && !_isSnapping) {
-      final double currentY = _appBarController.value;
-      final bool isAppBarPartial = currentY > -76.0 && currentY < 0.0;
+      _isSnapping = true;
+      _activeSnapId++;
+      final int currentSnapId = _activeSnapId;
 
-      double targetAppBarY = currentY;
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
+        final double currentY = _appBarController.value;
+        final bool isAppBarPartial = currentY > -75.9 && currentY < -0.1; // Wider float tolerance
 
-      // 1. DETERMINE APP BAR SNAP TARGET (Never leave it partially visible)
-      if (isAppBarPartial) {
-        if (_lastUserScrollDirection == ScrollDirection.reverse) {
-          targetAppBarY = 0.0; // Scrolling up (revealing), snap fully open
-        } else if (_lastUserScrollDirection == ScrollDirection.forward) {
-          targetAppBarY = -76.0; // Scrolling down (hiding), snap fully closed
-        } else {
-          targetAppBarY = currentY < -38.0 ? -76.0 : 0.0;
+        // --- PHASE 1: RESOLVE THE APP BAR ANCHOR ---
+        if (isAppBarPartial) {
+          double targetAppBarY;
+          if (_lastUserScrollDirection == ScrollDirection.reverse) {
+            targetAppBarY = 0.0;
+          } else if (_lastUserScrollDirection == ScrollDirection.forward) {
+            targetAppBarY = -76.0;
+          } else {
+            targetAppBarY = currentY < -38.0 ? -76.0 : 0.0;
+          }
+
+          await _appBarController.animateTo(
+            targetAppBarY,
+            duration: const Duration(milliseconds: 150),
+            curve: Curves.easeOut,
+          );
         }
-      }
 
-      final snapDelta = _headerState.value.snapDelta;
-      final bool needsCellSnap = snapDelta.abs() > 1.0 && snapDelta.abs() < 150.0;
+        // Abort if the user touched the screen during Phase 1
+        if (!mounted || _activeSnapId != currentSnapId) return;
 
-      // 2. RUN SYNCHRONIZED DUAL-SNAPPING
-      if (isAppBarPartial || needsCellSnap) {
-        _isSnapping = true;
-        _activeSnapId++;
-        final int currentSnapId = _activeSnapId;
+        // --- PHASE 2: STATIC RECALCULATION & CELL SNAP ---
+        // Force the engine to look at the new, completely stationary layout
+        _runPhysics();
 
-        WidgetsBinding.instance.addPostFrameCallback((_) async {
-          List<Future> animations = [];
+        final snapDelta = _headerState.value.snapDelta;
 
-          if (isAppBarPartial) {
-            animations.add(_appBarController.animateTo(
-              targetAppBarY,
-              duration: const Duration(milliseconds: 250),
-              curve: Curves.easeOutQuad,
-            ));
+        if (snapDelta.abs() > 1.0 && snapDelta.abs() < 150.0 && _scrollController.hasClients) {
+          final targetOffset = _scrollController.offset + snapDelta;
+
+          if (targetOffset >= 0 && targetOffset <= _scrollController.position.maxScrollExtent) {
+            await _scrollController.animateTo(
+              targetOffset,
+              duration: const Duration(milliseconds: 150),
+              curve: Curves.easeOutCubic,
+            );
           }
+        }
 
-          if (needsCellSnap && _scrollController.hasClients) {
-            // Predict where the App Bar is going to land and adjust the cell's target offset to match
-            double appBarMoveDelta = targetAppBarY - currentY;
-            final targetOffset = _scrollController.offset + snapDelta - appBarMoveDelta;
-
-            if (targetOffset >= 0 && targetOffset <= _scrollController.position.maxScrollExtent) {
-              animations.add(_scrollController.animateTo(
-                targetOffset,
-                duration: const Duration(milliseconds: 250),
-                curve: Curves.easeOutQuad,
-              ));
-            }
-          }
-
-          if (animations.isNotEmpty) {
-            await Future.wait(animations);
-          }
-
-          if (mounted && _activeSnapId == currentSnapId) {
-            _isSnapping = false;
-          }
-        });
-      }
+        if (mounted && _activeSnapId == currentSnapId) {
+          _isSnapping = false;
+        }
+      });
     }
     return false;
   }
@@ -242,7 +232,6 @@ class _MainScreenState extends State<MainScreen> with SingleTickerProviderStateM
         child: Stack(
           key: _stackKey,
           children: [
-            // LAYER 1: The Core Scroll View
             Listener(
               onPointerDown: _handlePointerDown,
               child: NotificationListener<ScrollNotification>(
@@ -250,7 +239,6 @@ class _MainScreenState extends State<MainScreen> with SingleTickerProviderStateM
                 child: CustomScrollView(
                   controller: _scrollController,
                   slivers: [
-                    // A transparent runway equal to the height of the App Bar
                     const SliverToBoxAdapter(
                       child: SizedBox(height: 76.0),
                     ),
@@ -352,7 +340,6 @@ class _MainScreenState extends State<MainScreen> with SingleTickerProviderStateM
               ),
             ),
 
-            // LAYER 2: The Phantom Header
             ValueListenableBuilder<StickyHeaderState>(
               valueListenable: _headerState,
               builder: (context, state, child) {
@@ -392,7 +379,6 @@ class _MainScreenState extends State<MainScreen> with SingleTickerProviderStateM
               },
             ),
 
-            // LAYER 3: The Decoupled App Bar
             AnimatedBuilder(
               animation: _appBarController,
               builder: (context, child) {
@@ -463,7 +449,6 @@ class _MainScreenState extends State<MainScreen> with SingleTickerProviderStateM
                             ),
                           ),
                         ),
-                        // The anchor key explicitly attached to the bottom
                         Container(key: _appBarKey, height: 0),
                       ],
                     ),
