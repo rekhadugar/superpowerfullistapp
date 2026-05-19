@@ -132,17 +132,38 @@ class _MainScreenState extends State<MainScreen> {
                     centerTitle: true,
                     backgroundColor: AppTheme.background,
 
-                    leading: IconButton(
+                    // NEW: Swap leading icon when searching
+                    leading: listProvider.isSearching
+                        ? IconButton(
+                      icon: const Icon(Icons.arrow_back, color: Colors.black),
+                      onPressed: () => listProvider.toggleSearch(),
+                    )
+                        : IconButton(
                       icon: const Icon(Icons.menu),
                       onPressed: () => _scaffoldKey.currentState?.openDrawer(),
                     ),
 
-                    title: Text(
+                    // NEW: Swap title for a TextField when searching
+                    title: listProvider.isSearching
+                        ? TextField(
+                      autofocus: true,
+                      decoration: const InputDecoration(
+                        hintText: 'Search items, tags, stores...',
+                        border: InputBorder.none,
+                        hintStyle: TextStyle(color: Colors.black45, fontSize: 16),
+                      ),
+                      style: const TextStyle(color: Colors.black, fontSize: 18, fontWeight: FontWeight.w600),
+                      onChanged: (value) => listProvider.setSearchQuery(value),
+                    )
+                        : Text(
                       activeType,
                       style: Theme.of(context).appBarTheme.titleTextStyle,
                     ),
 
-                    actions: [
+                    // Hide right actions during search to give the text field breathing room
+                    actions: listProvider.isSearching
+                        ? []
+                        : [
                       IconButton(
                         icon: Icon(
                           listProvider.isGlobalCompactMode

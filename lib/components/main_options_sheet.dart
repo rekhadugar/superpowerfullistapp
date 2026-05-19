@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../services/list_provider.dart';
 import '../theme/app_theme.dart';
-import '../screens/completed_items_screen.dart'; // IMPORT THE NEW SCREEN
+import '../screens/completed_items_screen.dart';
 
 class MainOptionsSheet extends StatelessWidget {
   const MainOptionsSheet({super.key});
@@ -39,6 +39,8 @@ class MainOptionsSheet extends StatelessWidget {
             title: 'Search on the list',
             onTap: () {
               Navigator.pop(context);
+              // NEW: Trigger the search mode
+              provider.toggleSearch();
             },
           ),
           _buildOptionTile(
@@ -74,7 +76,6 @@ class MainOptionsSheet extends StatelessWidget {
 
           const Divider(height: 16),
 
-          // NEW: Compact Mode Toggle
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 4),
             child: Row(

@@ -16,6 +16,26 @@ class ListProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  // NEW: Smart Search State
+  bool _isSearching = false;
+  bool get isSearching => _isSearching;
+
+  String _searchQuery = '';
+  String get searchQuery => _searchQuery;
+
+  void toggleSearch() {
+    _isSearching = !_isSearching;
+    if (!_isSearching) {
+      _searchQuery = ''; // Clear the query when closing search
+    }
+    notifyListeners();
+  }
+
+  void setSearchQuery(String query) {
+    _searchQuery = query;
+    notifyListeners();
+  }
+
   bool _isGlobalCompactMode = false;
   bool get isGlobalCompactMode => _isGlobalCompactMode;
 
@@ -57,26 +77,6 @@ class ListProvider extends ChangeNotifier {
     _listenToItems();
   }
 
-  // ==========================================
-  // --- MODULAR SORTING HOOKS ---
-  // ==========================================
-
-  /// Determines the display order of the group headers.
-  /// Phase 4 Prep: Hook this into a custom user-defined array for "Manage Shops/Categories".
-  List<String> _getSortedGroupNames(Iterable<String> unsortedGroups) {
-    final groups = unsortedGroups.toList();
-    groups.sort(); // Currently defaults to alphabetical
-    return groups;
-  }
-
-  /// Determines the display order of items within a specific group.
-  void _sortItemsWithinGroup(List<ListItem> items) {
-    // Items strictly respect their manual drag-and-drop integer.
-    items.sort((a, b) => a.order.compareTo(b.order));
-  }
-
-  // ==========================================
-
   List<String> get availableLists {
     final Set<String> types = {'All Items'};
     for (var item in _items) {
@@ -85,7 +85,6 @@ class ListProvider extends ChangeNotifier {
       }
     }
     final sortedTypes = types.toList();
-    // Keep 'All Items' pinned to the top, sort the rest alphabetically
     sortedTypes.sort((a, b) {
       if (a == 'All Items') return -1;
       if (b == 'All Items') return 1;
@@ -94,11 +93,35 @@ class ListProvider extends ChangeNotifier {
     return sortedTypes;
   }
 
+  List<String> _getSortedGroupNames(Iterable<String> unsortedGroups) {
+    final groups = unsortedGroups.toList();
+    groups.sort();
+    return groups;
+  }
+
+  void _sortItemsWithinGroup(List<ListItem> items) {
+    items.sort((a, b) => a.order.compareTo(b.order));
+  }
+
   List<dynamic> get groupedAndSortedItems {
     final activeItems = _items.where((i) {
       if (i.isCompleted || i.isDeleted) return false;
-      // NEW: Filter items based on the active drawer selection
       if (_activeType != 'All Items' && i.type != _activeType) return false;
+
+      // NEW: Smart Search Filtering Logic
+      if (_isSearching && _searchQuery.isNotEmpty) {
+        final query = _searchQuery.toLowerCase();
+
+        final matchesName = i.name.toLowerCase().contains(query);
+        final matchesCategory = i.category.toLowerCase().contains(query);
+        final matchesContext = i.context.toLowerCase().contains(query);
+        final matchesLocation = i.locations.any((loc) => loc.toLowerCase().contains(query));
+
+        if (!matchesName && !matchesCategory && !matchesContext && !matchesLocation) {
+          return false;
+        }
+      }
+
       return true;
     }).toList();
 
@@ -136,10 +159,8 @@ class ListProvider extends ChangeNotifier {
 
     for (var groupName in sortedGroupNames) {
       flattenedList.add(groupName.toUpperCase());
-
       final itemsInGroup = groups[groupName]!;
       _sortItemsWithinGroup(itemsInGroup);
-
       flattenedList.addAll(itemsInGroup);
     }
 
@@ -198,8 +219,6 @@ class ListProvider extends ChangeNotifier {
     });
   }
 
-  // FIXED: Reorder logic now operates purely on the flat array to guarantee precise placements
-  // across boundaries and assigns global, continuous integers.
   Future<void> reorderItems(int oldIndex, int newIndex) async {
     if (oldIndex < newIndex) {
       newIndex -= 1;
@@ -209,15 +228,13 @@ class ListProvider extends ChangeNotifier {
     if (oldIndex >= flatList.length || newIndex >= flatList.length) return;
 
     final draggedElement = flatList[oldIndex];
-    if (draggedElement is String) return; // Prevent dragging headers
+    if (draggedElement is String) return;
 
     final draggedItem = draggedElement as ListItem;
 
-    // 1. Visually reorder the flat array in local memory
     flatList.removeAt(oldIndex);
     flatList.insert(newIndex, draggedItem);
 
-    // 2. Sweep the modified list, update local properties, and queue batch updates
     WriteBatch batch = _db.batch();
     String currentGroupName = 'Uncategorized';
     int currentOrderIndex = 0;
@@ -230,14 +247,12 @@ class ListProvider extends ChangeNotifier {
         bool needsUpdate = false;
         Map<String, dynamic> updates = {};
 
-        // Force a continuous global order parameter
         if (item.order != currentOrderIndex) {
           item.order = currentOrderIndex;
           updates['order'] = currentOrderIndex;
           needsUpdate = true;
         }
 
-        // Check if the item was dropped under a new header
         if (item.id == draggedItem.id && _groupBy != 'None') {
           String formattedGroup = currentGroupName.split(' ').map((word) =>
           word.isNotEmpty ? '${word[0].toUpperCase()}${word.substring(1).toLowerCase()}' : ''
@@ -266,7 +281,6 @@ class ListProvider extends ChangeNotifier {
       }
     }
 
-    // Trigger optimistic UI update so items snap instantly before Firestore acknowledges
     notifyListeners();
     await batch.commit();
   }
