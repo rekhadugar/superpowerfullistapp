@@ -11,6 +11,7 @@ class AppTheme {
   static const Color border = Color(0xFFE5E5EA);     // Standard iOS border
   static const Color error = Colors.red;
 
+
   // 2. Global Theme Configuration
   static final ThemeData lightTheme = ThemeData(
     scaffoldBackgroundColor: background,

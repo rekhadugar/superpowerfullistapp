@@ -2,12 +2,12 @@ import 'package:flutter/cupertino.dart';
 
 class AppConstants {
   // --- Padding & Spacing ---
-  static const double padTiny = 6.0;   // NEW: For wrap spacing
-  static const double padSmall = 8.0;
-  static const double padCompact = 12.0; // NEW: For compact modes/inner padding
-  static const double padMedium = 16.0;
-  static const double padLarge = 24.0;
-  static const double padXLarge = 32.0;
+  static const double padTiny = 4.0;   // NEW: For wrap spacing
+  static const double padSmall = 6.0;
+  static const double padCompact = 8.0; // NEW: For compact modes/inner padding
+  static const double padMedium = 12.0;
+  static const double padLarge = 16.0;
+  static const double padXLarge = 24.0;
 
   // --- UI Geometry ---
   static const double stickyHeaderHeight = 56.0;
