@@ -101,6 +101,18 @@ class ListProvider extends ChangeNotifier {
     }
   }
 
+  void editItem(String id, String newTitle, List<String> newAttributes) {
+    final index = _items.indexWhere((item) => item.id == id);
+    if (index != -1) {
+      _items[index] = _items[index].copyWith(
+        title: newTitle,
+        attributeRows: newAttributes,
+      );
+      // Recalculating wraps will automatically update nWrap and notify listeners
+      _recalculateWraps();
+    }
+  }
+
   void deleteItem(String id) {
     final index = _items.indexWhere((item) => item.id == id);
     if (index != -1) {

@@ -3,6 +3,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/list_provider.dart';
+import '../widgets/edit_item_bottom_sheet.dart';
 import '../widgets/list_item_card.dart';
 import '../theme/app_theme.dart';
 import '../theme/app_constants.dart';
@@ -55,9 +56,16 @@ class MainScreen extends StatelessWidget {
             key: ValueKey('swipe_${item.id}'),
             itemId: item.id,
             onEdit: () {
-              // Phase 4: This will trigger the BottomSheet/Edit Flow
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('Edit tapped for ${item.title}')),
+              showModalBottomSheet(
+                context: context,
+                isScrollControlled: true,
+                backgroundColor: Colors.transparent, // Allows our custom rounded corners to show
+                builder: (context) => EditItemBottomSheet(
+                  item: item,
+                  onSave: (newTitle, newAttributes) {
+                    context.read<ListProvider>().editItem(item.id, newTitle, newAttributes);
+                  },
+                ),
               );
             },
             onDelete: () {
