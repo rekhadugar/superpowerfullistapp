@@ -7,17 +7,34 @@ import '../theme/app_constants.dart';
 import '../theme/app_theme.dart';
 import 'item_form_modal.dart';
 
+// Location: lib/components/list_item_card.dart
+
 class ListItemCard extends StatefulWidget {
   final ListItem item;
   final bool isCompact;
   final bool isDraggingProxy;
+  final bool isExpanded;
   final ValueChanged<double>? onPointerDown;
+
+  final VoidCallback onToggleStatus;
+  final VoidCallback onDelete;
+  final VoidCallback onRestore;
+  final VoidCallback onToggleExpand;
+  final ValueChanged<int> onUpdateQuantity;
+  final VoidCallback onEdit;
 
   const ListItemCard({
     required this.item,
     this.isCompact = false,
     this.isDraggingProxy = false,
+    this.isExpanded = false,
     this.onPointerDown,
+    required this.onToggleStatus,
+    required this.onDelete,
+    required this.onRestore,
+    required this.onToggleExpand,
+    required this.onUpdateQuantity,
+    required this.onEdit,
     super.key
   });
 
@@ -35,15 +52,13 @@ class _ListItemCardState extends State<ListItemCard> {
 
     final item = widget.item;
     final bool wasCompleted = item.isCompleted;
-    final provider = context.read<ListProvider>();
     final scaffoldMessenger = ScaffoldMessenger.of(context);
 
-    // FIXED: Deletion dispatch perfectly syncs with the new global layout duration
     Future.delayed(AppConstants.layoutDuration, () {
       if (isDelete) {
-        provider.deleteItem(item.id);
+        widget.onDelete();
       } else {
-        provider.toggleItemStatus(item.id, wasCompleted);
+        widget.onToggleStatus();
       }
 
       scaffoldMessenger.clearSnackBars();
@@ -65,9 +80,9 @@ class _ListItemCardState extends State<ListItemCard> {
             textColor: AppTheme.primary,
             onPressed: () {
               if (isDelete) {
-                provider.restoreItem(item.id);
+                widget.onRestore();
               } else {
-                provider.toggleItemStatus(item.id, !wasCompleted);
+                widget.onToggleStatus();
               }
               scaffoldMessenger.hideCurrentSnackBar();
             },
@@ -110,14 +125,14 @@ class _ListItemCardState extends State<ListItemCard> {
 
   void _handleInteraction() {
     if (widget.isCompact) {
-      context.read<ListProvider>().toggleExpandedItem(widget.item.id);
+      widget.onToggleExpand();
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final provider = context.watch<ListProvider>();
-    final isLocallyExpanded = !widget.isDraggingProxy && provider.expandedItemId == widget.item.id;
+    // FIXED: The card no longer reads global state; it relies entirely on its widget properties.
+    final isLocallyExpanded = !widget.isDraggingProxy && widget.isExpanded;
     final isActuallyCompact = widget.isCompact && !isLocallyExpanded;
     final hasExtraDetails = widget.item.locations.isNotEmpty || widget.item.category != 'Uncategorized' || widget.item.context.isNotEmpty;
 
@@ -170,17 +185,7 @@ class _ListItemCardState extends State<ListItemCard> {
               children: [
                 SlidableAction(
                   flex: 2,
-                  onPressed: (context) {
-                    showModalBottomSheet(
-                      context: context,
-                      isScrollControlled: true,
-                      backgroundColor: Colors.transparent,
-                      builder: (context) => ItemFormModal(
-                        activeListType: context.read<ListProvider>().activeType,
-                        existingItem: widget.item,
-                      ),
-                    );
-                  },
+                  onPressed: (context) => widget.onEdit(),
                   backgroundColor: Colors.blue,
                   foregroundColor: Colors.white,
                   icon: Icons.edit,
@@ -246,7 +251,6 @@ class _ListItemCardState extends State<ListItemCard> {
                                 ),
                               ),
 
-                              // NEW: Encapsulated the tags in their own AnimatedSize
                               AnimatedSize(
                                 duration: AppConstants.layoutDuration,
                                 curve: AppConstants.layoutCurve,
@@ -279,7 +283,6 @@ class _ListItemCardState extends State<ListItemCard> {
                           ),
                         ),
 
-                        // NEW: Cross-fading the quantity display to ensure smooth transition and gliding
                         AnimatedCrossFade(
                           duration: AppConstants.layoutDuration,
                           firstCurve: AppConstants.layoutCurve,
@@ -311,7 +314,7 @@ class _ListItemCardState extends State<ListItemCard> {
                               ),
                             ],
                           )
-                              : const SizedBox(width: 100, height: 36), // Preserves a stable 100px width when hidden
+                              : const SizedBox(width: 100, height: 36),
                           secondChild: Container(
                             height: 36,
                             decoration: BoxDecoration(
@@ -328,7 +331,7 @@ class _ListItemCardState extends State<ListItemCard> {
                                     color: AppTheme.textSecondary,
                                     padding: EdgeInsets.zero,
                                     splashRadius: 18,
-                                    onPressed: () => context.read<ListProvider>().updateQuantity(widget.item.id, widget.item.quantity - 1),
+                                    onPressed: () => widget.onUpdateQuantity(widget.item.quantity - 1),
                                   ),
                                 ),
                                 SizedBox(
@@ -346,7 +349,7 @@ class _ListItemCardState extends State<ListItemCard> {
                                     color: Colors.black,
                                     padding: EdgeInsets.zero,
                                     splashRadius: 18,
-                                    onPressed: () => context.read<ListProvider>().updateQuantity(widget.item.id, widget.item.quantity + 1),
+                                    onPressed: () => widget.onUpdateQuantity(widget.item.quantity + 1),
                                   ),
                                 ),
                               ],

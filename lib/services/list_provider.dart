@@ -77,8 +77,30 @@ class ListProvider extends ChangeNotifier {
 
   // ==========================================
 
+  List<String> get availableLists {
+    final Set<String> types = {'All Items'};
+    for (var item in _items) {
+      if (!item.isDeleted) {
+        types.add(item.type);
+      }
+    }
+    final sortedTypes = types.toList();
+    // Keep 'All Items' pinned to the top, sort the rest alphabetically
+    sortedTypes.sort((a, b) {
+      if (a == 'All Items') return -1;
+      if (b == 'All Items') return 1;
+      return a.compareTo(b);
+    });
+    return sortedTypes;
+  }
+
   List<dynamic> get groupedAndSortedItems {
-    final activeItems = _items.where((i) => !i.isCompleted && !i.isDeleted).toList();
+    final activeItems = _items.where((i) {
+      if (i.isCompleted || i.isDeleted) return false;
+      // NEW: Filter items based on the active drawer selection
+      if (_activeType != 'All Items' && i.type != _activeType) return false;
+      return true;
+    }).toList();
 
     if (_groupBy == 'None') {
       _sortItemsWithinGroup(activeItems);

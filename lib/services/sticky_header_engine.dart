@@ -1,3 +1,5 @@
+// Location: lib/services/sticky_header_engine.dart
+
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -26,7 +28,6 @@ class StickyHeaderEngine {
     required GlobalKey endOfListKey,
     required Map<String, GlobalKey> headerKeys,
     required ValueNotifier<StickyHeaderState> headerState,
-    required double overscrollY,
   }) {
     if (!isMounted || stackKey.currentContext == null) return;
 
@@ -36,9 +37,9 @@ class StickyHeaderEngine {
     double appBarBottomY = stackTopY;
     if (appBarKey.currentContext != null) {
       final RenderBox appBarBox = appBarKey.currentContext!.findRenderObject() as RenderBox;
-      // FIXED: Applied the -1.0 logical pixel overlap to mask underlying DPR grid rounding errors
       const double opticalNudge = -1.0;
-      appBarBottomY = appBarBox.localToGlobal(Offset.zero).dy + opticalNudge + overscrollY;
+      // FIXED: Removed overscrollY. localToGlobal inherently includes the scroll offset.
+      appBarBottomY = appBarBox.localToGlobal(Offset.zero).dy + opticalNudge;
     }
 
     final double pinY = math.max(stackTopY, appBarBottomY);
@@ -64,7 +65,8 @@ class StickyHeaderEngine {
 
       if (key != null && key.currentContext != null) {
         final RenderBox box = key.currentContext!.findRenderObject() as RenderBox;
-        final dy = box.localToGlobal(Offset.zero).dy + overscrollY;
+        // FIXED: Removed overscrollY.
+        final dy = box.localToGlobal(Offset.zero).dy;
 
         if (dy <= pinY + 1.0) {
           lastSeenAboveIndex = i;
@@ -91,7 +93,8 @@ class StickyHeaderEngine {
       pushOffset = nextHeaderY - (pinY + stickyHeight);
     } else if (nextHeader == null && endOfListKey.currentContext != null) {
       final RenderBox endBox = endOfListKey.currentContext!.findRenderObject() as RenderBox;
-      final double endDy = endBox.localToGlobal(Offset.zero).dy + overscrollY;
+      // FIXED: Removed overscrollY.
+      final double endDy = endBox.localToGlobal(Offset.zero).dy;
       if (endDy < pinY + stickyHeight) {
         pushOffset = endDy - (pinY + stickyHeight);
       }

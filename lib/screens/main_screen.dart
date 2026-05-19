@@ -26,7 +26,7 @@ class _MainScreenState extends State<MainScreen> {
   final Map<String, GlobalKey> _headerKeys = {};
 
   final ValueNotifier<StickyHeaderState> _headerState = ValueNotifier<StickyHeaderState>(StickyHeaderState(title: ''));
-  double _overscrollY = 0.0;
+  // FIXED: _overscrollY has been completely removed from memory.
 
   void _runPhysics() {
     StickyHeaderEngine.calculate(
@@ -38,19 +38,11 @@ class _MainScreenState extends State<MainScreen> {
       endOfListKey: _endOfListKey,
       headerKeys: _headerKeys,
       headerState: _headerState,
-      overscrollY: _overscrollY,
     );
   }
 
   bool _onScroll(ScrollNotification notification) {
     if (notification is ScrollUpdateNotification) {
-      if (notification.metrics.pixels < notification.metrics.minScrollExtent) {
-        _overscrollY = -(notification.metrics.pixels - notification.metrics.minScrollExtent);
-      } else if (notification.metrics.pixels > notification.metrics.maxScrollExtent) {
-        _overscrollY = -(notification.metrics.pixels - notification.metrics.maxScrollExtent);
-      } else {
-        _overscrollY = 0.0;
-      }
       _runPhysics();
     }
 
@@ -107,13 +99,13 @@ class _MainScreenState extends State<MainScreen> {
       key: _scaffoldKey,
       backgroundColor: AppTheme.background,
 
-      drawer: const Drawer(
-        child: SafeArea(
-          child: Padding(
-            padding: EdgeInsets.all(AppConstants.padMedium),
-            child: Text('App Drawer Placeholder', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-          ),
-        ),
+      drawer: AppDrawer(
+        availableLists: listProvider.availableLists,
+        activeType: listProvider.activeType,
+        onListSelected: (String newListType) {
+          listProvider.setActiveType(newListType);
+          _scaffoldKey.currentState?.closeDrawer();
+        },
       ),
 
       floatingActionButton: FloatingActionButton(
@@ -184,16 +176,23 @@ class _MainScreenState extends State<MainScreen> {
                       proxyDecorator: (Widget child, int index, Animation<double> animation) {
                         final row = flatList[index];
                         if (row is String) return child;
+                        final item = row as ListItem;
+
                         return Container(
-                          // FIXED: This forces the instantly shrunken card to suspend itself perfectly
-                          // in the center of the original drag snapshot constraints, keeping it under your thumb!
                           alignment: Alignment.center,
                           child: Material(
                             color: Colors.transparent,
                             child: ListItemCard(
-                              item: row as ListItem,
+                              item: item,
                               isCompact: listProvider.isGlobalCompactMode,
                               isDraggingProxy: true,
+                              isExpanded: listProvider.expandedItemId == item.id,
+                              onToggleStatus: () {},
+                              onDelete: () {},
+                              onRestore: () {},
+                              onToggleExpand: () {},
+                              onUpdateQuantity: (_) {},
+                              onEdit: () {},
                             ),
                           ),
                         );
@@ -211,12 +210,31 @@ class _MainScreenState extends State<MainScreen> {
                           );
                         }
 
+                        final item = row as ListItem;
+
                         return ReorderableDelayedDragStartListener(
-                          key: ValueKey((row as ListItem).id),
+                          key: ValueKey(item.id),
                           index: index,
                           child: ListItemCard(
-                            item: row,
+                            item: item,
                             isCompact: listProvider.isGlobalCompactMode,
+                            isExpanded: listProvider.expandedItemId == item.id,
+                            onToggleStatus: () => context.read<ListProvider>().toggleItemStatus(item.id, item.isCompleted),
+                            onDelete: () => context.read<ListProvider>().deleteItem(item.id),
+                            onRestore: () => context.read<ListProvider>().restoreItem(item.id),
+                            onToggleExpand: () => context.read<ListProvider>().toggleExpandedItem(item.id),
+                            onUpdateQuantity: (q) => context.read<ListProvider>().updateQuantity(item.id, q),
+                            onEdit: () {
+                              showModalBottomSheet(
+                                context: context,
+                                isScrollControlled: true,
+                                backgroundColor: Colors.transparent,
+                                builder: (context) => ItemFormModal(
+                                  activeListType: listProvider.activeType,
+                                  existingItem: item,
+                                ),
+                              );
+                            },
                           ),
                         );
                       },
@@ -284,50 +302,70 @@ class _MainScreenState extends State<MainScreen> {
   }
 }
 
-class _PseudoHeaderDelegate extends SliverPersistentHeaderDelegate {
-  final ValueNotifier<String> activeHeader;
-  final Map<String, GlobalKey> headerKeys;
-  final List<dynamic> flatList;
 
-  _PseudoHeaderDelegate(this.activeHeader, this.headerKeys, this.flatList);
+class AppDrawer extends StatelessWidget {
+  final List<String> availableLists;
+  final String activeType;
+  final ValueChanged<String> onListSelected;
+
+  const AppDrawer({
+    required this.availableLists,
+    required this.activeType,
+    required this.onListSelected,
+    super.key,
+  });
 
   @override
-  Widget build(BuildContext context, double shrinkOffset, bool overlapsContent) {
-    // Logic: Find the highest header whose GlobalKey is at or above the top (or very close)
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      String bestHeader = flatList.firstWhere((r) => r is String);
+  Widget build(BuildContext context) {
+    return Drawer(
+      backgroundColor: AppTheme.background,
+      child: SafeArea(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: AppConstants.padMedium, vertical: 24.0),
+              child: Text(
+                'My Lists',
+                style: TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.w800,
+                  color: AppTheme.primary,
+                ),
+              ),
+            ),
+            const Divider(height: 1),
+            Expanded(
+              child: ListView.builder(
+                physics: const BouncingScrollPhysics(),
+                itemCount: availableLists.length,
+                itemBuilder: (context, index) {
+                  final listName = availableLists[index];
+                  final isSelected = listName == activeType;
 
-      for (var entry in headerKeys.entries) {
-        final renderBox = entry.value.currentContext?.findRenderObject() as RenderBox?;
-        if (renderBox != null) {
-          final dy = renderBox.localToGlobal(Offset.zero).dy;
-          // If the header is at or above the 60px sticky area, it's the active one
-          if (dy <= 60) {
-            bestHeader = entry.key;
-          }
-        }
-      }
-      if (activeHeader.value != bestHeader) activeHeader.value = bestHeader;
-    });
-
-    return ValueListenableBuilder<String>(
-        valueListenable: activeHeader,
-        builder: (context, header, child) {
-          return Container(
-            height: maxExtent, width: double.infinity,
-            alignment: Alignment.bottomLeft,
-            padding: const EdgeInsets.only(left: 32.0, right: 16.0, bottom: 8.0),
-            decoration: const BoxDecoration(color: AppTheme.background),
-            child: Text(header, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: AppTheme.primary, letterSpacing: 1.0)),
-          );
-        }
+                  return ListTile(
+                    leading: Icon(
+                      listName == 'All Items' ? Icons.all_inbox : Icons.list_alt,
+                      color: isSelected ? AppTheme.primary : AppTheme.textSecondary,
+                    ),
+                    title: Text(
+                      listName,
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                        color: isSelected ? AppTheme.primary : Colors.black87,
+                      ),
+                    ),
+                    selected: isSelected,
+                    selectedTileColor: AppTheme.primary.withValues(alpha: 0.1),
+                    onTap: () => onListSelected(listName),
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
-
-  @override
-  double get maxExtent => 56.0;
-  @override
-  double get minExtent => 56.0;
-  @override
-  bool shouldRebuild(covariant _PseudoHeaderDelegate oldDelegate) => true;
 }

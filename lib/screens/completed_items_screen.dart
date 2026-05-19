@@ -107,10 +107,22 @@ class CompletedItemsScreen extends StatelessWidget {
                       final row = flatList[index];
 
                       if (row is String) {
-                        return SectionHeader(title: row); // CHANGED: Removed the item count
+                        return SectionHeader(title: row);
                       }
 
-                      return ListItemCard(item: row as ListItem, isCompact: true);
+                      final item = row as ListItem;
+
+                      return ListItemCard(
+                        item: item,
+                        isCompact: true,
+                        isExpanded: false,
+                        onToggleStatus: () => context.read<ListProvider>().toggleItemStatus(item.id, item.isCompleted),
+                        onDelete: () => context.read<ListProvider>().deleteItem(item.id),
+                        onRestore: () => context.read<ListProvider>().restoreItem(item.id),
+                        onToggleExpand: () {}, // Not actionable in archive
+                        onUpdateQuantity: (_) {}, // Not actionable in archive
+                        onEdit: () {}, // Not actionable in archive
+                      );
                     },
                     childCount: flatList.length,
                   ),
