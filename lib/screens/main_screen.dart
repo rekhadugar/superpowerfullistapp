@@ -23,12 +23,25 @@ class _MainScreenState extends State<MainScreen> {
   final GlobalKey _appBarKey = GlobalKey();
   final GlobalKey _phantomHeaderKey = GlobalKey();
   final GlobalKey _endOfListKey = GlobalKey();
+
+  // Track everything on the screen
   final Map<String, GlobalKey> _headerKeys = {};
+  final Map<String, GlobalKey> _itemKeys = {};
 
   final ValueNotifier<StickyHeaderState> _headerState = ValueNotifier<StickyHeaderState>(StickyHeaderState(title: ''));
-  // FIXED: _overscrollY has been completely removed from memory.
+  final ScrollController _scrollController = ScrollController();
+
+  bool _isSnapping = false;
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    _headerState.dispose();
+    super.dispose();
+  }
 
   void _runPhysics() {
+    final listProvider = context.read<ListProvider>();
     StickyHeaderEngine.calculate(
       context: context,
       isMounted: mounted,
@@ -37,7 +50,10 @@ class _MainScreenState extends State<MainScreen> {
       phantomHeaderKey: _phantomHeaderKey,
       endOfListKey: _endOfListKey,
       headerKeys: _headerKeys,
+      itemKeys: _itemKeys,
+      flatList: listProvider.groupedAndSortedItems,
       headerState: _headerState,
+      scrollController: _scrollController,
     );
   }
 
@@ -55,6 +71,30 @@ class _MainScreenState extends State<MainScreen> {
       }
     }
 
+    if (notification is ScrollEndNotification && !_isSnapping) {
+      final snapDelta = _headerState.value.snapDelta;
+
+      if (snapDelta.abs() > 1.0 && snapDelta.abs() < 150.0) {
+        _isSnapping = true;
+
+        WidgetsBinding.instance.addPostFrameCallback((_) async {
+          if (_scrollController.hasClients) {
+            final targetOffset = _scrollController.offset + snapDelta;
+
+            if (targetOffset >= 0 && targetOffset <= _scrollController.position.maxScrollExtent) {
+              await _scrollController.animateTo(
+                targetOffset,
+                duration: const Duration(milliseconds: 250), // Smooth 250ms glide
+                curve: Curves.easeOutQuad,
+              );
+            }
+          }
+          if (mounted) {
+            _isSnapping = false;
+          }
+        });
+      }
+    }
     return false;
   }
 
@@ -84,10 +124,14 @@ class _MainScreenState extends State<MainScreen> {
     final activeType = listProvider.activeType;
     final flatList = listProvider.groupedAndSortedItems;
 
+    // Refresh dynamic keys for all visible elements
     _headerKeys.clear();
+    _itemKeys.clear();
     for (var row in flatList) {
       if (row is String) {
         _headerKeys.putIfAbsent(row, () => GlobalKey());
+      } else if (row is ListItem) {
+        _itemKeys.putIfAbsent(row.id, () => GlobalKey());
       }
     }
 
@@ -121,16 +165,19 @@ class _MainScreenState extends State<MainScreen> {
             NotificationListener<ScrollNotification>(
               onNotification: _onScroll,
               child: CustomScrollView(
+                controller: _scrollController,
                 slivers: [
                   SliverAppBar(
+                    // FIX 3: Restored Auto-Collapsing App Bar without the violent snap reactions
                     floating: true,
-                    snap: true,
-                    pinned: false,
+                    snap: false,   // Crucial: Disables the violent 1-pixel instant expansion
+                    pinned: false, // Allows it to scroll away naturally like you wanted
                     elevation: 0,
                     scrolledUnderElevation: 0,
-                    surfaceTintColor: AppTheme.background,
+                    surfaceTintColor: AppTheme.surface,
                     centerTitle: true,
-                    backgroundColor: AppTheme.background,
+                    backgroundColor: AppTheme.surface,
+                    toolbarHeight: 76.0, // Retained the taller height
 
                     leading: listProvider.isSearching
                         ? IconButton(
@@ -155,7 +202,6 @@ class _MainScreenState extends State<MainScreen> {
                     )
                         : Text(
                       activeType,
-                      // CHANGED: Matches SectionHeader styling exactly
                       style: const TextStyle(
                         fontSize: 20,
                         fontWeight: FontWeight.w800,
@@ -169,17 +215,14 @@ class _MainScreenState extends State<MainScreen> {
                         : [
                       IconButton(
                         icon: Icon(
-                          // CHANGED: Resembles collapse/expand states
                           listProvider.isGlobalCompactMode
                               ? Icons.unfold_less
                               : Icons.unfold_more,
-                          // CHANGED: Highlights blue when expanded (!isGlobalCompactMode)
                           color: listProvider.isGlobalCompactMode ? Colors.black : AppTheme.primary,
                         ),
                         onPressed: () => listProvider.toggleGlobalCompactMode(),
                       ),
                       IconButton(
-                        // CHANGED: 3 vertical dots
                         icon: const Icon(Icons.more_vert, color: Colors.black),
                         onPressed: _openOptionsSheet,
                       ),
@@ -192,12 +235,10 @@ class _MainScreenState extends State<MainScreen> {
                   ),
 
                   SliverPadding(
-                    // CHANGED: Removed 'const' and added dynamic top padding
                     padding: EdgeInsets.only(
                       left: AppConstants.padMedium,
                       right: AppConstants.padMedium,
                       bottom: AppConstants.padMedium,
-                      // NEW: Offsets the 20px difference in header heights (56 - 36)
                       top: listProvider.isGlobalCompactMode ? 20.0 : 0.0,
                     ),
                     sliver: SliverReorderableList(
@@ -244,26 +285,29 @@ class _MainScreenState extends State<MainScreen> {
                         return ReorderableDelayedDragStartListener(
                           key: ValueKey(item.id),
                           index: index,
-                          child: ListItemCard(
-                            item: item,
-                            isCompact: listProvider.isGlobalCompactMode,
-                            isExpanded: listProvider.expandedItemId == item.id,
-                            onToggleStatus: () => context.read<ListProvider>().toggleItemStatus(item.id, item.isCompleted),
-                            onDelete: () => context.read<ListProvider>().deleteItem(item.id),
-                            onRestore: () => context.read<ListProvider>().restoreItem(item.id),
-                            onToggleExpand: () => context.read<ListProvider>().toggleExpandedItem(item.id),
-                            onUpdateQuantity: (q) => context.read<ListProvider>().updateQuantity(item.id, q),
-                            onEdit: () {
-                              showModalBottomSheet(
-                                context: context,
-                                isScrollControlled: true,
-                                backgroundColor: Colors.transparent,
-                                builder: (context) => ItemFormModal(
-                                  activeListType: listProvider.activeType,
-                                  existingItem: item,
-                                ),
-                              );
-                            },
+                          child: Container(
+                            key: _itemKeys[item.id],
+                            child: ListItemCard(
+                              item: item,
+                              isCompact: listProvider.isGlobalCompactMode,
+                              isExpanded: listProvider.expandedItemId == item.id,
+                              onToggleStatus: () => context.read<ListProvider>().toggleItemStatus(item.id, item.isCompleted),
+                              onDelete: () => context.read<ListProvider>().deleteItem(item.id),
+                              onRestore: () => context.read<ListProvider>().restoreItem(item.id),
+                              onToggleExpand: () => context.read<ListProvider>().toggleExpandedItem(item.id),
+                              onUpdateQuantity: (q) => context.read<ListProvider>().updateQuantity(item.id, q),
+                              onEdit: () {
+                                showModalBottomSheet(
+                                  context: context,
+                                  isScrollControlled: true,
+                                  backgroundColor: Colors.transparent,
+                                  builder: (context) => ItemFormModal(
+                                    activeListType: listProvider.activeType,
+                                    existingItem: item,
+                                  ),
+                                );
+                              },
+                            ),
                           ),
                         );
                       },
@@ -330,6 +374,8 @@ class _MainScreenState extends State<MainScreen> {
     );
   }
 }
+
+// AppDrawer class remains unchanged
 
 
 class AppDrawer extends StatelessWidget {

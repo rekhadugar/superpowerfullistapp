@@ -1,24 +1,22 @@
-// Location: lib/services/sticky_header_engine.dart
-
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
-import '../services/list_provider.dart';
+import '../models/list_item.dart';
 
 class StickyHeaderState {
   final String title;
   final double dockY;
   final double pushOffset;
+  final double snapDelta;
 
   StickyHeaderState({
     required this.title,
     this.dockY = 0.0,
-    this.pushOffset = 0.0
+    this.pushOffset = 0.0,
+    this.snapDelta = 0.0,
   });
 }
 
 class StickyHeaderEngine {
-  /// Calculates the exact physics for the Phantom Sticky Header.
   static void calculate({
     required BuildContext context,
     required bool isMounted,
@@ -27,25 +25,14 @@ class StickyHeaderEngine {
     required GlobalKey phantomHeaderKey,
     required GlobalKey endOfListKey,
     required Map<String, GlobalKey> headerKeys,
+    required Map<String, GlobalKey> itemKeys,
     required ValueNotifier<StickyHeaderState> headerState,
+    required ScrollController scrollController,
+    required List<dynamic> flatList,
   }) {
     if (!isMounted || stackKey.currentContext == null) return;
 
-    final RenderBox stackBox = stackKey.currentContext!.findRenderObject() as RenderBox;
-    final double stackTopY = stackBox.localToGlobal(Offset.zero).dy;
-
-    double appBarBottomY = stackTopY;
-    if (appBarKey.currentContext != null) {
-      final RenderBox appBarBox = appBarKey.currentContext!.findRenderObject() as RenderBox;
-      const double opticalNudge = -1.0;
-      // FIXED: Removed overscrollY. localToGlobal inherently includes the scroll offset.
-      appBarBottomY = appBarBox.localToGlobal(Offset.zero).dy + opticalNudge;
-    }
-
-    final double pinY = math.max(stackTopY, appBarBottomY);
-
-    final listProvider = context.read<ListProvider>();
-    final List<String> allHeaders = listProvider.groupedAndSortedItems.whereType<String>().toList();
+    final List<String> allHeaders = flatList.whereType<String>().toList();
 
     if (allHeaders.isEmpty) {
       if (headerState.value.title.isNotEmpty) {
@@ -54,49 +41,118 @@ class StickyHeaderEngine {
       return;
     }
 
-    String activeHeader = '';
-    String? nextHeader;
-    double nextHeaderY = double.infinity;
-    int lastSeenAboveIndex = -1;
-
-    for (int i = 0; i < allHeaders.length; i++) {
-      final String headerTitle = allHeaders[i];
-      final GlobalKey? key = headerKeys[headerTitle];
-
-      if (key != null && key.currentContext != null) {
-        final RenderBox box = key.currentContext!.findRenderObject() as RenderBox;
-        // FIXED: Removed overscrollY.
-        final dy = box.localToGlobal(Offset.zero).dy;
-
-        if (dy <= pinY + 1.0) {
-          lastSeenAboveIndex = i;
-        } else {
-          nextHeader = headerTitle;
-          nextHeaderY = dy;
-          if (i > 0) activeHeader = allHeaders[i - 1];
-          break;
-        }
-      }
+    if (scrollController.hasClients && scrollController.offset <= 0) {
+      headerState.value = StickyHeaderState(title: '');
+      return;
     }
 
-    if (nextHeader == null && lastSeenAboveIndex != -1) {
-      activeHeader = allHeaders[lastSeenAboveIndex];
+    final RenderBox stackBox = stackKey.currentContext!.findRenderObject() as RenderBox;
+    final double stackTopY = stackBox.localToGlobal(Offset.zero).dy;
+
+    double appBarBottomY = stackTopY;
+    if (appBarKey.currentContext != null) {
+      final RenderBox appBarBox = appBarKey.currentContext!.findRenderObject() as RenderBox;
+      appBarBottomY = appBarBox.localToGlobal(Offset.zero).dy - 1.0;
     }
 
-    double pushOffset = 0.0;
+    final double pinY = math.max(stackTopY, appBarBottomY);
+
     double stickyHeight = 56.0;
     if (phantomHeaderKey.currentContext != null) {
       stickyHeight = (phantomHeaderKey.currentContext!.findRenderObject() as RenderBox).size.height;
     }
 
-    if (nextHeader != null && nextHeaderY < pinY + stickyHeight) {
-      pushOffset = nextHeaderY - (pinY + stickyHeight);
-    } else if (nextHeader == null && endOfListKey.currentContext != null) {
+    int? activeElementIndex;
+
+    // 1. DYNAMIC SECTION DISCOVERY
+    for (int i = 0; i < flatList.length; i++) {
+      final row = flatList[i];
+      GlobalKey? key = (row is String) ? headerKeys[row] : itemKeys[(row as ListItem).id];
+
+      if (key?.currentContext != null) {
+        final box = key!.currentContext!.findRenderObject() as RenderBox;
+        final dy = box.localToGlobal(Offset.zero).dy;
+
+        if (dy <= pinY + 2.0) {
+          activeElementIndex = i;
+        } else {
+          if (activeElementIndex == null) activeElementIndex = i > 0 ? i - 1 : 0;
+          break;
+        }
+      }
+    }
+
+    String activeHeader = allHeaders.first;
+    double pushOffset = 0.0;
+
+    if (activeElementIndex != null) {
+      for (int i = activeElementIndex; i >= 0; i--) {
+        if (flatList[i] is String) {
+          activeHeader = flatList[i] as String;
+          break;
+        }
+      }
+
+      for (int i = activeElementIndex + 1; i < flatList.length; i++) {
+        if (flatList[i] is String) {
+          final hKey = headerKeys[flatList[i]];
+          if (hKey?.currentContext != null) {
+            final hBox = hKey!.currentContext!.findRenderObject() as RenderBox;
+            final nextHeaderY = hBox.localToGlobal(Offset.zero).dy;
+            if (nextHeaderY < pinY + stickyHeight) {
+              pushOffset = nextHeaderY - (pinY + stickyHeight);
+            }
+          }
+          break;
+        }
+      }
+    }
+
+    if (pushOffset == 0.0 && endOfListKey.currentContext != null) {
       final RenderBox endBox = endOfListKey.currentContext!.findRenderObject() as RenderBox;
-      // FIXED: Removed overscrollY.
       final double endDy = endBox.localToGlobal(Offset.zero).dy;
       if (endDy < pinY + stickyHeight) {
         pushOffset = endDy - (pinY + stickyHeight);
+      }
+    }
+
+    // FIX 1: HIDE PHANTOM IF PHYSICAL HEADER IS VISIBLE BELOW DOCK LINE
+    final GlobalKey? activeHeaderKey = headerKeys[activeHeader];
+    if (activeHeaderKey?.currentContext != null) {
+      final RenderBox box = activeHeaderKey!.currentContext!.findRenderObject() as RenderBox;
+      final dy = box.localToGlobal(Offset.zero).dy;
+      if (dy > pinY + 0.5) {
+        headerState.value = StickyHeaderState(title: '');
+        return; // Kills the ghost header entirely
+      }
+    }
+
+    // FIX 2: SPLIT GAPLESS CELL-SNAPPING MATH
+    double bestSnapDelta = 0.0;
+    double minAbsDelta = double.infinity;
+
+    if (scrollController.hasClients && scrollController.offset > 10.0) {
+      for (int i = 0; i < flatList.length; i++) {
+        final row = flatList[i];
+        final isHeader = row is String;
+        GlobalKey? key = isHeader ? headerKeys[row] : itemKeys[(row as ListItem).id];
+
+        if (key?.currentContext != null) {
+          final box = key!.currentContext!.findRenderObject() as RenderBox;
+          final dy = box.localToGlobal(Offset.zero).dy;
+
+          // Headers snap to the top (pinY), Items snap below the phantom header (pinY + stickyHeight)
+          double targetDockLine = isHeader ? pinY : (pinY + stickyHeight);
+          double delta = dy - targetDockLine;
+
+          if (delta.abs() < minAbsDelta) {
+            minAbsDelta = delta.abs();
+            bestSnapDelta = delta;
+          }
+        }
+      }
+      if (minAbsDelta > 150.0) {
+        bestSnapDelta = 0.0;
       }
     }
 
@@ -104,11 +160,13 @@ class StickyHeaderEngine {
 
     if (headerState.value.title != activeHeader ||
         headerState.value.dockY != dockY ||
-        headerState.value.pushOffset != pushOffset) {
+        headerState.value.pushOffset != pushOffset ||
+        headerState.value.snapDelta != bestSnapDelta) {
       headerState.value = StickyHeaderState(
-          title: activeHeader,
-          dockY: dockY,
-          pushOffset: pushOffset
+        title: activeHeader,
+        dockY: dockY,
+        pushOffset: pushOffset,
+        snapDelta: bestSnapDelta,
       );
     }
   }

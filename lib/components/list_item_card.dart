@@ -211,6 +211,7 @@ class _ListItemCardState extends State<ListItemCard> {
             child: GestureDetector(
               onTap: _handleInteraction,
               child: Container(
+                constraints: const BoxConstraints(minHeight: 68),
                 decoration: BoxDecoration(
                     color: AppTheme.surface,
                     borderRadius: AppConstants.cardRadius,
