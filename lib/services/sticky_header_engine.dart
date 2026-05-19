@@ -64,7 +64,6 @@ class StickyHeaderEngine {
 
     int? activeElementIndex;
 
-    // 1. DYNAMIC SECTION DISCOVERY
     for (int i = 0; i < flatList.length; i++) {
       final row = flatList[i];
       GlobalKey? key = (row is String) ? headerKeys[row] : itemKeys[(row as ListItem).id];
@@ -83,19 +82,53 @@ class StickyHeaderEngine {
     }
 
     String activeHeader = allHeaders.first;
+    int activeHeaderIndex = -1;
     double pushOffset = 0.0;
 
     if (activeElementIndex != null) {
       for (int i = activeElementIndex; i >= 0; i--) {
         if (flatList[i] is String) {
           activeHeader = flatList[i] as String;
+          activeHeaderIndex = i;
           break;
         }
       }
 
-      for (int i = activeElementIndex + 1; i < flatList.length; i++) {
-        if (flatList[i] is String) {
-          final hKey = headerKeys[flatList[i]];
+      int nextHeaderIndex = -1;
+      if (activeHeaderIndex != -1) {
+        for (int i = activeHeaderIndex + 1; i < flatList.length; i++) {
+          if (flatList[i] is String) {
+            nextHeaderIndex = i;
+            break;
+          }
+        }
+      }
+
+      // CUSTOM FIX: Push by the TOP of the last item in the active section
+      // This guarantees the Phantom Header is NEVER on screen without an item.
+      bool pushedByItem = false;
+      int lastItemIndex = nextHeaderIndex != -1 ? nextHeaderIndex - 1 : flatList.length - 1;
+
+      if (lastItemIndex > activeHeaderIndex) {
+        final row = flatList[lastItemIndex];
+        if (row is ListItem) {
+          GlobalKey? lastItemKey = itemKeys[row.id];
+          if (lastItemKey?.currentContext != null) {
+            final box = lastItemKey!.currentContext!.findRenderObject() as RenderBox;
+            final lastItemY = box.localToGlobal(Offset.zero).dy;
+
+            if (lastItemY < pinY + stickyHeight) {
+              pushOffset = lastItemY - (pinY + stickyHeight);
+              pushedByItem = true;
+            }
+          }
+        }
+      }
+
+      // Fallback behavior if the section is empty or last item is unmounted
+      if (!pushedByItem) {
+        if (nextHeaderIndex != -1) {
+          final hKey = headerKeys[flatList[nextHeaderIndex]];
           if (hKey?.currentContext != null) {
             final hBox = hKey!.currentContext!.findRenderObject() as RenderBox;
             final nextHeaderY = hBox.localToGlobal(Offset.zero).dy;
@@ -103,31 +136,26 @@ class StickyHeaderEngine {
               pushOffset = nextHeaderY - (pinY + stickyHeight);
             }
           }
-          break;
+        } else if (endOfListKey.currentContext != null) {
+          final RenderBox endBox = endOfListKey.currentContext!.findRenderObject() as RenderBox;
+          final double endDy = endBox.localToGlobal(Offset.zero).dy;
+          if (endDy < pinY + stickyHeight) {
+            pushOffset = endDy - (pinY + stickyHeight);
+          }
         }
       }
     }
 
-    if (pushOffset == 0.0 && endOfListKey.currentContext != null) {
-      final RenderBox endBox = endOfListKey.currentContext!.findRenderObject() as RenderBox;
-      final double endDy = endBox.localToGlobal(Offset.zero).dy;
-      if (endDy < pinY + stickyHeight) {
-        pushOffset = endDy - (pinY + stickyHeight);
-      }
-    }
-
-    // FIX 1: HIDE PHANTOM IF PHYSICAL HEADER IS VISIBLE BELOW DOCK LINE
     final GlobalKey? activeHeaderKey = headerKeys[activeHeader];
     if (activeHeaderKey?.currentContext != null) {
       final RenderBox box = activeHeaderKey!.currentContext!.findRenderObject() as RenderBox;
       final dy = box.localToGlobal(Offset.zero).dy;
       if (dy > pinY + 0.5) {
         headerState.value = StickyHeaderState(title: '');
-        return; // Kills the ghost header entirely
+        return;
       }
     }
 
-    // FIX 2: SPLIT GAPLESS CELL-SNAPPING MATH
     double bestSnapDelta = 0.0;
     double minAbsDelta = double.infinity;
 
@@ -141,7 +169,6 @@ class StickyHeaderEngine {
           final box = key!.currentContext!.findRenderObject() as RenderBox;
           final dy = box.localToGlobal(Offset.zero).dy;
 
-          // Headers snap to the top (pinY), Items snap below the phantom header (pinY + stickyHeight)
           double targetDockLine = isHeader ? pinY : (pinY + stickyHeight);
           double delta = dy - targetDockLine;
 
