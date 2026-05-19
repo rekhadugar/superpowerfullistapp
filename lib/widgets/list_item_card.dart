@@ -5,7 +5,7 @@ import '../theme/app_constants.dart';
 
 class ListItemCard extends StatelessWidget {
   final String title;
-  final int nWrap; // Inject the wrap factor
+  final int nWrap;
   final List<String> attributeRows;
   final VoidCallback onTap;
 
@@ -39,42 +39,37 @@ class ListItemCard extends StatelessWidget {
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisAlignment: MainAxisAlignment.start, // Shifted to start for predictable rendering
+          mainAxisAlignment: MainAxisAlignment.start,
           children: [
             // Base Height Title Row (Accounts for Name Wraps and 1px border)
             Container(
               height: AppConstants.baseCardHeight + (nWrap * AppConstants.nameWrapHeightStep) - 1.0,
-              padding: const EdgeInsets.only(top: 18.0), // Strict top padding to center the first 20px line
+              padding: const EdgeInsets.only(top: 18.0),
               child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start, // Anchor strictly to first line
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // 1. Fixed Interactive Leading Block
                   Container(
                     width: AppConstants.leadingBlockWidth,
-                    height: 20.0, // Match exact 20px first line height
+                    height: 20.0,
                     alignment: Alignment.center,
                     child: Icon(Icons.check_box_outline_blank, color: theme.dividerColor),
                   ),
                   const SizedBox(width: AppConstants.interElementGap),
-
-                  // 2. Flexible Text Title Area
                   Expanded(
                     child: Text(
                       title,
-                      maxLines: 6, // Expanded to support up to 6 lines per spec
+                      maxLines: 6,
                       overflow: TextOverflow.ellipsis,
                       style: theme.textTheme.titleMedium?.copyWith(
                         fontSize: 16.0,
-                        height: 1.25, // 16 * 1.25 = exactly 20px per line footprint
+                        height: 1.25,
                       ),
                     ),
                   ),
                   const SizedBox(width: AppConstants.interElementGap),
-
-                  // 3. Fixed Trailing Action Block
                   Container(
                     width: AppConstants.trailingBlockWidth,
-                    height: 20.0, // Match exact 20px first line height
+                    height: 20.0,
                     alignment: Alignment.center,
                     child: Text(
                         '1',
@@ -85,30 +80,45 @@ class ListItemCard extends StatelessWidget {
                 ],
               ),
             ),
-            // Dynamic Attribute Rows mathematically constrained
+            // Dynamic Attribute Rows mathematically constrained to 20px
             if (attributeRows.isNotEmpty)
               ...attributeRows.map((attr) => SizedBox(
-                height: AppConstants.attributeRowHeight,
+                height: AppConstants.attributeRowHeight, // The unbreakable 20px math constraint
                 child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Spacer to perfectly align the icon with the title text above it
                     const SizedBox(width: AppConstants.leadingBlockWidth + AppConstants.interElementGap),
-                    Icon(
-                        Icons.tag,
-                        size: AppConstants.attributeIconSize,
-                        color: theme.iconTheme.color
-                    ),
-                    const SizedBox(width: 8.0),
-                    Expanded(
-                      child: Text(
-                        attr,
-                        style: theme.textTheme.labelSmall?.copyWith(
-                          fontSize: 12.0,
-                          height: 1.2,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
+
+                    // Maximized Pill Badge (Exactly 20.0px tall)
+                    Container(
+                      height: 20.0, // Expanded from 18.0 to the absolute maximum safe limit
+                      padding: const EdgeInsets.symmetric(horizontal: 10.0), // Slightly wider padding for larger text
+                      decoration: BoxDecoration(
+                        color: theme.dividerColor.withOpacity(0.3),
+                        borderRadius: BorderRadius.circular(10.0), // Exactly half of 20.0px for a perfect circle edge
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          Icon(
+                              Icons.sell_outlined,
+                              size: 12.0, // Increased from 10.0
+                              color: theme.textTheme.labelSmall?.color
+                          ),
+                          const SizedBox(width: 4.0),
+                          Text(
+                            attr,
+                            style: theme.textTheme.labelSmall?.copyWith(
+                              fontSize: 12.0, // Increased from 10.0 for much better legibility
+                              fontWeight: FontWeight.w600,
+                              letterSpacing: 0.2,
+                              height: 1.1, // Tight line height prevents vertical clipping
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
                       ),
                     ),
                   ],

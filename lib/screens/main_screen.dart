@@ -5,6 +5,9 @@ import 'package:provider/provider.dart';
 import '../providers/list_provider.dart';
 import '../widgets/list_item_card.dart';
 import '../theme/app_theme.dart';
+import '../theme/app_constants.dart';
+import '../widgets/section_header.dart';
+import '../widgets/swipe_action_wrapper.dart';
 
 class MainScreen extends StatelessWidget {
   const MainScreen({Key? key}) : super(key: key);
@@ -26,6 +29,7 @@ class MainScreen extends StatelessWidget {
     return Scaffold(
       backgroundColor: theme.scaffoldBackgroundColor,
       appBar: AppBar(
+        titleSpacing: AppConstants.horizontalPadding + AppConstants.leadingBlockWidth + AppConstants.interElementGap,
         title: const Text('Listicle V2 Prototype'),
         backgroundColor: theme.scaffoldBackgroundColor,
         elevation: 0,
@@ -38,19 +42,35 @@ class MainScreen extends StatelessWidget {
       body: activeItems.isEmpty
           ? Center(child: Text('All caught up!', style: theme.textTheme.bodyMedium))
           : ListView.builder(
-        padding: const EdgeInsets.only(top: 8.0, bottom: 120.0),
-        itemCount: activeItems.length,
+        padding: const EdgeInsets.only(top: 0.0, bottom: 120.0), // Removed top padding to sit flush
+        itemCount: activeItems.length + 1, // +1 for the static header
         itemBuilder: (context, index) {
-          final item = activeItems[index];
+          if (index == 0) {
+            return const SectionHeader(title: 'Hardware Store');
+          }
 
-          return ListItemCard(
-            key: ValueKey(item.id),
-            title: item.title,
-            nWrap: item.nWrap, // Now dynamically driven by the state engine
-            attributeRows: item.attributeRows,
-            onTap: () {
-              context.read<ListProvider>().toggleCompletion(item.id);
+          final item = activeItems[index - 1];
+
+          return SwipeActionWrapper(
+            key: ValueKey('swipe_${item.id}'),
+            itemId: item.id,
+            onEdit: () {
+              // Phase 4: This will trigger the BottomSheet/Edit Flow
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text('Edit tapped for ${item.title}')),
+              );
             },
+            onDelete: () {
+              context.read<ListProvider>().deleteItem(item.id);
+            },
+            child: ListItemCard(
+              title: item.title,
+              nWrap: item.nWrap,
+              attributeRows: item.attributeRows,
+              onTap: () {
+                context.read<ListProvider>().toggleCompletion(item.id);
+              },
+            ),
           );
         },
       ),

@@ -21,18 +21,6 @@ class AppColors {
   static const Color borderDark = Color(0xFF374151);
 }
 
-class AppConstants {
-  // Strict Math-Driven Heights
-  static const double headerHeight = 44.0;
-  static const double baseCardHeight = 56.0;
-  static const double attributeRowHeight = 20.0;
-
-  // Padding & Radii
-  static const double screenPadding = 16.0;
-  static const double cardPadding = 12.0;
-  static const double borderRadius = 12.0;
-}
-
 class AppTheme {
   static ThemeData get lightTheme {
     return ThemeData(
