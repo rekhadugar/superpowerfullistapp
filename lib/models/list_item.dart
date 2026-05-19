@@ -1,91 +1,55 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
+// Location: lib/models/list_item.dart
 
 class ListItem {
   final String id;
-  final String name;
+  final String title;
+  final List<String> attributeRows;
 
-  bool isCompleted;
-  int order;
+  // State flags
+  final bool isCompleted;
+  final bool isDeleted;
 
-  // Quantifiable Fields
-  int quantity;
-  final String unit;
+  // New: Math-Driven Multi-line Wrapping factor (0 to 5)
+  final int nWrap;
 
-  // Relational Fields
-  String type;
-  String category;
-  List<String> locations;
-  String context;
-
-  // Audit & Soft Delete Fields
-  String? createdBy;
-  Timestamp? createdAt;
-  String? updatedBy;
-  Timestamp? updatedAt;
-  bool isDeleted;
-  String? deletedBy;
-  Timestamp? deletedAt;
+  // Fractional Multi-Indexing
+  final double shopOrder;
+  final double categoryOrder;
+  final double globalCustomOrder;
 
   ListItem({
     required this.id,
-    required this.name,
+    required this.title,
+    this.attributeRows = const [],
     this.isCompleted = false,
-    this.order = 0,
-    this.quantity = 1,
-    this.unit = 'pcs',
-    this.type = 'Groceries',
-    this.category = 'Uncategorized',
-    this.locations = const ['Anywhere'],
-    this.context = '',
-    this.createdBy,
-    this.createdAt,
-    this.updatedBy,
-    this.updatedAt,
     this.isDeleted = false,
-    this.deletedBy,
-    this.deletedAt,
+    this.nWrap = 0, // Default to 1-line (0 wraps)
+    this.shopOrder = 0.0,
+    this.categoryOrder = 0.0,
+    this.globalCustomOrder = 0.0,
   });
 
-  factory ListItem.fromMap(Map<String, dynamic> data, String documentId) {
+  ListItem copyWith({
+    String? id,
+    String? title,
+    List<String>? attributeRows,
+    bool? isCompleted,
+    bool? isDeleted,
+    int? nWrap,
+    double? shopOrder,
+    double? categoryOrder,
+    double? globalCustomOrder,
+  }) {
     return ListItem(
-      id: documentId,
-      name: data['name'] ?? 'Unknown Item',
-      isCompleted: data['isCompleted'] ?? false,
-      order: data['order'] ?? 0,
-      quantity: data['quantity'] ?? 1,
-      unit: data['unit'] ?? '',
-      type: data['type'] ?? 'Groceries',
-      category: data['category'] ?? 'Uncategorized',
-      locations: List<String>.from(data['locations'] ?? ['Anywhere']),
-      context: data['context'] ?? '',
-      createdBy: data['createdBy'],
-      createdAt: data['createdAt'] as Timestamp?,
-      updatedBy: data['updatedBy'],
-      updatedAt: data['updatedAt'] as Timestamp?,
-      isDeleted: data['isDeleted'] ?? false,
-      deletedBy: data['deletedBy'],
-      deletedAt: data['deletedAt'] as Timestamp?,
+      id: id ?? this.id,
+      title: title ?? this.title,
+      attributeRows: attributeRows ?? this.attributeRows,
+      isCompleted: isCompleted ?? this.isCompleted,
+      isDeleted: isDeleted ?? this.isDeleted,
+      nWrap: nWrap ?? this.nWrap,
+      shopOrder: shopOrder ?? this.shopOrder,
+      categoryOrder: categoryOrder ?? this.categoryOrder,
+      globalCustomOrder: globalCustomOrder ?? this.globalCustomOrder,
     );
-  }
-
-  Map<String, dynamic> toMap() {
-    return {
-      'name': name,
-      'isCompleted': isCompleted,
-      'order': order,
-      'quantity': quantity,
-      'unit': unit,
-      'type': type,
-      'category': category,
-      'locations': locations,
-      'context': context,
-      'createdBy': createdBy,
-      'createdAt': createdAt,
-      'updatedBy': updatedBy,
-      'updatedAt': updatedAt,
-      'isDeleted': isDeleted,
-      'deletedBy': deletedBy,
-      'deletedAt': deletedAt,
-    };
   }
 }

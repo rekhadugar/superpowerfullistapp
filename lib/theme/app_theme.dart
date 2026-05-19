@@ -1,41 +1,90 @@
+// Location: lib/theme/app_theme.dart
+
 import 'package:flutter/material.dart';
 
+class AppColors {
+  // Premium Light Theme
+  static const Color backgroundLight = Color(0xFFF8F9FA);
+  static const Color surfaceLight = Color(0xFFFFFFFF);
+  static const Color textPrimaryLight = Color(0xFF111827);
+  static const Color textSecondaryLight = Color(0xFF6B7280);
+  static const Color borderLight = Color(0xFFE5E7EB);
+  static const Color primaryAction = Color(0xFF3B82F6); // Premium Blue
+  static const Color destructiveAction = Color(0xFFEF4444); // Premium Red
+  static const Color successAction = Color(0xFF10B981); // Premium Green
+
+  // Premium Dark Theme
+  static const Color backgroundDark = Color(0xFF111827);
+  static const Color surfaceDark = Color(0xFF1F2937);
+  static const Color textPrimaryDark = Color(0xFFF9FAFB);
+  static const Color textSecondaryDark = Color(0xFF9CA3AF);
+  static const Color borderDark = Color(0xFF374151);
+}
+
+class AppConstants {
+  // Strict Math-Driven Heights
+  static const double headerHeight = 44.0;
+  static const double baseCardHeight = 56.0;
+  static const double attributeRowHeight = 20.0;
+
+  // Padding & Radii
+  static const double screenPadding = 16.0;
+  static const double cardPadding = 12.0;
+  static const double borderRadius = 12.0;
+}
+
 class AppTheme {
-  // 1. Core Color Tokens from React Native Spec
-  static const Color background = Color(0xFFF2F2F7); // iOS Grouped Background
-  static const Color primary = Color(0xFF007AFF);    // iOS System Blue
-  static const Color success = Color(0xFF34C759);    // Shopping Mode Green
-  static const Color dragActive = Color(0xFFE5E9F0); // Darker grey/blue for active drag
-  static const Color textSecondary = Color(0xFF8E8E93); // Counts/Hints
-  static const Color surface = Color(0xFFFFFFFF);    // Pure White
-  static const Color border = Color(0xFFE5E5EA);     // Standard iOS border
-  static const Color error = Colors.red;
-
-
-  // 2. Global Theme Configuration
-  static final ThemeData lightTheme = ThemeData(
-    scaffoldBackgroundColor: background,
-    primaryColor: primary,
-    appBarTheme: const AppBarTheme(
-      backgroundColor: background,
-      elevation: 0,
-      iconTheme: IconThemeData(color: primary),
-      titleTextStyle: TextStyle(
-        color: Colors.black,
-        fontSize: 28,
-        fontWeight: FontWeight.w800,
-        letterSpacing: 0.5,
+  static ThemeData get lightTheme {
+    return ThemeData(
+      brightness: Brightness.light,
+      scaffoldBackgroundColor: AppColors.backgroundLight,
+      cardColor: AppColors.surfaceLight,
+      dividerColor: AppColors.borderLight,
+      textTheme: const TextTheme(
+        titleMedium: TextStyle(
+          color: AppColors.textPrimaryLight,
+          fontSize: 16,
+          fontWeight: FontWeight.w600,
+          letterSpacing: -0.3,
+        ),
+        bodyMedium: TextStyle(
+          color: AppColors.textSecondaryLight,
+          fontSize: 14,
+          fontWeight: FontWeight.w400,
+        ),
+        labelSmall: TextStyle(
+          color: AppColors.textSecondaryLight,
+          fontSize: 12,
+          fontWeight: FontWeight.w500,
+        ),
       ),
-    ),
-    floatingActionButtonTheme: const FloatingActionButtonThemeData(
-      backgroundColor: primary,
-      foregroundColor: surface,
-      elevation: 8,
-    ),
-    colorScheme: ColorScheme.fromSeed(
-      seedColor: primary,
-      surface: surface,
-      // 'background' has been removed to resolve the Material 3 deprecation warning
-    ),
-  );
+    );
+  }
+
+  static ThemeData get darkTheme {
+    return ThemeData(
+      brightness: Brightness.dark,
+      scaffoldBackgroundColor: AppColors.backgroundDark,
+      cardColor: AppColors.surfaceDark,
+      dividerColor: AppColors.borderDark,
+      textTheme: const TextTheme(
+        titleMedium: TextStyle(
+          color: AppColors.textPrimaryDark,
+          fontSize: 16,
+          fontWeight: FontWeight.w600,
+          letterSpacing: -0.3,
+        ),
+        bodyMedium: TextStyle(
+          color: AppColors.textSecondaryDark,
+          fontSize: 14,
+          fontWeight: FontWeight.w400,
+        ),
+        labelSmall: TextStyle(
+          color: AppColors.textSecondaryDark,
+          fontSize: 12,
+          fontWeight: FontWeight.w500,
+        ),
+      ),
+    );
+  }
 }

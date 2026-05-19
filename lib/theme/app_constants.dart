@@ -1,27 +1,20 @@
-import 'package:flutter/cupertino.dart';
+// Location: lib/theme/app_constants.dart
 
 class AppConstants {
-  // --- Padding & Spacing ---
-  static const double padTiny = 4.0;   // NEW: For wrap spacing
-  static const double padSmall = 6.0;
-  static const double padCompact = 8.0; // NEW: For compact modes/inner padding
-  static const double padMedium = 12.0;
-  static const double padLarge = 16.0;
-  static const double padXLarge = 24.0;
+  // Strict Math-Driven Heights
+  static const double headerHeight = 44.0;
+  static const double baseCardHeight = 56.0;
+  static const double attributeRowHeight = 20.0;
+  static const double nameWrapHeightStep = 20.0;
+  static const double topBarHeight = 76.0;
 
-  // --- UI Geometry ---
-  static const double stickyHeaderHeight = 56.0;
-  static const double endOfListRunway = 160.0;
+  // Padding & Margins
+  static const double cardMargin = 0.0; // Must remain 0px to preserve O(1) scroll math
+  static const double horizontalPadding = 16.0;
 
-  static final BorderRadius cardRadius = BorderRadius.circular(12.0);
-  static final BorderRadius modalRadius = const BorderRadius.vertical(top: Radius.circular(20));
-  static final BorderRadius pillRadius = BorderRadius.circular(8.0);
-
-  // --- Animation Timings ---
-  static const Duration animQuick = Duration(milliseconds: 300);
-  static const Duration animStandard = Duration(milliseconds: 400);
-
-  // Parameterized and slowed down layout physics
-  static const Duration layoutDuration = Duration(milliseconds: 300);
-  static const Curve layoutCurve = Curves.easeInOutQuart;
+  // Internal Card Geometry
+  static const double leadingBlockWidth = 32.0;
+  static const double trailingBlockWidth = 48.0;
+  static const double interElementGap = 12.0;
+  static const double attributeIconSize = 14.0;
 }
