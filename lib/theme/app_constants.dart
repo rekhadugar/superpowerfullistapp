@@ -18,3 +18,20 @@ class AppConstants {
   static const double interElementGap = 12.0;
   static const double attributeIconSize = 14.0;
 }
+
+class AppPhysics {
+  // 1. Layout
+  static const double menuWidth = 0.45;
+  static const double deleteSlotRatio = 0.30;
+  static const double editSlotRatio = 0.70;
+
+  // 2. Friction & Resistance
+  static const double frictionYield = 0.70;
+  static const double flickVelocity = 400.0;
+  static const double flickMinDistance = 50.0;
+
+  // 3. Animation & Visuals
+  static const int snapDurationMs = 400;
+  static const double swallowSpeed = 2.3;
+  static const double continuousSwallowSpeed = 3.0;
+}

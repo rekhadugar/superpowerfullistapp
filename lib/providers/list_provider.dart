@@ -40,6 +40,11 @@ class ListProvider extends ChangeNotifier {
     ),
   ];
 
+  // --- Gesture State Coordination ---
+  // Tracks the ID of the currently swiped-open item.
+  // Wrappers listen to this without triggering a global UI rebuild.
+  final ValueNotifier<String?> openSwipeItemId = ValueNotifier(null);
+
   // Active Filtering
   List<ListItem> get activeItems {
     final filtered = _items.where((item) => !item.isDeleted && !item.isCompleted).toList();

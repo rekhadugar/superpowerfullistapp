@@ -91,7 +91,7 @@ class ListItemCard extends StatelessWidget {
 
                     // Maximized Pill Badge (Exactly 20.0px tall)
                     Container(
-                      height: 20.0, // Expanded from 18.0 to the absolute maximum safe limit
+                      height: 19.0, // Expanded from 18.0 to the absolute maximum safe limit
                       padding: const EdgeInsets.symmetric(horizontal: 10.0), // Slightly wider padding for larger text
                       decoration: BoxDecoration(
                         color: theme.dividerColor.withOpacity(0.3),
@@ -103,14 +103,14 @@ class ListItemCard extends StatelessWidget {
                         children: [
                           Icon(
                               Icons.sell_outlined,
-                              size: 12.0, // Increased from 10.0
+                              size: 11.0, // Increased from 10.0
                               color: theme.textTheme.labelSmall?.color
                           ),
                           const SizedBox(width: 4.0),
                           Text(
                             attr,
                             style: theme.textTheme.labelSmall?.copyWith(
-                              fontSize: 12.0, // Increased from 10.0 for much better legibility
+                              fontSize: 11.0, // Increased from 10.0 for much better legibility
                               fontWeight: FontWeight.w600,
                               letterSpacing: 0.2,
                               height: 1.1, // Tight line height prevents vertical clipping
