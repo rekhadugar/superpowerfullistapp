@@ -56,7 +56,8 @@ class CompletedItemsScreen extends StatelessWidget {
       String timeGroup = _getTimeGroup(_extractDate(item));
 
       if (timeGroup != currentGroup) {
-        flatList.add(timeGroup.toUpperCase());
+        // CHANGED: Removed .toUpperCase()
+        flatList.add(timeGroup);
         currentGroup = timeGroup;
       }
       flatList.add(item);
@@ -119,9 +120,9 @@ class CompletedItemsScreen extends StatelessWidget {
                         onToggleStatus: () => context.read<ListProvider>().toggleItemStatus(item.id, item.isCompleted),
                         onDelete: () => context.read<ListProvider>().deleteItem(item.id),
                         onRestore: () => context.read<ListProvider>().restoreItem(item.id),
-                        onToggleExpand: () {}, // Not actionable in archive
-                        onUpdateQuantity: (_) {}, // Not actionable in archive
-                        onEdit: () {}, // Not actionable in archive
+                        onToggleExpand: () {},
+                        onUpdateQuantity: (_) {},
+                        onEdit: () {},
                       );
                     },
                     childCount: flatList.length,

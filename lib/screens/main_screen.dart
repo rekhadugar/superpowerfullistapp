@@ -132,7 +132,6 @@ class _MainScreenState extends State<MainScreen> {
                     centerTitle: true,
                     backgroundColor: AppTheme.background,
 
-                    // NEW: Swap leading icon when searching
                     leading: listProvider.isSearching
                         ? IconButton(
                       icon: const Icon(Icons.arrow_back, color: Colors.black),
@@ -143,7 +142,6 @@ class _MainScreenState extends State<MainScreen> {
                       onPressed: () => _scaffoldKey.currentState?.openDrawer(),
                     ),
 
-                    // NEW: Swap title for a TextField when searching
                     title: listProvider.isSearching
                         ? TextField(
                       autofocus: true,
@@ -157,24 +155,32 @@ class _MainScreenState extends State<MainScreen> {
                     )
                         : Text(
                       activeType,
-                      style: Theme.of(context).appBarTheme.titleTextStyle,
+                      // CHANGED: Matches SectionHeader styling exactly
+                      style: const TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.w800,
+                        color: AppTheme.primary,
+                        letterSpacing: 1.0,
+                      ),
                     ),
 
-                    // Hide right actions during search to give the text field breathing room
                     actions: listProvider.isSearching
                         ? []
                         : [
                       IconButton(
                         icon: Icon(
+                          // CHANGED: Resembles collapse/expand states
                           listProvider.isGlobalCompactMode
-                              ? Icons.view_headline
-                              : Icons.view_compact_alt_outlined,
-                          color: listProvider.isGlobalCompactMode ? AppTheme.primary : Colors.black,
+                              ? Icons.unfold_less
+                              : Icons.unfold_more,
+                          // CHANGED: Highlights blue when expanded (!isGlobalCompactMode)
+                          color: listProvider.isGlobalCompactMode ? Colors.black : AppTheme.primary,
                         ),
                         onPressed: () => listProvider.toggleGlobalCompactMode(),
                       ),
                       IconButton(
-                        icon: const Icon(Icons.more_horiz, color: Colors.black),
+                        // CHANGED: 3 vertical dots
+                        icon: const Icon(Icons.more_vert, color: Colors.black),
                         onPressed: _openOptionsSheet,
                       ),
                     ],
@@ -186,11 +192,13 @@ class _MainScreenState extends State<MainScreen> {
                   ),
 
                   SliverPadding(
-                    padding: const EdgeInsets.only(
+                    // CHANGED: Removed 'const' and added dynamic top padding
+                    padding: EdgeInsets.only(
                       left: AppConstants.padMedium,
                       right: AppConstants.padMedium,
                       bottom: AppConstants.padMedium,
-                      top: 0,
+                      // NEW: Offsets the 20px difference in header heights (56 - 36)
+                      top: listProvider.isGlobalCompactMode ? 20.0 : 0.0,
                     ),
                     sliver: SliverReorderableList(
                       itemCount: flatList.length,

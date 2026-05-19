@@ -108,7 +108,6 @@ class ListProvider extends ChangeNotifier {
       if (i.isCompleted || i.isDeleted) return false;
       if (_activeType != 'All Items' && i.type != _activeType) return false;
 
-      // NEW: Smart Search Filtering Logic
       if (_isSearching && _searchQuery.isNotEmpty) {
         final query = _searchQuery.toLowerCase();
 
@@ -158,7 +157,13 @@ class ListProvider extends ChangeNotifier {
     final sortedGroupNames = _getSortedGroupNames(groups.keys);
 
     for (var groupName in sortedGroupNames) {
-      flattenedList.add(groupName.toUpperCase());
+      // NEW: Convert to Title Case instead of upper case
+      String formattedHeader = groupName.split(' ').map((word) =>
+      word.isNotEmpty ? '${word[0].toUpperCase()}${word.substring(1).toLowerCase()}' : ''
+      ).join(' ');
+
+      flattenedList.add(formattedHeader);
+
       final itemsInGroup = groups[groupName]!;
       _sortItemsWithinGroup(itemsInGroup);
       flattenedList.addAll(itemsInGroup);

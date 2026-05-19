@@ -131,7 +131,6 @@ class _ListItemCardState extends State<ListItemCard> {
 
   @override
   Widget build(BuildContext context) {
-    // FIXED: The card no longer reads global state; it relies entirely on its widget properties.
     final isLocallyExpanded = !widget.isDraggingProxy && widget.isExpanded;
     final isActuallyCompact = widget.isCompact && !isLocallyExpanded;
     final hasExtraDetails = widget.item.locations.isNotEmpty || widget.item.category != 'Uncategorized' || widget.item.context.isNotEmpty;
@@ -243,8 +242,9 @@ class _ListItemCardState extends State<ListItemCard> {
                             children: [
                               Text(
                                 widget.item.name,
+                                // CHANGED: Reduced font size from 18 to 16
                                 style: TextStyle(
-                                  fontSize: 18,
+                                  fontSize: 16,
                                   fontWeight: FontWeight.w600,
                                   color: widget.item.isCompleted ? AppTheme.textSecondary : Colors.black,
                                   decoration: widget.item.isCompleted ? TextDecoration.lineThrough : null,
@@ -301,6 +301,7 @@ class _ListItemCardState extends State<ListItemCard> {
                                 child: Text(
                                   '${widget.item.quantity}',
                                   textAlign: TextAlign.center,
+                                  // Quantity font size is 16 (matches item name)
                                   style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16, color: Colors.black87),
                                 ),
                               ),
@@ -309,7 +310,8 @@ class _ListItemCardState extends State<ListItemCard> {
                                 child: Text(
                                   widget.item.unit,
                                   textAlign: TextAlign.center,
-                                  style: const TextStyle(fontWeight: FontWeight.w600, color: AppTheme.textSecondary, fontSize: 14),
+                                  // CHANGED: Increased unit font size from 14 to 16 to match item name
+                                  style: const TextStyle(fontWeight: FontWeight.w600, color: AppTheme.textSecondary, fontSize: 16),
                                 ),
                               ),
                             ],
@@ -339,6 +341,7 @@ class _ListItemCardState extends State<ListItemCard> {
                                   child: Text(
                                       '${widget.item.quantity}',
                                       textAlign: TextAlign.center,
+                                      // Quantity font size is 16
                                       style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16)
                                   ),
                                 ),
