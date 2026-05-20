@@ -156,27 +156,23 @@ class _ListItemCardState extends State<ListItemCard> with SingleTickerProviderSt
             Container(
               height: AppConstants.baseCardHeight + (widget.nWrap * AppConstants.nameWrapHeightStep) - AppConstants.borderWidth,
               child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
+                crossAxisAlignment: CrossAxisAlignment.center, // Switched to center for flawless baseline alignment
                 children: [
                   Container(
                     width: AppConstants.leadingBlockWidth,
                     height: AppConstants.attributeRowHeight,
                     alignment: Alignment.center,
-                    margin: const EdgeInsets.only(top: 18.0),
                     child: Icon(Icons.check_box_outline_blank, color: theme.dividerColor),
                   ),
                   const SizedBox(width: AppConstants.interElementGap),
                   Expanded(
-                    child: Padding(
-                      padding: const EdgeInsets.only(top: 18.0),
-                      child: Text(
-                        widget.title,
-                        maxLines: AppConstants.maxTitleLines,
-                        overflow: TextOverflow.ellipsis,
-                        style: theme.textTheme.titleMedium?.copyWith(
-                          fontSize: AppConstants.titleFontSize,
-                          height: AppConstants.titleLineHeight,
-                        ),
+                    child: Text(
+                      widget.title,
+                      maxLines: AppConstants.maxTitleLines,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        fontSize: AppConstants.titleFontSize,
+                        height: AppConstants.titleLineHeight,
                       ),
                     ),
                   ),
@@ -185,11 +181,9 @@ class _ListItemCardState extends State<ListItemCard> with SingleTickerProviderSt
                     width: AppConstants.trailingBlockWidth,
                     height: AppConstants.attributeRowHeight,
                     alignment: Alignment.center,
-                    margin: const EdgeInsets.only(top: 18.0), // Mathematically synced to the title baseline
                     child: Text(
                       '1',
                       textAlign: TextAlign.center,
-                      // Parameterized to match the exact font geometry of the title
                       style: theme.textTheme.titleMedium?.copyWith(
                         fontSize: AppConstants.titleFontSize,
                         height: AppConstants.titleLineHeight,
