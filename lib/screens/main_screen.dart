@@ -9,13 +9,103 @@ import '../theme/app_theme.dart';
 import '../theme/app_constants.dart';
 import '../widgets/section_header.dart';
 import '../widgets/swipe_action_wrapper.dart';
+import '../models/list_item.dart';
 
-class MainScreen extends StatelessWidget {
+// Helper class for the Phantom Header state
+class PhantomHeaderData {
+  final String? title;
+  final double yOffset;
+  PhantomHeaderData({this.title, this.yOffset = 0.0});
+}
+
+class MainScreen extends StatefulWidget {
   const MainScreen({Key? key}) : super(key: key);
 
   @override
+  State<MainScreen> createState() => _MainScreenState();
+}
+
+class _MainScreenState extends State<MainScreen> {
+  late ScrollController _scrollController;
+  final ValueNotifier<PhantomHeaderData> _phantomHeaderState = ValueNotifier(PhantomHeaderData());
+
+  @override
+  void initState() {
+    super.initState();
+    _scrollController = ScrollController();
+    _scrollController.addListener(_onScroll);
+  }
+
+  @override
+  void dispose() {
+    _scrollController.removeListener(_onScroll);
+    _scrollController.dispose();
+    _phantomHeaderState.dispose();
+    super.dispose();
+  }
+
+  // ==========================================
+  // BATCH 2: THE SPATIAL CACHE SEARCH ENGINE
+  // ==========================================
+  void _onScroll() {
+    final provider = context.read<ListProvider>();
+    final offsets = provider.cumulativeYOffsets;
+    final displayList = provider.displayList;
+    final offset = _scrollController.offset;
+
+    // If scrolled to the very top, or list is empty, hide the phantom header
+    if (offsets.isEmpty || offset <= 0) {
+      if (_phantomHeaderState.value.title != null) {
+        _phantomHeaderState.value = PhantomHeaderData(title: null, yOffset: 0.0);
+      }
+      return;
+    }
+
+    // 1. Find the currently visible index based on scroll offset
+    int activeIndex = 0;
+    for (int i = 0; i < offsets.length; i++) {
+      if (offset >= offsets[i]) {
+        activeIndex = i;
+      } else {
+        break;
+      }
+    }
+
+    // 2. Walk backwards to find what the current Section Header is
+    String? currentHeaderTitle;
+    for (int i = activeIndex; i >= 0; i--) {
+      if (displayList[i] is String) {
+        currentHeaderTitle = displayList[i];
+        break;
+      }
+    }
+
+    // 3. Look forward to find the NEXT header for the push-up collision effect
+    double pushOffset = 0.0;
+    for (int i = activeIndex + 1; i < displayList.length; i++) {
+      if (displayList[i] is String) {
+        final nextHeaderY = offsets[i];
+        final distanceToNextHeader = nextHeaderY - offset;
+
+        // AppConstants.headerHeight is typically 44.0.
+        // If the next header is closer than 44px, it starts pushing the phantom header up.
+        const double headerHeight = 44.0;
+        if (distanceToNextHeader < headerHeight) {
+          pushOffset = distanceToNextHeader - headerHeight; // Yields a negative number
+        }
+        break;
+      }
+    }
+
+    // Update the ValueNotifier (O(1) update, doesn't rebuild the whole list)
+    _phantomHeaderState.value = PhantomHeaderData(
+      title: currentHeaderTitle,
+      yOffset: pushOffset,
+    );
+  }
+
+  @override
   Widget build(BuildContext context) {
-    // NEW: Pass viewport width to the provider for strict layout math
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (context.mounted) {
         final width = MediaQuery.of(context).size.width;
@@ -24,10 +114,9 @@ class MainScreen extends StatelessWidget {
     });
 
     final listProvider = context.watch<ListProvider>();
-    final activeItems = listProvider.activeItems;
+    final displayList = listProvider.displayList;
     final theme = Theme.of(context);
 
-    // 1. Wrap Scaffold in a GestureDetector to catch taps on empty screen space below the list
     return GestureDetector(
       onTap: () {
         if (listProvider.openSwipeItemId.value != null) {
@@ -48,61 +137,98 @@ class MainScreen extends StatelessWidget {
             fontWeight: FontWeight.w700,
           ),
         ),
-        body: activeItems.isEmpty
+        body: displayList.isEmpty
             ? Center(child: Text('All caught up!', style: theme.textTheme.bodyMedium))
-        // 2. Wrap ListView in a NotificationListener to instantly snap closed on scroll
             : NotificationListener<ScrollStartNotification>(
           onNotification: (_) {
             if (listProvider.openSwipeItemId.value != null) {
               listProvider.openSwipeItemId.value = null;
             }
-            return false; // Return false to let the scroll propagate normally
+            return false;
           },
-          child: ListView.builder(
-            padding: const EdgeInsets.only(top: 0.0, bottom: 120.0), // Removed top padding to sit flush
-            itemCount: activeItems.length + 1, // +1 for the static header
-            itemBuilder: (context, index) {
-              if (index == 0) {
-                return const SectionHeader(title: 'Hardware Store');
-              }
+          // ==========================================
+          // BATCH 3: THE PHANTOM HEADER UI STACK
+          // ==========================================
+          child: Stack(
+            children: [
+              // The main scrolling list
+              ListView.builder(
+                controller: _scrollController,
+                padding: const EdgeInsets.only(top: 0.0, bottom: 120.0),
+                itemCount: displayList.length,
+                itemBuilder: (context, index) {
+                  final item = displayList[index];
 
-              final item = activeItems[index - 1];
+                  if (item is String) {
+                    return SectionHeader(
+                      key: ValueKey('header_$item'),
+                      title: item,
+                    );
+                  }
 
-              return SwipeActionWrapper(
-                key: ValueKey('swipe_${item.id}'),
-                itemId: item.id,
-                requireConfirm: true, // Set this to check your provider/settings state later
-                onEdit: () {
-                  showModalBottomSheet(
-                    context: context,
-                    isScrollControlled: true,
-                    backgroundColor: Colors.transparent, // Allows our custom rounded corners to show
-                    builder: (context) => EditItemBottomSheet(
-                      item: item,
-                      onSave: (newTitle, newAttributes) {
-                        context.read<ListProvider>().editItem(item.id, newTitle, newAttributes);
+                  if (item is ListItem) {
+                    return SwipeActionWrapper(
+                      key: ValueKey('swipe_${item.id}'),
+                      itemId: item.id,
+                      requireConfirm: true,
+                      onCheckout: () {
+                        context.read<ListProvider>().toggleCompletion(item.id);
                       },
+                      onEdit: () {
+                        showModalBottomSheet(
+                          context: context,
+                          isScrollControlled: true,
+                          backgroundColor: Colors.transparent,
+                          builder: (context) => EditItemBottomSheet(
+                            item: item,
+                            onSave: (newTitle, newAttributes) {
+                              context.read<ListProvider>().editItem(item.id, newTitle, newAttributes);
+                            },
+                          ),
+                        );
+                      },
+                      onDelete: () {
+                        context.read<ListProvider>().deleteItem(item.id);
+                      },
+                      child: ListItemCard(
+                        title: item.title,
+                        nWrap: item.nWrap,
+                        attributeRows: item.attributeRows,
+                        onTap: () {
+                          if (listProvider.openSwipeItemId.value != null) {
+                            listProvider.openSwipeItemId.value = null;
+                          } else {
+                            listProvider.toggleCompletion(item.id);
+                          }
+                        },
+                      ),
+                    );
+                  }
+                  return const SizedBox.shrink();
+                },
+              ),
+
+              // The Math-Driven Phantom Header Overlay
+              ValueListenableBuilder<PhantomHeaderData>(
+                valueListenable: _phantomHeaderState,
+                builder: (context, data, child) {
+                  if (data.title == null) return const SizedBox.shrink();
+
+                  return Positioned(
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    // GPU hardware acceleration for the floating header
+                    child: RepaintBoundary(
+                      child: Transform.translate(
+                        offset: Offset(0, data.yOffset), // Pushes up natively when colliding
+                        child: SectionHeader(title: data.title!),
+                      ),
                     ),
                   );
                 },
-                onDelete: () {
-                  context.read<ListProvider>().deleteItem(item.id);
-                },
-                child: ListItemCard(
-                  title: item.title,
-                  nWrap: item.nWrap,
-                  attributeRows: item.attributeRows,
-                  onTap: () {
-                    // 3. Native iOS behavior: Tapping ANY card while a menu is open simply closes the menu
-                    if (listProvider.openSwipeItemId.value != null) {
-                      listProvider.openSwipeItemId.value = null;
-                    } else {
-                      listProvider.toggleCompletion(item.id);
-                    }
-                  },
-                ),
-              );
-            },
+              ),
+            ],
           ),
         ),
       ),

@@ -5,14 +5,20 @@ class ListItem {
   final String title;
   final List<String> attributeRows;
 
-  // State flags
+  // --- Store-Routing & Grouping Schema (Section 9.1) ---
+  final String category; // Classification mapping to store aisles (e.g., "Produce")
+  final String type; // Primary assigned Shop String or ID (e.g., "Costco")
+  final List<String> locations; // Secondary supported stores
+
+  // --- State flags ---
   final bool isCompleted;
   final bool isDeleted;
 
-  // New: Math-Driven Multi-line Wrapping factor (0 to 5)
+  // --- Layout Geometry ---
+  // Math-Driven Multi-line Wrapping factor (0 to 5)
   final int nWrap;
 
-  // Fractional Multi-Indexing
+  // --- Fractional Multi-Indexing ---
   final double shopOrder;
   final double categoryOrder;
   final double globalCustomOrder;
@@ -21,6 +27,9 @@ class ListItem {
     required this.id,
     required this.title,
     this.attributeRows = const [],
+    this.category = "Uncategorized",
+    this.type = "Generic",
+    this.locations = const [],
     this.isCompleted = false,
     this.isDeleted = false,
     this.nWrap = 0, // Default to 1-line (0 wraps)
@@ -33,6 +42,9 @@ class ListItem {
     String? id,
     String? title,
     List<String>? attributeRows,
+    String? category,
+    String? type,
+    List<String>? locations,
     bool? isCompleted,
     bool? isDeleted,
     int? nWrap,
@@ -44,6 +56,12 @@ class ListItem {
       id: id ?? this.id,
       title: title ?? this.title,
       attributeRows: attributeRows ?? this.attributeRows,
+
+      // Included new schema variables in the copyWith method
+      category: category ?? this.category,
+      type: type ?? this.type,
+      locations: locations ?? this.locations,
+
       isCompleted: isCompleted ?? this.isCompleted,
       isDeleted: isDeleted ?? this.isDeleted,
       nWrap: nWrap ?? this.nWrap,

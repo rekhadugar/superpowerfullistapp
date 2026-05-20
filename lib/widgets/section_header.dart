@@ -16,27 +16,26 @@ class SectionHeader extends StatelessWidget {
     final theme = Theme.of(context);
 
     return Container(
-      // Strictly enforced 44px height for the math engine remains untouched
       height: AppConstants.headerHeight,
       width: double.infinity,
+      alignment: Alignment.bottomLeft,
       padding: const EdgeInsets.only(
+        // FIX: Matches the exact indent of the AppBar and ListItem titles
         left: AppConstants.horizontalPadding + AppConstants.leadingBlockWidth + AppConstants.interElementGap,
         right: AppConstants.horizontalPadding,
+        bottom: AppConstants.headerBottomPadding,
       ),
-      // Solid background is required to prevent visual bleed during sticky scroll
       color: theme.scaffoldBackgroundColor,
-      alignment: Alignment.bottomLeft,
-      child: Padding(
-        padding: const EdgeInsets.only(bottom: 8.0), // Snaps text to the bottom baseline
-        child: Text(
-          title, // Removed .toUpperCase() to match standard item name casing, or you can keep it if preferred
-          style: theme.textTheme.titleMedium?.copyWith(
-            fontWeight: FontWeight.bold, // Matches item name size (16px) but forces bold
-            color: theme.textTheme.titleMedium?.color, // Solid color to match item titles
-          ),
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
+      child: Text(
+        title,
+        style: theme.textTheme.titleSmall?.copyWith(
+          fontSize: AppConstants.headerFontSize,
+          fontWeight: FontWeight.w700,
+          letterSpacing: 0.3,
+          color: theme.textTheme.titleLarge?.color,
         ),
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
       ),
     );
   }

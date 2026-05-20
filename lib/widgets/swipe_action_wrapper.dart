@@ -1,6 +1,5 @@
-// Location: lib/widgets/swipe_action_wrapper.dart
-
 import 'package:flutter/material.dart';
+import 'package:flutter/physics.dart';
 import 'package:provider/provider.dart';
 import '../providers/list_provider.dart';
 import '../theme/app_theme.dart';
@@ -11,7 +10,8 @@ class SwipeActionWrapper extends StatefulWidget {
   final String itemId;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
-  final bool requireConfirm; // NEW: Exposes the tap-to-confirm toggle to parent settings
+  final VoidCallback onCheckout; // NEW: Action for the right swipe
+  final bool requireConfirm;
 
   const SwipeActionWrapper({
     Key? key,
@@ -19,7 +19,8 @@ class SwipeActionWrapper extends StatefulWidget {
     required this.itemId,
     required this.onEdit,
     required this.onDelete,
-    this.requireConfirm = true, // Defaults to true for safety
+    required this.onCheckout,
+    this.requireConfirm = true,
   }) : super(key: key);
 
   @override
@@ -28,9 +29,7 @@ class SwipeActionWrapper extends StatefulWidget {
 
 class _SwipeActionWrapperState extends State<SwipeActionWrapper> with TickerProviderStateMixin {
 
-  late AnimationController _snapController;
-  late Animation<double> _snapAnimation;
-
+  late AnimationController _offsetController;
   late AnimationController _confirmController;
   late Animation<double> _confirmAnimation;
 
@@ -38,38 +37,26 @@ class _SwipeActionWrapperState extends State<SwipeActionWrapper> with TickerProv
   double _currentVisualOffset = 0.0;
 
   double _dragStartPosition = 0.0;
-  bool _isDeleting = false;
+  bool _isExecutingAction = false; // Renamed from _isDeleting to support both sides
   bool _isConfirmingDelete = false;
 
   ListProvider? _provider;
 
   double get _menuSnapWidth => MediaQuery.of(context).size.width * AppPhysics.menuWidth;
+  double get _checkoutThreshold => MediaQuery.of(context).size.width * AppPhysics.checkoutThreshold;
 
   double get _activeSwallowSpeed => (_dragStartPosition.abs() < 1.0)
       ? AppPhysics.continuousSwallowSpeed
       : AppPhysics.swallowSpeed;
 
-  bool get _isSwallowComplete {
-    final double exposedWidth = _currentVisualOffset.abs();
-    if (exposedWidth <= _menuSnapWidth) return false;
-
-    final double deleteSlotWidth = _menuSnapWidth * AppPhysics.deleteSlotRatio;
-    final double extraVisualDrag = exposedWidth - _menuSnapWidth;
-    final double deleteWidth = deleteSlotWidth + (extraVisualDrag * _activeSwallowSpeed);
-
-    return deleteWidth >= exposedWidth;
-  }
-
   @override
   void initState() {
     super.initState();
-    _snapController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: AppPhysics.snapDurationMs),
-    );
-    _snapController.addListener(() {
+
+    _offsetController = AnimationController.unbounded(vsync: this);
+    _offsetController.addListener(() {
       setState(() {
-        _currentVisualOffset = _snapAnimation.value;
+        _currentVisualOffset = _offsetController.value;
       });
     });
 
@@ -83,7 +70,6 @@ class _SwipeActionWrapperState extends State<SwipeActionWrapper> with TickerProv
     });
   }
 
-  // NEW: Safely hook into the global provider state without triggering heavy rebuilds
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
@@ -98,24 +84,22 @@ class _SwipeActionWrapperState extends State<SwipeActionWrapper> with TickerProv
   @override
   void dispose() {
     _provider?.openSwipeItemId.removeListener(_onGlobalStateChanged);
-    _snapController.dispose();
+    _offsetController.dispose();
     _confirmController.dispose();
     super.dispose();
   }
 
-  // NEW: The auto-close trigger
   void _onGlobalStateChanged() {
     if (_provider?.openSwipeItemId.value != widget.itemId && _currentVisualOffset != 0.0) {
-      _snapTo(0.0);
+      _snapTo(0.0, 0.0);
     }
   }
 
   void _onDragStart(DragStartDetails details) {
-    if (_snapController.isAnimating) {
-      _snapController.stop();
+    if (_offsetController.isAnimating) {
+      _offsetController.stop();
     }
 
-    // NEW: Claim the global open state, instantly closing any other open cards
     _provider?.openSwipeItemId.value = widget.itemId;
 
     if (_isConfirmingDelete) {
@@ -130,86 +114,141 @@ class _SwipeActionWrapperState extends State<SwipeActionWrapper> with TickerProv
   }
 
   void _onDragUpdate(DragUpdateDetails details) {
-    if (_isDeleting) return;
+    if (_isExecutingAction) return;
 
     setState(() {
       _rawDragDistance += details.delta.dx;
-      if (_rawDragDistance > 0) _rawDragDistance = 0;
 
-      if (_rawDragDistance.abs() <= _menuSnapWidth) {
-        _currentVisualOffset = _rawDragDistance;
+      double calculatedOffset = 0.0;
+
+      if (_rawDragDistance > 0) {
+        // RIGHT SWIPE MATH
+        if (_rawDragDistance <= _checkoutThreshold) {
+          calculatedOffset = _rawDragDistance;
+        } else {
+          final overDrag = _rawDragDistance - _checkoutThreshold;
+          calculatedOffset = _checkoutThreshold + (overDrag * AppPhysics.frictionYield);
+        }
       } else {
-        final overDrag = _rawDragDistance.abs() - _menuSnapWidth;
-        _currentVisualOffset = -(_menuSnapWidth + (overDrag * AppPhysics.frictionYield));
+        // LEFT SWIPE MATH
+        if (_rawDragDistance.abs() <= _menuSnapWidth) {
+          calculatedOffset = _rawDragDistance;
+        } else {
+          final overDrag = _rawDragDistance.abs() - _menuSnapWidth;
+          calculatedOffset = -(_menuSnapWidth + (overDrag * AppPhysics.frictionYield));
+        }
       }
+
+      _offsetController.value = calculatedOffset;
     });
   }
 
   void _onDragEnd(DragEndDetails details) {
-    if (_isDeleting) return;
+    if (_isExecutingAction) return;
 
     final double velocity = details.primaryVelocity ?? 0.0;
-    final double distanceDragged = (_rawDragDistance - _dragStartPosition).abs();
+    final double screenWidth = MediaQuery.of(context).size.width;
 
-    final bool isFlingingLeft = velocity < -AppPhysics.flickVelocity && distanceDragged >= AppPhysics.flickMinDistance;
-    final bool isFlingingRight = velocity > AppPhysics.flickVelocity && distanceDragged >= AppPhysics.flickMinDistance;
+    // PROJECT THE MOMENTUM
+    // Calculates exactly where the card would naturally stop given current velocity
+    final double projectedOffset = _currentVisualOffset + (velocity * AppPhysics.momentumMultiplier);
 
-    final bool crossedHalfway = _currentVisualOffset.abs() > (_menuSnapWidth * 0.5);
+    // === RIGHT SWIPE (Checkout) ===
+    if (_currentVisualOffset > 0) {
+      final double checkoutTriggerPoint = screenWidth * AppPhysics.checkoutThreshold;
 
-    if (_isSwallowComplete) {
-      if (widget.requireConfirm) {
-        setState(() {
-          _isConfirmingDelete = true;
-        });
-        _confirmController.forward();
-        _snapTo(-_menuSnapWidth);
+      if (projectedOffset >= checkoutTriggerPoint) {
+        // Momentum carries it past threshold -> Lose stiffness and glide off screen
+        _glideOffScreen(screenWidth, velocity, () => widget.onCheckout());
       } else {
-        setState(() {
-          _isDeleting = true;
-        });
-        widget.onDelete();
-        _snapTo(0.0);
+        // Not enough momentum -> Spring tightly back to 0
+        _snapTo(0.0, velocity);
       }
       return;
     }
 
-    if (isFlingingRight) {
-      _snapTo(0.0);
-    } else if (isFlingingLeft || crossedHalfway) {
-      _snapTo(-_menuSnapWidth);
+    // === LEFT SWIPE (Menu / Delete) ===
+    final double deleteTriggerPoint = -(screenWidth * AppPhysics.swipeExecuteThreshold);
+    final double menuTriggerPoint = -(_menuSnapWidth * 0.5);
+
+    if (projectedOffset <= deleteTriggerPoint) {
+      if (widget.requireConfirm) {
+        // Ask for confirmation (Snap tightly to menu)
+        setState(() => _isConfirmingDelete = true);
+        _confirmController.forward();
+        _snapTo(-_menuSnapWidth, velocity);
+      } else {
+        // Auto Delete -> Lose stiffness and glide off screen
+        _glideOffScreen(-screenWidth, velocity, () => widget.onDelete());
+      }
+    } else if (projectedOffset <= menuTriggerPoint) {
+      // Snap tightly to open menu
+      _snapTo(-_menuSnapWidth, velocity);
     } else {
-      _snapTo(0.0);
+      // Snap tightly back to zero
+      _snapTo(0.0, velocity);
     }
   }
 
-  void _snapTo(double targetOffset) {
+  // STANDARD SPRING (Tight & Elastic)
+  void _snapTo(double targetOffset, double velocity) {
     if (targetOffset == 0.0 && _isConfirmingDelete) {
-      setState(() {
-        _isConfirmingDelete = false;
-      });
+      setState(() => _isConfirmingDelete = false);
       _confirmController.reverse();
     }
 
-    _snapAnimation = Tween<double>(
-      begin: _currentVisualOffset,
-      end: targetOffset,
-    ).animate(CurvedAnimation(
-      parent: _snapController,
-      curve: Curves.easeOutQuart,
-    ));
-    _snapController.forward(from: 0.0);
+    final simulation = SpringSimulation(
+      const SpringDescription(
+        mass: AppPhysics.springMass,
+        stiffness: AppPhysics.springStiffness,
+        damping: AppPhysics.springDamping,
+      ),
+      _offsetController.value,
+      targetOffset,
+      velocity,
+    );
+
+    _offsetController.animateWith(simulation);
+  }
+
+  // LOOSE SPRING (Follow-Through Momentum)
+  // LOOSE SPRING (Follow-Through Momentum) -> REPLACED WITH HIGH-SPEED EXIT
+  void _glideOffScreen(double targetOffset, double velocity, VoidCallback onComplete) {
+    setState(() => _isExecutingAction = true);
+
+    if (targetOffset == 0.0 && _isConfirmingDelete) {
+      setState(() => _isConfirmingDelete = false);
+      _confirmController.reverse();
+    }
+
+    // FIX: We completely drop the SpringSimulation for exits.
+    // Springs have a "settling tail" that causes the delay.
+    // Instead, we force the card off-screen on a strict 150ms deadline.
+    _offsetController.animateTo(
+      targetOffset,
+      duration: const Duration(milliseconds: 150), // Guaranteed to finish and fire the action instantly
+      curve: Curves.easeOutSine,
+    ).then((_) {
+      onComplete();
+
+      _offsetController.value = 0.0;
+      if (mounted) {
+        setState(() => _isExecutingAction = false);
+      }
+    });
   }
 
   @override
   Widget build(BuildContext context) {
     final double exposedWidth = _currentVisualOffset.abs();
+    final bool isRightSwipe = _currentVisualOffset > 0;
 
     final double deleteSlotWidth = _menuSnapWidth * AppPhysics.deleteSlotRatio;
     final double editSlotWidth = _menuSnapWidth * AppPhysics.editSlotRatio;
 
     double baseDeleteWidth = 0.0;
-    if (_isDeleting) {
-      baseDeleteWidth = exposedWidth;
+    if (_isExecutingAction && !isRightSwipe) {
+      baseDeleteWidth = exposedWidth; // Left wipe execution locks Red box to full width
     } else if (exposedWidth <= _menuSnapWidth) {
       baseDeleteWidth = exposedWidth * AppPhysics.deleteSlotRatio;
     } else {
@@ -220,24 +259,72 @@ class _SwipeActionWrapperState extends State<SwipeActionWrapper> with TickerProv
 
     final double deleteWidth = baseDeleteWidth + ((exposedWidth - baseDeleteWidth) * _confirmAnimation.value);
 
+    // Visual feedback logic for Right Swipe readiness
+    final bool isCheckoutReady = _rawDragDistance >= _checkoutThreshold;
+
     return Stack(
       children: [
         Positioned.fill(
           child: Container(
             margin: const EdgeInsets.only(bottom: AppConstants.cardMargin),
             child: ClipRect(
-              child: Align(
+              child: isRightSwipe
+
+              // ==========================================
+              // RIGHT SWIPE BACKGROUND (Green Checkout)
+              // ==========================================
+                  ? Align(
+                alignment: Alignment.centerLeft,
+                child: SizedBox(
+                  width: exposedWidth,
+                  child: Container(
+                    color: const Color(0xFF34C759),
+                    child: Stack(
+                      children: [
+                        Positioned(
+                          left: 24.0,
+                          top: 0,
+                          bottom: 0,
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              AnimatedScale(
+                                scale: isCheckoutReady ? 1.2 : 1.0,
+                                duration: const Duration(milliseconds: 150),
+                                child: const Icon(Icons.check_circle, color: Colors.white, size: 28.0),
+                              ),
+                              const SizedBox(width: 12.0),
+                              AnimatedOpacity(
+                                opacity: isCheckoutReady ? 1.0 : 0.6,
+                                duration: const Duration(milliseconds: 150),
+                                child: const Text(
+                                    'Check Out',
+                                    style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 16.0)
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              )
+
+              // ==========================================
+              // LEFT SWIPE BACKGROUND (Blue/Red Menu)
+              // ==========================================
+                  : Align(
                 alignment: Alignment.centerRight,
                 child: SizedBox(
                   width: exposedWidth,
                   child: Stack(
                     children: [
-                      // BLUE EDIT LAYER
                       GestureDetector(
                         onTap: () {
-                          if (!_isDeleting && !_isConfirmingDelete) {
+                          if (!_isExecutingAction && !_isConfirmingDelete) {
                             widget.onEdit();
-                            _snapTo(0.0);
+                            _snapTo(0.0, 0.0);
                           }
                         },
                         onHorizontalDragStart: _onDragStart,
@@ -262,7 +349,6 @@ class _SwipeActionWrapperState extends State<SwipeActionWrapper> with TickerProv
                         ),
                       ),
 
-                      // RED DELETE LAYER
                       Positioned(
                         right: 0,
                         top: 0,
@@ -270,7 +356,7 @@ class _SwipeActionWrapperState extends State<SwipeActionWrapper> with TickerProv
                         width: deleteWidth,
                         child: GestureDetector(
                           onTap: () {
-                            if (!_isDeleting) {
+                            if (!_isExecutingAction) {
                               if (widget.requireConfirm && !_isConfirmingDelete) {
                                 setState(() {
                                   _isConfirmingDelete = true;
@@ -278,10 +364,10 @@ class _SwipeActionWrapperState extends State<SwipeActionWrapper> with TickerProv
                                 _confirmController.forward();
                               } else {
                                 setState(() {
-                                  _isDeleting = true;
+                                  _isExecutingAction = true;
                                 });
                                 widget.onDelete();
-                                _snapTo(0.0);
+                                _snapTo(0.0, 0.0);
                               }
                             }
                           },

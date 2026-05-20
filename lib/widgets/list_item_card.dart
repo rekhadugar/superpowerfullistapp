@@ -21,7 +21,7 @@ class ListItemCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
-    // Deterministic height calculation: Base + Wraps + Attribute Rows
+    // Deterministic height calculation
     final double computedHeight = AppConstants.baseCardHeight +
         (nWrap * AppConstants.nameWrapHeightStep) +
         (attributeRows.length * AppConstants.attributeRowHeight);
@@ -35,22 +35,22 @@ class ListItemCard extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: AppConstants.horizontalPadding),
         decoration: BoxDecoration(
           color: theme.cardColor,
-          border: Border(bottom: BorderSide(color: theme.dividerColor, width: 1)),
+          border: Border(bottom: BorderSide(color: theme.dividerColor, width: AppConstants.borderWidth)),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisAlignment: MainAxisAlignment.start,
           children: [
-            // Base Height Title Row (Accounts for Name Wraps and 1px border)
+            // Base Height Title Row
             Container(
-              height: AppConstants.baseCardHeight + (nWrap * AppConstants.nameWrapHeightStep) - 1.0,
-              padding: const EdgeInsets.only(top: 18.0),
+              height: AppConstants.baseCardHeight + (nWrap * AppConstants.nameWrapHeightStep) - AppConstants.borderWidth,
+              padding: const EdgeInsets.only(top: AppConstants.cardTopPadding),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Container(
                     width: AppConstants.leadingBlockWidth,
-                    height: 20.0,
+                    height: AppConstants.attributeRowHeight,
                     alignment: Alignment.center,
                     child: Icon(Icons.check_box_outline_blank, color: theme.dividerColor),
                   ),
@@ -58,18 +58,18 @@ class ListItemCard extends StatelessWidget {
                   Expanded(
                     child: Text(
                       title,
-                      maxLines: 6,
+                      maxLines: AppConstants.maxTitleLines,
                       overflow: TextOverflow.ellipsis,
                       style: theme.textTheme.titleMedium?.copyWith(
-                        fontSize: 16.0,
-                        height: 1.25,
+                        fontSize: AppConstants.titleFontSize,
+                        height: AppConstants.titleLineHeight,
                       ),
                     ),
                   ),
                   const SizedBox(width: AppConstants.interElementGap),
                   Container(
                     width: AppConstants.trailingBlockWidth,
-                    height: 20.0,
+                    height: AppConstants.attributeRowHeight,
                     alignment: Alignment.center,
                     child: Text(
                         '1',
@@ -80,22 +80,20 @@ class ListItemCard extends StatelessWidget {
                 ],
               ),
             ),
-            // Dynamic Attribute Rows mathematically constrained to 20px
+            // Dynamic Attribute Rows
             if (attributeRows.isNotEmpty)
               ...attributeRows.map((attr) => SizedBox(
-                height: AppConstants.attributeRowHeight, // The unbreakable 20px math constraint
+                height: AppConstants.attributeRowHeight,
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const SizedBox(width: AppConstants.leadingBlockWidth + AppConstants.interElementGap),
-
-                    // Maximized Pill Badge (Exactly 20.0px tall)
                     Container(
-                      height: 19.0, // Expanded from 18.0 to the absolute maximum safe limit
-                      padding: const EdgeInsets.symmetric(horizontal: 10.0), // Slightly wider padding for larger text
+                      height: AppConstants.badgeHeight,
+                      padding: const EdgeInsets.symmetric(horizontal: AppConstants.badgeHorizontalPadding),
                       decoration: BoxDecoration(
                         color: theme.dividerColor.withOpacity(0.3),
-                        borderRadius: BorderRadius.circular(10.0), // Exactly half of 20.0px for a perfect circle edge
+                        borderRadius: BorderRadius.circular(AppConstants.badgeBorderRadius),
                       ),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
@@ -103,17 +101,17 @@ class ListItemCard extends StatelessWidget {
                         children: [
                           Icon(
                               Icons.sell_outlined,
-                              size: 11.0, // Increased from 10.0
+                              size: AppConstants.badgeIconSize,
                               color: theme.textTheme.labelSmall?.color
                           ),
-                          const SizedBox(width: 4.0),
+                          const SizedBox(width: AppConstants.badgeIconGap),
                           Text(
                             attr,
                             style: theme.textTheme.labelSmall?.copyWith(
-                              fontSize: 11.0, // Increased from 10.0 for much better legibility
+                              fontSize: AppConstants.badgeFontSize,
                               fontWeight: FontWeight.w600,
                               letterSpacing: 0.2,
-                              height: 1.1, // Tight line height prevents vertical clipping
+                              height: 1.1,
                             ),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,

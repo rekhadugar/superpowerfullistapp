@@ -316,7 +316,7 @@ lib/
 
 ---
 
-# AI Developer System Rules for Listille
+# AI Developer System Rules for Listicle
 
 ## 1. Immutable Design System
 * **NEVER hardcode colors, paddings, margins, border radii, or text styles in the UI.**
