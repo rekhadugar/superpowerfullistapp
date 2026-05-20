@@ -13,10 +13,8 @@ class ListItemCard extends StatefulWidget {
   final String type;
   final String category;
   final SortMode sortMode;
-  final int quantity; // NEW
   final bool isHighlighted;
   final VoidCallback onTap;
-  final Function(int) onQuantityChanged; // NEW
 
   const ListItemCard({
     Key? key,
@@ -27,10 +25,8 @@ class ListItemCard extends StatefulWidget {
     required this.type,
     required this.category,
     required this.sortMode,
-    required this.quantity, // NEW
     this.isHighlighted = false,
     required this.onTap,
-    required this.onQuantityChanged, // NEW
   }) : super(key: key);
 
   @override
@@ -166,7 +162,6 @@ class _ListItemCardState extends State<ListItemCard> with SingleTickerProviderSt
           children: [
             Container(
               height: AppConstants.baseCardHeight + (widget.nWrap * AppConstants.nameWrapHeightStep) - AppConstants.borderWidth,
-              padding: const EdgeInsets.only(top: 12.0), // Reduced top padding slightly to center the stepper
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -174,13 +169,13 @@ class _ListItemCardState extends State<ListItemCard> with SingleTickerProviderSt
                     width: AppConstants.leadingBlockWidth,
                     height: AppConstants.attributeRowHeight,
                     alignment: Alignment.center,
-                    margin: const EdgeInsets.only(top: 6.0), // Push the checkbox down slightly to align with the text
+                    margin: const EdgeInsets.only(top: 18.0),
                     child: Icon(Icons.check_box_outline_blank, color: theme.dividerColor),
                   ),
                   const SizedBox(width: AppConstants.interElementGap),
                   Expanded(
                     child: Padding(
-                      padding: const EdgeInsets.only(top: 6.0), // Push the text down slightly to align
+                      padding: const EdgeInsets.only(top: 18.0),
                       child: Text(
                         widget.title,
                         maxLines: AppConstants.maxTitleLines,
@@ -193,36 +188,15 @@ class _ListItemCardState extends State<ListItemCard> with SingleTickerProviderSt
                     ),
                   ),
                   const SizedBox(width: AppConstants.interElementGap),
-                  // ==========================================
-                  // NEW VERTICAL QUANTITY STEPPER
-                  // ==========================================
                   Container(
                     width: AppConstants.trailingBlockWidth,
-                    decoration: BoxDecoration(
-                      color: theme.dividerColor.withOpacity(0.15),
-                      borderRadius: BorderRadius.circular(12.0),
-                    ),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                      children: [
-                        GestureDetector(
-                          onTap: () => widget.onQuantityChanged(1),
-                          behavior: HitTestBehavior.opaque,
-                          child: Icon(Icons.add, size: 16.0, color: theme.textTheme.titleMedium?.color),
-                        ),
-                        Text(
-                          '${widget.quantity}',
-                          style: theme.textTheme.titleMedium?.copyWith(
-                            fontSize: 14.0,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                        GestureDetector(
-                          onTap: () => widget.onQuantityChanged(-1),
-                          behavior: HitTestBehavior.opaque,
-                          child: Icon(Icons.remove, size: 16.0, color: theme.textTheme.titleMedium?.color),
-                        ),
-                      ],
+                    height: AppConstants.attributeRowHeight,
+                    alignment: Alignment.center,
+                    margin: const EdgeInsets.only(top: 16.0), // Aligned with the text
+                    child: Text(
+                        '1', // Static placeholder until the tap-and-hold feature is implemented
+                        textAlign: TextAlign.center,
+                        style: theme.textTheme.labelSmall
                     ),
                   ),
                 ],
