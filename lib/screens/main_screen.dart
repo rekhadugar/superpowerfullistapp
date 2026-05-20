@@ -79,7 +79,6 @@ class _MainScreenState extends State<MainScreen> {
       child: Scaffold(
         backgroundColor: theme.scaffoldBackgroundColor,
         appBar: AppBar(
-          // Lock the leading width to our exact layout constants
           leadingWidth: AppConstants.horizontalPadding + AppConstants.leadingBlockWidth + AppConstants.interElementGap,
           leading: Padding(
             padding: const EdgeInsets.only(left: AppConstants.horizontalPadding),
@@ -92,7 +91,7 @@ class _MainScreenState extends State<MainScreen> {
               },
             ),
           ),
-          titleSpacing: 0, // Set to 0 because leadingWidth now perfectly occupies the required space
+          titleSpacing: 0,
           title: const Text('Listicle V2 Prototype'),
           backgroundColor: theme.scaffoldBackgroundColor,
           elevation: 0,
@@ -102,9 +101,6 @@ class _MainScreenState extends State<MainScreen> {
             fontWeight: FontWeight.w700,
           ),
           actions: [
-            // ==========================================
-            // BATCH 2: EXPAND/COLLAPSE & OPTIONS ICONS
-            // ==========================================
             IconButton(
               icon: Icon(Icons.unfold_more_rounded, color: theme.textTheme.titleMedium?.color),
               tooltip: 'Expand / Collapse Menu',
@@ -150,25 +146,20 @@ class _MainScreenState extends State<MainScreen> {
             ),
           ],
         ),
-        // ==========================================
-        // NEW ADDITION: FLOATING ACTION BUTTON
-        // ==========================================
         floatingActionButton: FloatingActionButton(
           onPressed: () {
-            // Close any open swipe menus
             if (listProvider.openSwipeItemId.value != null) {
               listProvider.openSwipeItemId.value = null;
             }
 
-            // Reuse the existing edit sheet by passing a blank ListItem
             showModalBottomSheet(
               context: context,
               isScrollControlled: true,
               backgroundColor: Colors.transparent,
               builder: (context) => EditItemBottomSheet(
                 item: ListItem(id: '', title: ''),
-                onSave: (newTitle, newAttributes) {
-                  context.read<ListProvider>().addItem(newTitle, newAttributes);
+                onSave: (newTitle, newAttributes, newType, newCategory) {
+                  context.read<ListProvider>().addItem(newTitle, newAttributes, newType, newCategory);
                 },
               ),
             );
@@ -186,12 +177,8 @@ class _MainScreenState extends State<MainScreen> {
             }
             return false;
           },
-          // ==========================================
-          // BATCH 3: THE PHANTOM HEADER UI STACK
-          // ==========================================
           child: Stack(
             children: [
-              // The main scrolling list
               ListView.builder(
                 controller: _scrollController,
                 padding: const EdgeInsets.only(top: 0.0, bottom: 120.0),
@@ -221,8 +208,8 @@ class _MainScreenState extends State<MainScreen> {
                           backgroundColor: Colors.transparent,
                           builder: (context) => EditItemBottomSheet(
                             item: item,
-                            onSave: (newTitle, newAttributes) {
-                              context.read<ListProvider>().editItem(item.id, newTitle, newAttributes);
+                            onSave: (newTitle, newAttributes, newType, newCategory) {
+                              context.read<ListProvider>().editItem(item.id, newTitle, newAttributes, newType, newCategory);
                             },
                           ),
                         );
@@ -248,7 +235,6 @@ class _MainScreenState extends State<MainScreen> {
                 },
               ),
 
-              // The Math-Driven Phantom Header Overlay
               ValueListenableBuilder<PhantomHeaderData>(
                 valueListenable: _phantomHeaderState,
                 builder: (context, data, child) {
@@ -258,10 +244,9 @@ class _MainScreenState extends State<MainScreen> {
                     top: 0,
                     left: 0,
                     right: 0,
-                    // GPU hardware acceleration for the floating header
                     child: RepaintBoundary(
                       child: Transform.translate(
-                        offset: Offset(0, data.yOffset), // Pushes up natively when colliding
+                        offset: Offset(0, data.yOffset),
                         child: SectionHeader(title: data.title!),
                       ),
                     ),

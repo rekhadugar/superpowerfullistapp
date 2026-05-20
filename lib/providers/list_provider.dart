@@ -113,36 +113,48 @@ class ListProvider extends ChangeNotifier {
     }
   }
 
-  void addItem(String title, List<String> attributes) {
-    double newCustomOrder = 1000.0; // Arbitrary starting point for a completely empty list
+  void addItem(String title, List<String> attributes, String type, String category) {
+    double newCustomOrder = 1000.0;
 
     if (_items.isNotEmpty) {
-      // Find the absolute minimum custom order value currently in the list
       final double currentMin = _items
           .map((item) => item.globalCustomOrder)
           .reduce((a, b) => a < b ? a : b);
-
-      // Subtract 1.0 to place the new item exactly at the top
       newCustomOrder = currentMin - 1.0;
     }
 
     final newItem = ListItem(
-      id: DateTime.now().millisecondsSinceEpoch.toString(), // Generate a simple unique ID
+      id: DateTime.now().millisecondsSinceEpoch.toString(),
       title: title,
       attributeRows: attributes,
+      // Pass the new routing parameters, falling back to defaults if left blank
+      type: type.trim().isEmpty ? "Any" : type.trim(),
+      category: category.trim().isEmpty ? "Everything Else" : category.trim(),
       globalCustomOrder: newCustomOrder,
     );
 
     _items.add(newItem);
 
-    // 1. Recalculate text geometry for the new item
     _recalculateWraps();
-
-    // 2. FORCE the Strategy Engine to re-sort and inject the item into the active view
     _buildDisplayList();
-
-    // 3. Explicitly tell the UI to paint the updates
     notifyListeners();
+  }
+
+  void editItem(String id, String newTitle, List<String> newAttributes, String type, String category) {
+    final index = _items.indexWhere((item) => item.id == id);
+    if (index != -1) {
+      _items[index] = _items[index].copyWith(
+        title: newTitle,
+        attributeRows: newAttributes,
+        type: type.trim().isEmpty ? "Any" : type.trim(),
+        category: category.trim().isEmpty ? "Everything Else" : category.trim(),
+      );
+
+      // We must rebuild the display list in case the item moved to a different group
+      _recalculateWraps();
+      _buildDisplayList();
+      notifyListeners();
+    }
   }
 
   void updateViewportWidth(double width) {
@@ -241,17 +253,6 @@ class ListProvider extends ChangeNotifier {
       // Rebuild the flat list when an item is removed
       _buildDisplayList();
       notifyListeners();
-    }
-  }
-
-  void editItem(String id, String newTitle, List<String> newAttributes) {
-    final index = _items.indexWhere((item) => item.id == id);
-    if (index != -1) {
-      _items[index] = _items[index].copyWith(
-        title: newTitle,
-        attributeRows: newAttributes,
-      );
-      _recalculateWraps();
     }
   }
 
