@@ -24,11 +24,47 @@ class _MainScreenState extends State<MainScreen> {
   late ScrollController _scrollController;
   final ValueNotifier<PhantomHeaderData> _phantomHeaderState = ValueNotifier(const PhantomHeaderData());
 
+  String? _lastScrolledFlashId;
+
   @override
   void initState() {
     super.initState();
     _scrollController = ScrollController();
     _scrollController.addListener(_onScroll);
+
+    // Safely attach a listener to execute scroll side-effects outside the build phase
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        context.read<ListProvider>().addListener(_onProviderStateChanged);
+      }
+    });
+  }
+
+  void _onProviderStateChanged() {
+    if (!mounted) return;
+    final provider = context.read<ListProvider>();
+
+    // Only scroll if there is a new item we haven't scrolled to yet
+    if (provider.flashItemId != null && provider.flashItemId != _lastScrolledFlashId) {
+      _lastScrolledFlashId = provider.flashItemId;
+      final targetOffset = provider.getOffsetForItem(provider.flashItemId!);
+
+      if (targetOffset != null && _scrollController.hasClients) {
+        double maxScroll = _scrollController.position.maxScrollExtent;
+
+        // Include the 44px sticky header height + 16px of visual padding
+        double safeBuffer = AppConstants.headerHeight + 16.0;
+        double scrollTarget = (targetOffset - safeBuffer).clamp(0.0, maxScroll);
+
+        _scrollController.animateTo(
+          scrollTarget,
+          duration: const Duration(milliseconds: 800), // Smoother, slower scroll
+          curve: Curves.easeOutCubic,
+        );
+      }
+    } else if (provider.flashItemId == null) {
+      _lastScrolledFlashId = null;
+    }
   }
 
   @override

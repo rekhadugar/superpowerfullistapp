@@ -1,5 +1,7 @@
 // Location: lib/providers/list_provider.dart
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import '../models/list_item.dart';
 import '../theme/app_constants.dart';
@@ -113,6 +115,19 @@ class ListProvider extends ChangeNotifier {
     }
   }
 
+  String? _flashItemId;
+  String? get flashItemId => _flashItemId;
+  Timer? _flashTimer;
+
+  // $O(N)$ lookup that utilizes our $O(1)$ spatial cache
+  double? getOffsetForItem(String id) {
+    final index = displayList.indexWhere((element) => element is ListItem && element.id == id);
+    if (index != -1 && index < cumulativeYOffsets.length) {
+      return cumulativeYOffsets[index];
+    }
+    return null;
+  }
+
   void addItem(String title, List<String> attributes, String type, String category) {
     double newCustomOrder = 1000.0;
 
@@ -127,7 +142,6 @@ class ListProvider extends ChangeNotifier {
       id: DateTime.now().millisecondsSinceEpoch.toString(),
       title: title,
       attributeRows: attributes,
-      // Pass the new routing parameters, falling back to defaults if left blank
       type: type.trim().isEmpty ? "Any" : type.trim(),
       category: category.trim().isEmpty ? "Everything Else" : category.trim(),
       globalCustomOrder: newCustomOrder,
@@ -135,8 +149,18 @@ class ListProvider extends ChangeNotifier {
 
     _items.add(newItem);
 
+    // Rebuild spatial layout
     _recalculateWraps();
     _buildDisplayList();
+
+    // Trigger the flash state, extended to 3 seconds to account for scroll delay
+    _flashItemId = newItem.id;
+    _flashTimer?.cancel();
+    _flashTimer = Timer(const Duration(seconds: 3), () {
+      _flashItemId = null;
+      notifyListeners();
+    });
+
     notifyListeners();
   }
 
