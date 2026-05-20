@@ -15,6 +15,8 @@ class ListItem {
   // --- Layout Geometry ---
   // Math-Driven Multi-line Wrapping factor (0 to 5)
   final int nWrap;
+  // Math-Driven Tag Wrapping factor (0 to N)
+  final int nTagRows;
 
   // --- Fractional Multi-Indexing ---
   final double typeOrder; // Renamed from shopOrder to be domain-agnostic
@@ -31,6 +33,7 @@ class ListItem {
     this.isCompleted = false,
     this.isDeleted = false,
     this.nWrap = 0, // Default to 1-line (0 wraps)
+    this.nTagRows = 0,
     this.typeOrder = 0.0,
     this.categoryOrder = 0.0,
     this.globalCustomOrder = 0.0,
@@ -46,6 +49,7 @@ class ListItem {
     bool? isCompleted,
     bool? isDeleted,
     int? nWrap,
+    int? nTagRows,
     double? typeOrder,
     double? categoryOrder,
     double? globalCustomOrder,
@@ -63,6 +67,7 @@ class ListItem {
       isCompleted: isCompleted ?? this.isCompleted,
       isDeleted: isDeleted ?? this.isDeleted,
       nWrap: nWrap ?? this.nWrap,
+      nTagRows: nTagRows ?? this.nTagRows,
       typeOrder: typeOrder ?? this.typeOrder,
       categoryOrder: categoryOrder ?? this.categoryOrder,
       globalCustomOrder: globalCustomOrder ?? this.globalCustomOrder,

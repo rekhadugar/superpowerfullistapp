@@ -220,7 +220,11 @@ class _MainScreenState extends State<MainScreen> {
                       child: ListItemCard(
                         title: item.title,
                         nWrap: item.nWrap,
+                        nTagRows: item.nTagRows,
                         attributeRows: item.attributeRows,
+                        type: item.type,
+                        category: item.category,
+                        sortMode: listProvider.currentSortMode,
                         onTap: () {
                           if (listProvider.openSwipeItemId.value != null) {
                             listProvider.openSwipeItemId.value = null;

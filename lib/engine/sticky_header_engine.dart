@@ -23,10 +23,18 @@ class StickyHeaderEngine {
       if (item is String) {
         currentY += AppConstants.headerHeight;
       } else if (item is ListItem) {
-        final double cardHeight = AppConstants.baseCardHeight +
-            (item.nWrap * AppConstants.nameWrapHeightStep) +
-            (item.attributeRows.length * AppConstants.attributeRowHeight) +
-            AppConstants.cardMargin;
+        // 1. Base Height + Title Wraps
+        double cardHeight = AppConstants.baseCardHeight +
+            (item.nWrap * AppConstants.nameWrapHeightStep);
+
+        // 2. Context Badge Row (Type or Category, always 1 row)
+        cardHeight += AppConstants.attributeRowHeight;
+
+        // 3. Dynamic Tag Rows
+        cardHeight += (item.nTagRows * AppConstants.attributeRowHeight);
+
+        // 4. Margins (Strictly 0.0)
+        cardHeight += AppConstants.cardMargin;
 
         currentY += cardHeight;
       }

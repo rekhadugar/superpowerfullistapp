@@ -167,7 +167,6 @@ class ListProvider extends ChangeNotifier {
   void _recalculateWraps() {
     bool stateChanged = false;
 
-    // Use the mathematical constant width constraint
     final double textWidth = _viewportWidth -
         (AppConstants.horizontalPadding * 2) -
         AppConstants.leadingBlockWidth -
@@ -179,6 +178,7 @@ class ListProvider extends ChangeNotifier {
     for (int i = 0; i < _items.length; i++) {
       final item = _items[i];
 
+      // --- 1. Measure Title Wraps ---
       final TextPainter tp = TextPainter(
         text: TextSpan(
             text: item.title,
@@ -196,8 +196,46 @@ class ListProvider extends ChangeNotifier {
 
       final int calculatedNWrap = (lineCount - 1).clamp(0, 5);
 
-      if (item.nWrap != calculatedNWrap) {
-        _items[i] = item.copyWith(nWrap: calculatedNWrap);
+      // --- 2. Measure Tag Badge Wraps ---
+      int calculatedTagRows = 0;
+      if (item.attributeRows.isNotEmpty) {
+        double currentLineWidth = 0.0;
+        calculatedTagRows = 1;
+
+        for (String tag in item.attributeRows) {
+          final TextPainter tagTp = TextPainter(
+            text: TextSpan(
+                text: tag,
+                style: const TextStyle(
+                    fontSize: AppConstants.badgeFontSize,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: 0.2,
+                    height: 1.1)),
+            textDirection: TextDirection.ltr,
+          )..layout();
+
+          // Pixel-perfect physical width of the badge + spacing gap
+          final double tagWidth = tagTp.width +
+              (AppConstants.badgeHorizontalPadding * 2) +
+              AppConstants.badgeIconSize +
+              AppConstants.badgeIconGap +
+              8.0; // Inter-badge gap
+
+          if (currentLineWidth + tagWidth > textWidth) {
+            calculatedTagRows++;
+            currentLineWidth = tagWidth; // Start a new line
+          } else {
+            currentLineWidth += tagWidth; // Add to current line
+          }
+        }
+      }
+
+      // --- 3. Evaluate State Changes ---
+      if (item.nWrap != calculatedNWrap || item.nTagRows != calculatedTagRows) {
+        _items[i] = item.copyWith(
+            nWrap: calculatedNWrap,
+            nTagRows: calculatedTagRows
+        );
         stateChanged = true;
       }
     }
