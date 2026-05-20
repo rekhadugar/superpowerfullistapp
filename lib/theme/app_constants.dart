@@ -1,10 +1,8 @@
-// Location: lib/theme/app_constants.dart
-
 class AppConstants {
   // Strict Math-Driven Heights
   static const double headerHeight = 44.0;
   static const double baseCardHeight = 56.0;
-  static const double attributeRowHeight = 20.0;
+  static const double attributeRowHeight = 25.0; // Increased to 25px for visual breathing room
   static const double nameWrapHeightStep = 20.0;
   static const double topBarHeight = 76.0;
 

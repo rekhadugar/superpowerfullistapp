@@ -85,7 +85,7 @@ class ListItemCard extends StatelessWidget {
               ...attributeRows.map((attr) => SizedBox(
                 height: AppConstants.attributeRowHeight,
                 child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                  crossAxisAlignment: CrossAxisAlignment.center, // Vertically centers the 19px badge inside the 25px row
                   children: [
                     const SizedBox(width: AppConstants.leadingBlockWidth + AppConstants.interElementGap),
                     Container(
