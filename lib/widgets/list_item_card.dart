@@ -1,5 +1,3 @@
-// Location: lib/widgets/list_item_card.dart
-
 import 'package:flutter/material.dart';
 import '../theme/app_constants.dart';
 import '../theme/app_theme.dart';
@@ -51,7 +49,6 @@ class _ListItemCardState extends State<ListItemCard> with SingleTickerProviderSt
     super.didChangeDependencies();
     final theme = Theme.of(context);
 
-    // Tween from normal card color to a translucent primary highlight
     _colorAnimation = ColorTween(
       begin: theme.cardColor,
       end: AppColors.primaryAction.withOpacity(0.15),
@@ -60,7 +57,6 @@ class _ListItemCardState extends State<ListItemCard> with SingleTickerProviderSt
       curve: Curves.easeInOut,
     ));
 
-    // If the card is built while highlighted (e.g., scrolled into view), flash it
     if (widget.isHighlighted) {
       _triggerFlash();
     }
@@ -69,14 +65,12 @@ class _ListItemCardState extends State<ListItemCard> with SingleTickerProviderSt
   @override
   void didUpdateWidget(ListItemCard oldWidget) {
     super.didUpdateWidget(oldWidget);
-    // Trigger animation when the property changes from false to true
     if (widget.isHighlighted && !oldWidget.isHighlighted) {
       _triggerFlash();
     }
   }
 
   void _triggerFlash() {
-    // Stagger the flash: 800ms scroll + 100ms pause = 900ms delay
     Future.delayed(const Duration(milliseconds: 900), () {
       if (mounted) {
         _flashController.forward().then((_) {
@@ -130,7 +124,6 @@ class _ListItemCardState extends State<ListItemCard> with SingleTickerProviderSt
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
-    // Deterministic height calculation perfectly matching the StickyHeaderEngine
     final double computedHeight = AppConstants.baseCardHeight +
         (widget.nWrap * AppConstants.nameWrapHeightStep) +
         AppConstants.attributeRowHeight +
@@ -150,7 +143,7 @@ class _ListItemCardState extends State<ListItemCard> with SingleTickerProviderSt
             margin: const EdgeInsets.only(bottom: AppConstants.cardMargin),
             padding: const EdgeInsets.symmetric(horizontal: AppConstants.horizontalPadding),
             decoration: BoxDecoration(
-              color: _colorAnimation.value, // Driven by the animation tween
+              color: _colorAnimation.value,
               border: Border(bottom: BorderSide(color: theme.dividerColor, width: AppConstants.borderWidth)),
             ),
             child: child,
@@ -192,11 +185,15 @@ class _ListItemCardState extends State<ListItemCard> with SingleTickerProviderSt
                     width: AppConstants.trailingBlockWidth,
                     height: AppConstants.attributeRowHeight,
                     alignment: Alignment.center,
-                    margin: const EdgeInsets.only(top: 16.0), // Aligned with the text
+                    margin: const EdgeInsets.only(top: 18.0), // Mathematically synced to the title baseline
                     child: Text(
-                        '1', // Static placeholder until the tap-and-hold feature is implemented
-                        textAlign: TextAlign.center,
-                        style: theme.textTheme.labelSmall
+                      '1',
+                      textAlign: TextAlign.center,
+                      // Parameterized to match the exact font geometry of the title
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        fontSize: AppConstants.titleFontSize,
+                        height: AppConstants.titleLineHeight,
+                      ),
                     ),
                   ),
                 ],
