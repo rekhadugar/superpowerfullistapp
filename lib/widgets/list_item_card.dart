@@ -130,10 +130,11 @@ class ListItemCard extends StatelessWidget {
             ),
 
             // 1. Fixed Context Badge Row (Type or Category depending on SortMode)
+            // 1. Fixed Context Badge Row (Type or Category depending on SortMode)
             SizedBox(
               height: AppConstants.attributeRowHeight,
               child: Row(
-                crossAxisAlignment: CrossAxisAlignment.center, // Vertically centers the 19px badge inside the 25px row
+                crossAxisAlignment: CrossAxisAlignment.start, // Top align to push the 6px remainder to the bottom
                 children: [
                   const SizedBox(width: AppConstants.leadingBlockWidth + AppConstants.interElementGap),
                   _buildBadge(theme, contextBadgeText, contextIcon),
@@ -148,11 +149,11 @@ class ListItemCard extends StatelessWidget {
                 height: nTagRows * AppConstants.attributeRowHeight,
                 padding: const EdgeInsets.only(
                   left: AppConstants.leadingBlockWidth + AppConstants.interElementGap,
-                  top: 3.0, // (25px row - 19px badge) / 2 = 3px top padding for perfect vertical center alignment
+                  top: 0.0, // Top align to push the 6px remainder to the bottom
                 ),
                 child: Wrap(
-                  spacing: 8.0, // Horizontal gap between badges
-                  runSpacing: 6.0, // Vertical gap between lines of badges (25px row height - 19px badge height = 6px)
+                  spacing: 8.0,
+                  runSpacing: 6.0,
                   children: attributeRows.map((attr) => _buildBadge(theme, attr, Icons.sell_outlined)).toList(),
                 ),
               ),

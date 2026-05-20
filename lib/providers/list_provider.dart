@@ -167,13 +167,20 @@ class ListProvider extends ChangeNotifier {
   void _recalculateWraps() {
     bool stateChanged = false;
 
-    final double textWidth = _viewportWidth -
+    // The title stops before the trailing block (Quantity Stepper)
+    final double titleAvailableWidth = _viewportWidth -
         (AppConstants.horizontalPadding * 2) -
         AppConstants.leadingBlockWidth -
         (AppConstants.interElementGap * 2) -
         AppConstants.trailingBlockWidth;
 
-    if (textWidth <= 0) return;
+    // The tags flow all the way to the right edge padding
+    final double tagAvailableWidth = _viewportWidth -
+        (AppConstants.horizontalPadding * 2) -
+        AppConstants.leadingBlockWidth -
+        AppConstants.interElementGap;
+
+    if (titleAvailableWidth <= 0) return;
 
     for (int i = 0; i < _items.length; i++) {
       final item = _items[i];
@@ -186,7 +193,7 @@ class ListProvider extends ChangeNotifier {
         ),
         textDirection: TextDirection.ltr,
         maxLines: AppConstants.maxTitleLines,
-      )..layout(maxWidth: textWidth);
+      )..layout(maxWidth: titleAvailableWidth);
 
       final int lineCount = tp.didExceedMaxLines
           ? AppConstants.maxTitleLines
@@ -201,6 +208,7 @@ class ListProvider extends ChangeNotifier {
       if (item.attributeRows.isNotEmpty) {
         double currentLineWidth = 0.0;
         calculatedTagRows = 1;
+        const double wrapSpacing = 8.0; // Horizontal gap between badges
 
         for (String tag in item.attributeRows) {
           final TextPainter tagTp = TextPainter(
@@ -214,18 +222,24 @@ class ListProvider extends ChangeNotifier {
             textDirection: TextDirection.ltr,
           )..layout();
 
-          // Pixel-perfect physical width of the badge + spacing gap
-          final double tagWidth = tagTp.width +
+          // Pixel-perfect physical width of the badge ONLY (no gap)
+          final double actualBadgeWidth = tagTp.width +
               (AppConstants.badgeHorizontalPadding * 2) +
               AppConstants.badgeIconSize +
-              AppConstants.badgeIconGap +
-              8.0; // Inter-badge gap
+              AppConstants.badgeIconGap;
 
-          if (currentLineWidth + tagWidth > textWidth) {
+          // If line is empty, add badge without preceding gap
+          if (currentLineWidth == 0.0) {
+            currentLineWidth = actualBadgeWidth;
+          }
+          // Check if adding the gap + new badge exceeds the max width
+          else if (currentLineWidth + wrapSpacing + actualBadgeWidth > tagAvailableWidth) {
             calculatedTagRows++;
-            currentLineWidth = tagWidth; // Start a new line
-          } else {
-            currentLineWidth += tagWidth; // Add to current line
+            currentLineWidth = actualBadgeWidth; // Start a new line
+          }
+          // Otherwise, append to current line with the gap
+          else {
+            currentLineWidth += wrapSpacing + actualBadgeWidth;
           }
         }
       }
