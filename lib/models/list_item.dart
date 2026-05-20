@@ -1,5 +1,3 @@
-// Location: lib/models/list_item.dart
-
 class ListItem {
   final String id;
   final String title;
@@ -19,7 +17,7 @@ class ListItem {
   final int nWrap;
 
   // --- Fractional Multi-Indexing ---
-  final double shopOrder;
+  final double typeOrder; // Renamed from shopOrder to be domain-agnostic
   final double categoryOrder;
   final double globalCustomOrder;
 
@@ -27,13 +25,13 @@ class ListItem {
     required this.id,
     required this.title,
     this.attributeRows = const [],
-    this.category = "Uncategorized",
-    this.type = "Generic",
+    this.category = "Everything Else", // Updated default
+    this.type = "Any",                 // Updated default
     this.locations = const [],
     this.isCompleted = false,
     this.isDeleted = false,
     this.nWrap = 0, // Default to 1-line (0 wraps)
-    this.shopOrder = 0.0,
+    this.typeOrder = 0.0,
     this.categoryOrder = 0.0,
     this.globalCustomOrder = 0.0,
   });
@@ -48,7 +46,7 @@ class ListItem {
     bool? isCompleted,
     bool? isDeleted,
     int? nWrap,
-    double? shopOrder,
+    double? typeOrder,
     double? categoryOrder,
     double? globalCustomOrder,
   }) {
@@ -65,7 +63,7 @@ class ListItem {
       isCompleted: isCompleted ?? this.isCompleted,
       isDeleted: isDeleted ?? this.isDeleted,
       nWrap: nWrap ?? this.nWrap,
-      shopOrder: shopOrder ?? this.shopOrder,
+      typeOrder: typeOrder ?? this.typeOrder,
       categoryOrder: categoryOrder ?? this.categoryOrder,
       globalCustomOrder: globalCustomOrder ?? this.globalCustomOrder,
     );

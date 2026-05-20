@@ -1,3 +1,5 @@
+// Location: lib/screens/main_screen.dart
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/list_provider.dart';
@@ -9,6 +11,7 @@ import '../widgets/section_header.dart';
 import '../widgets/swipe_action_wrapper.dart';
 import '../models/list_item.dart';
 import '../engine/sticky_header_engine.dart'; // IMPORT THE ENGINE
+import '../engine/sort_mode_engine.dart'; // IMPORT THE SORT ENGINE
 
 class MainScreen extends StatefulWidget {
   const MainScreen({Key? key}) : super(key: key);
@@ -76,7 +79,20 @@ class _MainScreenState extends State<MainScreen> {
       child: Scaffold(
         backgroundColor: theme.scaffoldBackgroundColor,
         appBar: AppBar(
-          titleSpacing: AppConstants.horizontalPadding + AppConstants.leadingBlockWidth + AppConstants.interElementGap,
+          // Lock the leading width to our exact layout constants
+          leadingWidth: AppConstants.horizontalPadding + AppConstants.leadingBlockWidth + AppConstants.interElementGap,
+          leading: Padding(
+            padding: const EdgeInsets.only(left: AppConstants.horizontalPadding),
+            child: IconButton(
+              icon: Icon(Icons.menu_rounded, color: theme.textTheme.titleMedium?.color),
+              padding: EdgeInsets.zero,
+              alignment: Alignment.centerLeft,
+              onPressed: () {
+                // TODO: Implement Side Drawer Toggle
+              },
+            ),
+          ),
+          titleSpacing: 0, // Set to 0 because leadingWidth now perfectly occupies the required space
           title: const Text('Listicle V2 Prototype'),
           backgroundColor: theme.scaffoldBackgroundColor,
           elevation: 0,
@@ -85,6 +101,81 @@ class _MainScreenState extends State<MainScreen> {
             fontSize: 20,
             fontWeight: FontWeight.w700,
           ),
+          actions: [
+            // ==========================================
+            // BATCH 2: EXPAND/COLLAPSE & OPTIONS ICONS
+            // ==========================================
+            IconButton(
+              icon: Icon(Icons.unfold_more_rounded, color: theme.textTheme.titleMedium?.color),
+              tooltip: 'Expand / Collapse Menu',
+              onPressed: () {
+                // TODO: Implement Expand/Collapse Logic
+              },
+            ),
+            Consumer<ListProvider>(
+              builder: (context, provider, child) {
+                return PopupMenuButton<SortMode>(
+                  icon: Icon(Icons.sort_rounded, color: theme.textTheme.titleMedium?.color),
+                  tooltip: 'Sort & Group Settings',
+                  onSelected: (SortMode mode) {
+                    provider.setSortMode(mode);
+                  },
+                  itemBuilder: (BuildContext context) => <PopupMenuEntry<SortMode>>[
+                    const PopupMenuItem<SortMode>(
+                      value: SortMode.categories,
+                      child: Text('Group by Aisle'),
+                    ),
+                    const PopupMenuItem<SortMode>(
+                      value: SortMode.types,
+                      child: Text('Group by Store'),
+                    ),
+                    const PopupMenuItem<SortMode>(
+                      value: SortMode.az,
+                      child: Text('Alphabetical (A-Z)'),
+                    ),
+                    const PopupMenuItem<SortMode>(
+                      value: SortMode.customFlat,
+                      child: Text('Custom Order (Flat)'),
+                    ),
+                  ],
+                );
+              },
+            ),
+            IconButton(
+              icon: Icon(Icons.more_vert_rounded, color: theme.textTheme.titleMedium?.color),
+              tooltip: 'Options',
+              onPressed: () {
+                // TODO: Implement Options Menu
+              },
+            ),
+          ],
+        ),
+        // ==========================================
+        // NEW ADDITION: FLOATING ACTION BUTTON
+        // ==========================================
+        floatingActionButton: FloatingActionButton(
+          onPressed: () {
+            // Close any open swipe menus
+            if (listProvider.openSwipeItemId.value != null) {
+              listProvider.openSwipeItemId.value = null;
+            }
+
+            // Reuse the existing edit sheet by passing a blank ListItem
+            showModalBottomSheet(
+              context: context,
+              isScrollControlled: true,
+              backgroundColor: Colors.transparent,
+              builder: (context) => EditItemBottomSheet(
+                item: ListItem(id: '', title: ''),
+                onSave: (newTitle, newAttributes) {
+                  context.read<ListProvider>().addItem(newTitle, newAttributes);
+                },
+              ),
+            );
+          },
+          backgroundColor: AppColors.primaryAction,
+          elevation: 4,
+          child: const Icon(Icons.add, color: Colors.white, size: 28),
         ),
         body: displayList.isEmpty
             ? Center(child: Text('All caught up!', style: theme.textTheme.bodyMedium))
