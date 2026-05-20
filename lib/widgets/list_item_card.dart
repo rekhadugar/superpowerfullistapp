@@ -12,7 +12,10 @@ class ListItemCard extends StatefulWidget {
   final String category;
   final SortMode sortMode;
   final bool isHighlighted;
+  final bool isEditMode;   // NEW
+  final bool isSelected;   // NEW
   final VoidCallback onTap;
+  final VoidCallback onLongPress; // NEW
 
   const ListItemCard({
     Key? key,
@@ -24,7 +27,10 @@ class ListItemCard extends StatefulWidget {
     required this.category,
     required this.sortMode,
     this.isHighlighted = false,
+    this.isEditMode = false,
+    this.isSelected = false,
     required this.onTap,
+    required this.onLongPress,
   }) : super(key: key);
 
   @override
@@ -134,16 +140,25 @@ class _ListItemCardState extends State<ListItemCard> with SingleTickerProviderSt
 
     return GestureDetector(
       onTap: widget.onTap,
+      onLongPress: widget.onLongPress, // Trigger selection mode
       behavior: HitTestBehavior.opaque,
       child: AnimatedBuilder(
         animation: _colorAnimation,
         builder: (context, child) {
+          // If selected, apply a permanent subtle tint. If flashing, override with animation color.
+          Color? backgroundColor = widget.isSelected
+              ? AppColors.primaryAction.withOpacity(0.08)
+              : theme.cardColor;
+          if (_flashController.isAnimating) {
+            backgroundColor = _colorAnimation.value;
+          }
+
           return Container(
             height: computedHeight,
             margin: const EdgeInsets.only(bottom: AppConstants.cardMargin),
             padding: const EdgeInsets.symmetric(horizontal: AppConstants.horizontalPadding),
             decoration: BoxDecoration(
-              color: _colorAnimation.value,
+              color: backgroundColor,
               border: Border(bottom: BorderSide(color: theme.dividerColor, width: AppConstants.borderWidth)),
             ),
             child: child,
@@ -156,13 +171,17 @@ class _ListItemCardState extends State<ListItemCard> with SingleTickerProviderSt
             Container(
               height: AppConstants.baseCardHeight + (widget.nWrap * AppConstants.nameWrapHeightStep) - AppConstants.borderWidth,
               child: Row(
-                crossAxisAlignment: CrossAxisAlignment.center, // Switched to center for flawless baseline alignment
+                crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
                   Container(
                     width: AppConstants.leadingBlockWidth,
                     height: AppConstants.attributeRowHeight,
                     alignment: Alignment.center,
-                    child: Icon(Icons.check_box_outline_blank, color: theme.dividerColor),
+                    // Swap Checkbox for Drag Handle when in Edit Mode
+                    child: Icon(
+                        widget.isEditMode ? Icons.drag_handle_rounded : Icons.check_box_outline_blank,
+                        color: widget.isSelected ? AppColors.primaryAction : theme.dividerColor
+                    ),
                   ),
                   const SizedBox(width: AppConstants.interElementGap),
                   Expanded(
@@ -187,6 +206,7 @@ class _ListItemCardState extends State<ListItemCard> with SingleTickerProviderSt
                       style: theme.textTheme.titleMedium?.copyWith(
                         fontSize: AppConstants.titleFontSize,
                         height: AppConstants.titleLineHeight,
+                        color: widget.isEditMode ? theme.dividerColor.withOpacity(0.3) : null, // Dim out in edit mode
                       ),
                     ),
                   ),

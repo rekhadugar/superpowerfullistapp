@@ -93,6 +93,24 @@ class ListProvider extends ChangeNotifier {
   double totalListHeight = 0.0;
   final List<dynamic> displayList = [];
 
+  final Set<String> _selectedItemIds = {};
+  Set<String> get selectedItemIds => _selectedItemIds;
+  bool get isEditMode => _selectedItemIds.isNotEmpty;
+
+  void toggleSelection(String id) {
+    if (_selectedItemIds.contains(id)) {
+      _selectedItemIds.remove(id);
+    } else {
+      _selectedItemIds.add(id);
+    }
+    notifyListeners();
+  }
+
+  void clearSelection() {
+    _selectedItemIds.clear();
+    notifyListeners();
+  }
+
   ListProvider() {
     _buildDisplayList();
   }

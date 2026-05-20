@@ -105,6 +105,10 @@ class _MainScreenState extends State<MainScreen> {
     final displayList = listProvider.displayList;
     final theme = Theme.of(context);
 
+    // UI Math for Bottom Animations
+    final double safeBottomPadding = MediaQuery.of(context).padding.bottom;
+    const double menuHeight = 140.0;
+
     return GestureDetector(
       onTap: () {
         if (listProvider.openSwipeItemId.value != null) {
@@ -122,9 +126,7 @@ class _MainScreenState extends State<MainScreen> {
               icon: Icon(Icons.menu_rounded, color: theme.textTheme.titleMedium?.color),
               padding: EdgeInsets.zero,
               alignment: Alignment.centerLeft,
-              onPressed: () {
-                // TODO: Implement Side Drawer Toggle
-              },
+              onPressed: () {},
             ),
           ),
           titleSpacing: 0,
@@ -139,71 +141,29 @@ class _MainScreenState extends State<MainScreen> {
           actions: [
             IconButton(
               icon: Icon(Icons.unfold_more_rounded, color: theme.textTheme.titleMedium?.color),
-              tooltip: 'Expand / Collapse Menu',
-              onPressed: () {
-                // TODO: Implement Expand/Collapse Logic
-              },
+              onPressed: () {},
             ),
             Consumer<ListProvider>(
               builder: (context, provider, child) {
                 return PopupMenuButton<SortMode>(
                   icon: Icon(Icons.sort_rounded, color: theme.textTheme.titleMedium?.color),
-                  tooltip: 'Sort & Group Settings',
-                  onSelected: (SortMode mode) {
-                    provider.setSortMode(mode);
-                  },
+                  onSelected: (SortMode mode) => provider.setSortMode(mode),
                   itemBuilder: (BuildContext context) => <PopupMenuEntry<SortMode>>[
-                    const PopupMenuItem<SortMode>(
-                      value: SortMode.categories,
-                      child: Text('Group by Aisle'),
-                    ),
-                    const PopupMenuItem<SortMode>(
-                      value: SortMode.types,
-                      child: Text('Group by Store'),
-                    ),
-                    const PopupMenuItem<SortMode>(
-                      value: SortMode.az,
-                      child: Text('Alphabetical (A-Z)'),
-                    ),
-                    const PopupMenuItem<SortMode>(
-                      value: SortMode.customFlat,
-                      child: Text('Custom Order (Flat)'),
-                    ),
+                    const PopupMenuItem<SortMode>(value: SortMode.categories, child: Text('Group by Aisle')),
+                    const PopupMenuItem<SortMode>(value: SortMode.types, child: Text('Group by Store')),
+                    const PopupMenuItem<SortMode>(value: SortMode.az, child: Text('Alphabetical (A-Z)')),
+                    const PopupMenuItem<SortMode>(value: SortMode.customFlat, child: Text('Custom Order (Flat)')),
                   ],
                 );
               },
             ),
             IconButton(
               icon: Icon(Icons.more_vert_rounded, color: theme.textTheme.titleMedium?.color),
-              tooltip: 'Options',
-              onPressed: () {
-                // TODO: Implement Options Menu
-              },
+              onPressed: () {},
             ),
           ],
         ),
-        floatingActionButton: FloatingActionButton(
-          onPressed: () {
-            if (listProvider.openSwipeItemId.value != null) {
-              listProvider.openSwipeItemId.value = null;
-            }
-
-            showModalBottomSheet(
-              context: context,
-              isScrollControlled: true,
-              backgroundColor: Colors.transparent,
-              builder: (context) => EditItemBottomSheet(
-                item: ListItem(id: '', title: ''),
-                onSave: (newTitle, newAttributes, newType, newCategory) {
-                  context.read<ListProvider>().addItem(newTitle, newAttributes, newType, newCategory);
-                },
-              ),
-            );
-          },
-          backgroundColor: AppColors.primaryAction,
-          elevation: 4,
-          child: const Icon(Icons.add, color: Colors.white, size: 28),
-        ),
+        // We REMOVED the Scaffold floatingActionButton here. It is now inside the Stack.
         body: displayList.isEmpty
             ? Center(child: Text('All caught up!', style: theme.textTheme.bodyMedium))
             : NotificationListener<ScrollStartNotification>(
@@ -215,44 +175,32 @@ class _MainScreenState extends State<MainScreen> {
           },
           child: Stack(
             children: [
+              // 1. Core ListView
               ListView.builder(
                 controller: _scrollController,
-                padding: const EdgeInsets.only(top: 0.0, bottom: 120.0),
+                padding: EdgeInsets.only(
+                    top: 0.0,
+                    // Pad the list so items aren't completely hidden behind the menu
+                    bottom: listProvider.isEditMode ? menuHeight + safeBottomPadding + 20 : 120.0
+                ),
                 itemCount: displayList.length,
                 itemBuilder: (context, index) {
                   final item = displayList[index];
 
                   if (item is String) {
-                    return SectionHeader(
-                      key: ValueKey('header_$item'),
-                      title: item,
-                    );
+                    return SectionHeader(key: ValueKey('header_$item'), title: item);
                   }
 
                   if (item is ListItem) {
+                    final bool isSelected = listProvider.selectedItemIds.contains(item.id);
+
                     return SwipeActionWrapper(
                       key: ValueKey('swipe_${item.id}'),
                       itemId: item.id,
                       requireConfirm: true,
-                      onCheckout: () {
-                        context.read<ListProvider>().toggleCompletion(item.id);
-                      },
-                      onEdit: () {
-                        showModalBottomSheet(
-                          context: context,
-                          isScrollControlled: true,
-                          backgroundColor: Colors.transparent,
-                          builder: (context) => EditItemBottomSheet(
-                            item: item,
-                            onSave: (newTitle, newAttributes, newType, newCategory) {
-                              context.read<ListProvider>().editItem(item.id, newTitle, newAttributes, newType, newCategory);
-                            },
-                          ),
-                        );
-                      },
-                      onDelete: () {
-                        context.read<ListProvider>().deleteItem(item.id);
-                      },
+                      onCheckout: () => context.read<ListProvider>().toggleCompletion(item.id),
+                      onEdit: () {},
+                      onDelete: () => context.read<ListProvider>().deleteItem(item.id),
                       child: ListItemCard(
                         title: item.title,
                         nWrap: item.nWrap,
@@ -262,9 +210,20 @@ class _MainScreenState extends State<MainScreen> {
                         category: item.category,
                         sortMode: listProvider.currentSortMode,
                         isHighlighted: listProvider.flashItemId == item.id,
+                        // Context Menu State Links
+                        isEditMode: listProvider.isEditMode,
+                        isSelected: isSelected,
+                        onLongPress: () {
+                          if (listProvider.openSwipeItemId.value != null) {
+                            listProvider.openSwipeItemId.value = null;
+                          }
+                          listProvider.toggleSelection(item.id);
+                        },
                         onTap: () {
                           if (listProvider.openSwipeItemId.value != null) {
                             listProvider.openSwipeItemId.value = null;
+                          } else if (listProvider.isEditMode) {
+                            listProvider.toggleSelection(item.id);
                           } else {
                             listProvider.toggleCompletion(item.id);
                           }
@@ -276,15 +235,13 @@ class _MainScreenState extends State<MainScreen> {
                 },
               ),
 
+              // 2. Phantom Sticky Header
               ValueListenableBuilder<PhantomHeaderData>(
                 valueListenable: _phantomHeaderState,
                 builder: (context, data, child) {
                   if (data.title == null) return const SizedBox.shrink();
-
                   return Positioned(
-                    top: 0,
-                    left: 0,
-                    right: 0,
+                    top: 0, left: 0, right: 0,
                     child: RepaintBoundary(
                       child: Transform.translate(
                         offset: Offset(0, data.yOffset),
@@ -293,6 +250,125 @@ class _MainScreenState extends State<MainScreen> {
                     ),
                   );
                 },
+              ),
+
+              // 3. Dynamic Animated FAB
+              AnimatedPositioned(
+                duration: const Duration(milliseconds: 300),
+                curve: Curves.easeOutCubic,
+                right: AppConstants.horizontalPadding,
+                // Pushes the FAB up precisely above the menu when active
+                bottom: listProvider.isEditMode
+                    ? (menuHeight + safeBottomPadding + 16.0)
+                    : (safeBottomPadding + 16.0),
+                child: FloatingActionButton(
+                  onPressed: () {
+                    if (listProvider.openSwipeItemId.value != null) listProvider.openSwipeItemId.value = null;
+                    showModalBottomSheet(
+                      context: context,
+                      isScrollControlled: true,
+                      backgroundColor: Colors.transparent,
+                      builder: (context) => EditItemBottomSheet(
+                        item: ListItem(id: '', title: ''),
+                        onSave: (newTitle, newAttributes, newType, newCategory) {
+                          context.read<ListProvider>().addItem(newTitle, newAttributes, newType, newCategory);
+                        },
+                      ),
+                    );
+                  },
+                  backgroundColor: AppColors.primaryAction,
+                  elevation: 4,
+                  child: const Icon(Icons.add, color: Colors.white, size: 28),
+                ),
+              ),
+
+              // 4. The Sliding Edit Mode Context Menu
+              AnimatedPositioned(
+                duration: const Duration(milliseconds: 300),
+                curve: Curves.easeOutCubic,
+                left: 0, right: 0,
+                // Slides down out of frame entirely when not in edit mode
+                bottom: listProvider.isEditMode ? 0 : -(menuHeight + safeBottomPadding + 20),
+                child: Container(
+                  height: menuHeight + safeBottomPadding,
+                  padding: EdgeInsets.only(bottom: safeBottomPadding, top: 16.0, left: 24.0, right: 24.0),
+                  decoration: BoxDecoration(
+                    color: theme.scaffoldBackgroundColor,
+                    borderRadius: const BorderRadius.vertical(top: Radius.circular(24.0)),
+                    boxShadow: [
+                      BoxShadow(color: Colors.black.withOpacity(0.15), blurRadius: 15, offset: const Offset(0, -5))
+                    ],
+                  ),
+                  child: Column(
+                    children: [
+                      // Action Row
+                      Row(
+                        children: [
+                          // Dynamic Quantity/Selected Counter Block
+                          Expanded(
+                            child: AnimatedSwitcher(
+                              duration: const Duration(milliseconds: 200),
+                              child: listProvider.selectedItemIds.length == 1
+                                  ? Row(
+                                key: const ValueKey('stepper'),
+                                children: [
+                                  Container(
+                                    decoration: BoxDecoration(color: theme.dividerColor.withOpacity(0.15), borderRadius: BorderRadius.circular(8.0)),
+                                    child: IconButton(icon: const Icon(Icons.remove, size: 20), onPressed: () {}, constraints: const BoxConstraints(), padding: const EdgeInsets.all(8.0)),
+                                  ),
+                                  Padding(
+                                    padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                                    child: Text('1', style: theme.textTheme.titleMedium?.copyWith(fontSize: 18, fontWeight: FontWeight.bold)),
+                                  ),
+                                  Container(
+                                    decoration: BoxDecoration(color: theme.dividerColor.withOpacity(0.15), borderRadius: BorderRadius.circular(8.0)),
+                                    child: IconButton(icon: const Icon(Icons.add, size: 20), onPressed: () {}, constraints: const BoxConstraints(), padding: const EdgeInsets.all(8.0)),
+                                  ),
+                                ],
+                              )
+                                  : Row(
+                                key: const ValueKey('counter'),
+                                children: [
+                                  Icon(Icons.layers_rounded, color: AppColors.primaryAction, size: 22),
+                                  const SizedBox(width: 8.0),
+                                  Text('${listProvider.selectedItemIds.length} Selected', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
+                                ],
+                              ),
+                            ),
+                          ),
+
+                          // Static Tools
+                          IconButton(
+                            icon: const Icon(Icons.copy_rounded),
+                            color: theme.textTheme.titleMedium?.color,
+                            onPressed: () {},
+                          ),
+                          const SizedBox(width: 8.0),
+                          IconButton(
+                            icon: const Icon(Icons.delete_outline_rounded),
+                            color: Colors.redAccent,
+                            onPressed: () {},
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 16.0),
+
+                      // Close Mode Button
+                      SizedBox(
+                        width: double.infinity,
+                        child: TextButton(
+                          onPressed: () => listProvider.clearSelection(),
+                          style: TextButton.styleFrom(
+                            backgroundColor: theme.dividerColor.withOpacity(0.1),
+                            padding: const EdgeInsets.symmetric(vertical: 14.0),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12.0)),
+                          ),
+                          child: Text('Close Edit Mode', style: theme.textTheme.titleMedium?.copyWith(fontSize: 16, fontWeight: FontWeight.w600)),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               ),
             ],
           ),
