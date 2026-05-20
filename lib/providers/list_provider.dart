@@ -1,6 +1,7 @@
 // Location: lib/providers/list_provider.dart
 
 import 'package:flutter/material.dart';
+import '../engine/sticky_header_engine.dart';
 import '../models/list_item.dart';
 import '../theme/app_constants.dart';
 
@@ -328,26 +329,14 @@ class ListProvider extends ChangeNotifier {
 
   void _recalculateYOffsets() {
     cumulativeYOffsets.clear();
-    double currentY = 0.0;
+    // CLEAN ARCHITECTURE: Delegate all mathematical calculations to the Engine
+    final calculatedOffsets = StickyHeaderEngine.calculateSpatialCache(displayList);
+    cumulativeYOffsets.addAll(calculatedOffsets);
 
-    for (var item in displayList) {
-      cumulativeYOffsets.add(currentY);
-
-      if (item is String) {
-        // Reads directly from the centralized constant
-        currentY += AppConstants.headerHeight;
-      } else if (item is ListItem) {
-        // Matches the computedHeight + margin perfectly from your list_item_card.dart
-        final double cardHeight = AppConstants.baseCardHeight +
-            (item.nWrap * AppConstants.nameWrapHeightStep) +
-            (item.attributeRows.length * AppConstants.attributeRowHeight) +
-            AppConstants.cardMargin;
-
-        currentY += cardHeight;
-      }
+    if (cumulativeYOffsets.isNotEmpty) {
+      // Estimate total height if needed, though mostly handled by Flutter's scroll bounds
+      totalListHeight = cumulativeYOffsets.last;
     }
-
-    totalListHeight = currentY;
   }
 
   void toggleCompletion(String id) {

@@ -1,5 +1,3 @@
-// Location: lib/screens/main_screen.dart
-
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/list_provider.dart';
@@ -10,13 +8,7 @@ import '../theme/app_constants.dart';
 import '../widgets/section_header.dart';
 import '../widgets/swipe_action_wrapper.dart';
 import '../models/list_item.dart';
-
-// Helper class for the Phantom Header state
-class PhantomHeaderData {
-  final String? title;
-  final double yOffset;
-  PhantomHeaderData({this.title, this.yOffset = 0.0});
-}
+import '../engine/sticky_header_engine.dart'; // IMPORT THE ENGINE
 
 class MainScreen extends StatefulWidget {
   const MainScreen({Key? key}) : super(key: key);
@@ -27,7 +19,7 @@ class MainScreen extends StatefulWidget {
 
 class _MainScreenState extends State<MainScreen> {
   late ScrollController _scrollController;
-  final ValueNotifier<PhantomHeaderData> _phantomHeaderState = ValueNotifier(PhantomHeaderData());
+  final ValueNotifier<PhantomHeaderData> _phantomHeaderState = ValueNotifier(const PhantomHeaderData());
 
   @override
   void initState() {
@@ -44,64 +36,21 @@ class _MainScreenState extends State<MainScreen> {
     super.dispose();
   }
 
-  // ==========================================
-  // BATCH 2: THE SPATIAL CACHE SEARCH ENGINE
-  // ==========================================
   void _onScroll() {
     final provider = context.read<ListProvider>();
-    final offsets = provider.cumulativeYOffsets;
-    final displayList = provider.displayList;
-    final offset = _scrollController.offset;
 
-    // If scrolled to the very top, or list is empty, hide the phantom header
-    if (offsets.isEmpty || offset <= 0) {
-      if (_phantomHeaderState.value.title != null) {
-        _phantomHeaderState.value = PhantomHeaderData(title: null, yOffset: 0.0);
-      }
-      return;
-    }
-
-    // 1. Find the currently visible index based on scroll offset
-    int activeIndex = 0;
-    for (int i = 0; i < offsets.length; i++) {
-      if (offset >= offsets[i]) {
-        activeIndex = i;
-      } else {
-        break;
-      }
-    }
-
-    // 2. Walk backwards to find what the current Section Header is
-    String? currentHeaderTitle;
-    for (int i = activeIndex; i >= 0; i--) {
-      if (displayList[i] is String) {
-        currentHeaderTitle = displayList[i];
-        break;
-      }
-    }
-
-    // 3. Look forward to find the NEXT header for the push-up collision effect
-    double pushOffset = 0.0;
-    for (int i = activeIndex + 1; i < displayList.length; i++) {
-      if (displayList[i] is String) {
-        final nextHeaderY = offsets[i];
-        final distanceToNextHeader = nextHeaderY - offset;
-
-        // AppConstants.headerHeight is typically 44.0.
-        // If the next header is closer than 44px, it starts pushing the phantom header up.
-        const double headerHeight = 44.0;
-        if (distanceToNextHeader < headerHeight) {
-          pushOffset = distanceToNextHeader - headerHeight; // Yields a negative number
-        }
-        break;
-      }
-    }
-
-    // Update the ValueNotifier (O(1) update, doesn't rebuild the whole list)
-    _phantomHeaderState.value = PhantomHeaderData(
-      title: currentHeaderTitle,
-      yOffset: pushOffset,
+    // CLEAN ARCHITECTURE: Ask the engine for the result, instead of doing math in the UI layer
+    final newHeaderData = StickyHeaderEngine.calculatePhantomHeader(
+      _scrollController.offset,
+      provider.cumulativeYOffsets,
+      provider.displayList,
     );
+
+    // Only update the ValueNotifier if the data actually changed to prevent unnecessary rebuilds
+    if (_phantomHeaderState.value.title != newHeaderData.title ||
+        _phantomHeaderState.value.yOffset != newHeaderData.yOffset) {
+      _phantomHeaderState.value = newHeaderData;
+    }
   }
 
   @override
