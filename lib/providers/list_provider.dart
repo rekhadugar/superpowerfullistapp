@@ -153,10 +153,10 @@ class ListProvider extends ChangeNotifier {
     _recalculateWraps();
     _buildDisplayList();
 
-    // Trigger the flash state, extended to 3 seconds to account for scroll delay
+    // Trigger the flash state, extended to 4 seconds to safely outlive the staggered animation
     _flashItemId = newItem.id;
     _flashTimer?.cancel();
-    _flashTimer = Timer(const Duration(seconds: 3), () {
+    _flashTimer = Timer(const Duration(seconds: 4), () {
       _flashItemId = null;
       notifyListeners();
     });

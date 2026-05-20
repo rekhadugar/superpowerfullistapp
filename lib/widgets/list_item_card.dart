@@ -76,8 +76,8 @@ class _ListItemCardState extends State<ListItemCard> with SingleTickerProviderSt
   }
 
   void _triggerFlash() {
-    // Delay the flash by 500ms so it plays precisely as the scroll arrives
-    Future.delayed(const Duration(milliseconds: 500), () {
+    // Stagger the flash: 800ms scroll + 100ms pause = 900ms delay
+    Future.delayed(const Duration(milliseconds: 900), () {
       if (mounted) {
         _flashController.forward().then((_) {
           if (mounted) _flashController.reverse();

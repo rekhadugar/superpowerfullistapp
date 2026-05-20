@@ -52,13 +52,13 @@ class _MainScreenState extends State<MainScreen> {
       if (targetOffset != null && _scrollController.hasClients) {
         double maxScroll = _scrollController.position.maxScrollExtent;
 
-        // Include the 44px sticky header height + 16px of visual padding
-        double safeBuffer = AppConstants.headerHeight + 16.0;
+        // Include ONLY the 44px sticky header height for a perfect mathematical snap
+        double safeBuffer = AppConstants.headerHeight;
         double scrollTarget = (targetOffset - safeBuffer).clamp(0.0, maxScroll);
 
         _scrollController.animateTo(
           scrollTarget,
-          duration: const Duration(milliseconds: 800), // Smoother, slower scroll
+          duration: const Duration(milliseconds: 800),
           curve: Curves.easeOutCubic,
         );
       }
@@ -261,6 +261,8 @@ class _MainScreenState extends State<MainScreen> {
                         type: item.type,
                         category: item.category,
                         sortMode: listProvider.currentSortMode,
+                        // THIS IS THE CRITICAL LINK WE MISSED:
+                        isHighlighted: listProvider.flashItemId == item.id,
                         onTap: () {
                           if (listProvider.openSwipeItemId.value != null) {
                             listProvider.openSwipeItemId.value = null;
