@@ -261,6 +261,9 @@ class _MainScreenState extends State<MainScreen> {
                         type: item.type,
                         category: item.category,
                         sortMode: listProvider.currentSortMode,
+                        quantity: item.quantity,
+                        onQuantityChanged: (delta) => context.read<ListProvider>().updateQuantity(item.id, delta),
+
                         // THIS IS THE CRITICAL LINK WE MISSED:
                         isHighlighted: listProvider.flashItemId == item.id,
                         onTap: () {

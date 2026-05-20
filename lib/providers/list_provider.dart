@@ -181,6 +181,20 @@ class ListProvider extends ChangeNotifier {
     }
   }
 
+  void updateQuantity(String id, int delta) {
+    final index = _items.indexWhere((item) => item.id == id);
+    if (index != -1) {
+      // Clamp the quantity between 1 and 99
+      final newQuantity = (_items[index].quantity + delta).clamp(1, 99);
+
+      if (_items[index].quantity != newQuantity) {
+        _items[index] = _items[index].copyWith(quantity: newQuantity);
+        // Only a localized UI repaint is needed; no geometry or layout math changes!
+        notifyListeners();
+      }
+    }
+  }
+
   void updateViewportWidth(double width) {
     if (_viewportWidth != width && width > 0) {
       _viewportWidth = width;
