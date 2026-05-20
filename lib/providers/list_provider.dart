@@ -135,8 +135,14 @@ class ListProvider extends ChangeNotifier {
 
     _items.add(newItem);
 
-    // Trigger the existing layout pipeline to rebuild the spatial cache and UI
+    // 1. Recalculate text geometry for the new item
     _recalculateWraps();
+
+    // 2. FORCE the Strategy Engine to re-sort and inject the item into the active view
+    _buildDisplayList();
+
+    // 3. Explicitly tell the UI to paint the updates
+    notifyListeners();
   }
 
   void updateViewportWidth(double width) {
