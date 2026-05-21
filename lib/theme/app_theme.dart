@@ -4,8 +4,8 @@ import 'package:flutter/material.dart';
 
 class AppColors {
   // Premium Light Theme
-  static const Color backgroundLight = Color(0xFFF8F9FA);
-  static const Color surfaceLight = Color(0xFFFFFFFF);
+  static const Color backgroundLight = Color(0xFFF2F2F7);
+  static const Color surfaceLight = Color(0xFFF8F9FA);
   static const Color textPrimaryLight = Color(0xFF111827);
   static const Color textSecondaryLight = Color(0xFF6B7280);
   static const Color borderLight = Color(0xFFE5E7EB);

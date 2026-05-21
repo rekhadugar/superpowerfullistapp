@@ -130,7 +130,7 @@ class _MainScreenState extends State<MainScreen> {
             ),
           ),
           titleSpacing: 0,
-          title: const Text('Listicle V2 Prototype'),
+          title: const Text('Groceries'),
           backgroundColor: theme.scaffoldBackgroundColor,
           elevation: 0,
           centerTitle: false,
@@ -163,7 +163,6 @@ class _MainScreenState extends State<MainScreen> {
             ),
           ],
         ),
-        // We REMOVED the Scaffold floatingActionButton here. It is now inside the Stack.
         body: displayList.isEmpty
             ? Center(child: Text('All caught up!', style: theme.textTheme.bodyMedium))
             : NotificationListener<ScrollStartNotification>(
@@ -180,7 +179,6 @@ class _MainScreenState extends State<MainScreen> {
                 controller: _scrollController,
                 padding: EdgeInsets.only(
                     top: 0.0,
-                    // Pad the list so items aren't completely hidden behind the menu
                     bottom: listProvider.isEditMode ? menuHeight + safeBottomPadding + 20 : 120.0
                 ),
                 itemCount: displayList.length,
@@ -257,7 +255,6 @@ class _MainScreenState extends State<MainScreen> {
                 duration: const Duration(milliseconds: 300),
                 curve: Curves.easeOutCubic,
                 right: AppConstants.horizontalPadding,
-                // Pushes the FAB up precisely above the menu when active
                 bottom: listProvider.isEditMode
                     ? (menuHeight + safeBottomPadding + 16.0)
                     : (safeBottomPadding + 16.0),
@@ -282,12 +279,11 @@ class _MainScreenState extends State<MainScreen> {
                 ),
               ),
 
-              // 4. The Sliding Edit Mode Context Menu
+              // 4. The Pill-Based Edit Mode Context Menu
               AnimatedPositioned(
                 duration: const Duration(milliseconds: 300),
                 curve: Curves.easeOutCubic,
                 left: 0, right: 0,
-                // Slides down out of frame entirely when not in edit mode
                 bottom: listProvider.isEditMode ? 0 : -(menuHeight + safeBottomPadding + 20),
                 child: Container(
                   height: menuHeight + safeBottomPadding,
@@ -301,70 +297,128 @@ class _MainScreenState extends State<MainScreen> {
                   ),
                   child: Column(
                     children: [
-                      // Action Row
-                      Row(
-                        children: [
-                          // Dynamic Quantity/Selected Counter Block
-                          Expanded(
-                            child: AnimatedSwitcher(
+                      // Scrollable Horizontal Tool Strip
+                      SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        clipBehavior: Clip.none,
+                        child: Row(
+                          children: [
+                            // Dynamic Stepper / Counter Pill
+                            AnimatedSwitcher(
                               duration: const Duration(milliseconds: 200),
                               child: listProvider.selectedItemIds.length == 1
-                                  ? Row(
+                                  ? Container(
                                 key: const ValueKey('stepper'),
-                                children: [
-                                  Container(
-                                    decoration: BoxDecoration(color: theme.dividerColor.withOpacity(0.15), borderRadius: BorderRadius.circular(8.0)),
-                                    child: IconButton(icon: const Icon(Icons.remove, size: 20), onPressed: () {}, constraints: const BoxConstraints(), padding: const EdgeInsets.all(8.0)),
-                                  ),
-                                  Padding(
-                                    padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                                    child: Text('1', style: theme.textTheme.titleMedium?.copyWith(fontSize: 18, fontWeight: FontWeight.bold)),
-                                  ),
-                                  Container(
-                                    decoration: BoxDecoration(color: theme.dividerColor.withOpacity(0.15), borderRadius: BorderRadius.circular(8.0)),
-                                    child: IconButton(icon: const Icon(Icons.add, size: 20), onPressed: () {}, constraints: const BoxConstraints(), padding: const EdgeInsets.all(8.0)),
-                                  ),
-                                ],
+                                height: 44,
+                                padding: const EdgeInsets.symmetric(horizontal: 4.0),
+                                decoration: BoxDecoration(
+                                  color: theme.dividerColor.withOpacity(0.1),
+                                  borderRadius: BorderRadius.circular(50.0), // Pill Shape
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    IconButton(icon: const Icon(Icons.remove, size: 20), onPressed: () {}, constraints: const BoxConstraints(), padding: const EdgeInsets.all(8.0)),
+                                    Padding(
+                                      padding: const EdgeInsets.symmetric(horizontal: 12.0),
+                                      child: Text('1', style: theme.textTheme.titleMedium?.copyWith(fontSize: 16, fontWeight: FontWeight.bold)),
+                                    ),
+                                    IconButton(icon: const Icon(Icons.add, size: 20), onPressed: () {}, constraints: const BoxConstraints(), padding: const EdgeInsets.all(8.0)),
+                                  ],
+                                ),
                               )
-                                  : Row(
+                                  : Container(
                                 key: const ValueKey('counter'),
-                                children: [
-                                  Icon(Icons.layers_rounded, color: AppColors.primaryAction, size: 22),
-                                  const SizedBox(width: 8.0),
-                                  Text('${listProvider.selectedItemIds.length} Selected', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
-                                ],
+                                height: 44,
+                                padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                                decoration: BoxDecoration(
+                                  color: AppColors.primaryAction.withOpacity(0.15),
+                                  borderRadius: BorderRadius.circular(50.0), // Pill Shape
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(Icons.layers_rounded, color: AppColors.primaryAction, size: 20),
+                                    const SizedBox(width: 8.0),
+                                    Text('${listProvider.selectedItemIds.length} Selected', style: theme.textTheme.titleMedium?.copyWith(color: AppColors.primaryAction, fontWeight: FontWeight.w700)),
+                                  ],
+                                ),
                               ),
                             ),
-                          ),
+                            const SizedBox(width: 12.0),
 
-                          // Static Tools
-                          IconButton(
-                            icon: const Icon(Icons.copy_rounded),
-                            color: theme.textTheme.titleMedium?.color,
-                            onPressed: () {},
-                          ),
-                          const SizedBox(width: 8.0),
-                          IconButton(
-                            icon: const Icon(Icons.delete_outline_rounded),
-                            color: Colors.redAccent,
-                            onPressed: () {},
-                          ),
-                        ],
+                            // Copy Pill
+                            TextButton.icon(
+                              onPressed: () {},
+                              style: TextButton.styleFrom(
+                                backgroundColor: theme.dividerColor.withOpacity(0.1),
+                                foregroundColor: theme.textTheme.titleMedium?.color,
+                                padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                                minimumSize: const Size(0, 44),
+                                shape: const StadiumBorder(),
+                                elevation: 0,
+                              ),
+                              icon: const Icon(Icons.copy_rounded, size: 18),
+                              label: const Text('Copy', style: TextStyle(fontWeight: FontWeight.w600)),
+                            ),
+                            const SizedBox(width: 12.0),
+
+                            // Delete Pill
+                            TextButton.icon(
+                              onPressed: () {},
+                              style: TextButton.styleFrom(
+                                backgroundColor: Colors.redAccent.withOpacity(0.15),
+                                foregroundColor: Colors.redAccent,
+                                padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                                minimumSize: const Size(0, 44),
+                                shape: const StadiumBorder(),
+                                elevation: 0,
+                              ),
+                              icon: const Icon(Icons.delete_outline_rounded, size: 18),
+                              label: const Text('Delete', style: TextStyle(fontWeight: FontWeight.w600)),
+                            ),
+                          ],
+                        ),
                       ),
                       const SizedBox(height: 16.0),
 
-                      // Close Mode Button
-                      SizedBox(
-                        width: double.infinity,
-                        child: TextButton(
-                          onPressed: () => listProvider.clearSelection(),
-                          style: TextButton.styleFrom(
-                            backgroundColor: theme.dividerColor.withOpacity(0.1),
-                            padding: const EdgeInsets.symmetric(vertical: 14.0),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12.0)),
+                      // Close Mode Pill
+                      // Cancel & Save Action Row
+                      Row(
+                        children: [
+                          Expanded(
+                            child: SizedBox(
+                              height: 48,
+                              child: TextButton.icon(
+                                onPressed: () => listProvider.clearSelection(), // Will wire up rollback logic in Batch 2
+                                style: TextButton.styleFrom(
+                                  backgroundColor: theme.dividerColor.withOpacity(0.1),
+                                  foregroundColor: theme.textTheme.titleMedium?.color,
+                                  shape: const StadiumBorder(),
+                                ),
+                                icon: const Icon(Icons.close_rounded, size: 20),
+                                label: Text('Cancel', style: theme.textTheme.titleMedium?.copyWith(fontSize: 16, fontWeight: FontWeight.w600)),
+                              ),
+                            ),
                           ),
-                          child: Text('Close Edit Mode', style: theme.textTheme.titleMedium?.copyWith(fontSize: 16, fontWeight: FontWeight.w600)),
-                        ),
+                          const SizedBox(width: 12.0),
+                          Expanded(
+                            child: SizedBox(
+                              height: 48,
+                              child: ElevatedButton.icon(
+                                onPressed: () => listProvider.clearSelection(), // Will wire up commit logic in Batch 2
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: AppColors.primaryAction,
+                                  foregroundColor: Colors.white,
+                                  elevation: 0,
+                                  shape: const StadiumBorder(),
+                                ),
+                                icon: const Icon(Icons.check_rounded, size: 20),
+                                label: const Text('Save', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ],
                   ),
