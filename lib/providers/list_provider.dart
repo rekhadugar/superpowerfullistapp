@@ -1,12 +1,11 @@
 // Location: lib/providers/list_provider.dart
 
 import 'dart:async';
-
 import 'package:flutter/material.dart';
 import '../models/list_item.dart';
 import '../theme/app_constants.dart';
 import '../engine/sticky_header_engine.dart';
-import '../engine/sort_mode_engine.dart'; // IMPORT THE SORT ENGINE
+import '../engine/sort_mode_engine.dart';
 
 class ListProvider extends ChangeNotifier {
   double _viewportWidth = 0.0;
@@ -14,14 +13,8 @@ class ListProvider extends ChangeNotifier {
   // --- SORTING STATE & PREFERENCES ---
   SortMode _currentSortMode = SortMode.categories;
 
-  // These would eventually be loaded from the UserProfile or AppList database document
   List<String> preferredTypeOrder = [];
   List<String> preferredCategoryOrder = [];
-
-  // Added mock categories to support the grouping architecture
-  // Location: lib/models/mock_data.dart or directly inside your ListProvider
-
-
 
   final List<ListItem> _items = [
     // --- Costco (Bulk & Groceries) ---
@@ -97,10 +90,43 @@ class ListProvider extends ChangeNotifier {
   final Set<String> _selectedItemIds = {};
   final Map<String, int> _draftQuantities = {};
 
+  ListProvider() {
+    _buildDisplayList();
+    runDataMigration(); // Fixes legacy 0.0 ties immediately on startup
+  }
+
+  // --- UPGRADED MIGRATION: Detects ANY duplicates or zeroes and heals them ---
+  void runDataMigration() {
+    bool needsMigration = false;
+    final seenOrders = <double>{};
+
+    for (var item in _items) {
+      if (item.globalCustomOrder <= 0.01 || seenOrders.contains(item.globalCustomOrder)) {
+        needsMigration = true;
+        break;
+      }
+      seenOrders.add(item.globalCustomOrder);
+    }
+
+    if (!needsMigration) return;
+
+    double currentOrder = 100.0;
+    // Assigns perfect strict sequencing based on current visual order
+    for (var displayItem in displayList) {
+      if (displayItem is ListItem) {
+        final rawIndex = _items.indexWhere((i) => i.id == displayItem.id);
+        if (rawIndex != -1) {
+          _items[rawIndex] = _items[rawIndex].copyWith(globalCustomOrder: currentOrder);
+          currentOrder += 100.0;
+        }
+      }
+    }
+    _buildDisplayList();
+    notifyListeners();
+  }
+
   Set<String> get selectedItemIds => _selectedItemIds;
   bool get isEditMode => _selectedItemIds.isNotEmpty;
-
-  int getDraftQuantity(String id) => _draftQuantities[id] ?? 1;
 
   void toggleSelection(String id) {
     if (_selectedItemIds.contains(id)) {
@@ -113,6 +139,8 @@ class ListProvider extends ChangeNotifier {
     }
     notifyListeners();
   }
+
+  int getDraftQuantity(String id) => _draftQuantities[id] ?? 1;
 
   void updateDraftQuantity(String id, int delta) {
     if (!_draftQuantities.containsKey(id)) return;
@@ -139,176 +167,88 @@ class ListProvider extends ChangeNotifier {
     clearSelection();
   }
 
-  // Location: lib/providers/list_provider.dart
+  // --- Pure O(1) Fractional Math Drag Engine ---
+  void executeNativeReorder(int oldIndex, int newIndex) {
+    if (_currentSortMode == SortMode.az) return;
 
-  // --- Drag & Drop State ---
-  String? _draggingItemId;
-  String? get draggingItemId => _draggingItemId;
+    // Flutter native reorder adjustment
+    if (oldIndex < newIndex) newIndex -= 1;
+    if (oldIndex == newIndex) return;
 
-  void setDraggingItem(String? id) {
-    _draggingItemId = id;
-    notifyListeners();
-  }
+    // 1. Simulate the drop in a virtual list to map the exact visual boundaries
+    final virtualList = List.of(displayList);
+    final draggedItem = virtualList.removeAt(oldIndex) as ListItem;
+    virtualList.insert(newIndex, draggedItem);
 
-  // --- Strict O(1) Math-Driven Drag Engine ---
-  // --- Strict Math-Driven Drag Engine (Self-Healing) ---
-  void reorderItem(String draggedId, String targetId) {
-    if (draggedId == targetId) return;
-    if (currentSortMode == SortMode.az) return; // Prevent breaking alphabetical lock
+    // 2. CATEGORY STEALING: Look at the immediate visual neighbors
+    String newCategory = draggedItem.category;
+    String newType = draggedItem.type;
 
-    final draggedItem = _items.firstWhere((i) => i.id == draggedId);
-    final targetItem = _items.firstWhere((i) => i.id == targetId);
+    final immediateAbove = newIndex > 0 ? virtualList[newIndex - 1] : null;
+    final immediateBelow = newIndex < virtualList.length - 1 ? virtualList[newIndex + 1] : null;
 
-    bool isSameSection(ListItem a, ListItem b) {
-      if (currentSortMode == SortMode.categories) return a.category == b.category;
-      if (currentSortMode == SortMode.types) return a.type == b.type;
-      return true; // customFlat means the whole list is one section
+    if (immediateAbove is String) { // Dropped right under a header
+      newCategory = _currentSortMode == SortMode.categories ? immediateAbove : draggedItem.category;
+      newType = _currentSortMode == SortMode.types ? immediateAbove : draggedItem.type;
+    } else if (immediateAbove is ListItem) { // Dropped under an item
+      newCategory = immediateAbove.category;
+      newType = immediateAbove.type;
+    } else if (immediateAbove == null && immediateBelow is String) { // Absolute top above first header
+      newCategory = _currentSortMode == SortMode.categories ? immediateBelow : draggedItem.category;
+      newType = _currentSortMode == SortMode.types ? immediateBelow : draggedItem.type;
+    } else if (immediateAbove == null && immediateBelow is ListItem) { // Absolute top above first item
+      newCategory = immediateBelow.category;
+      newType = immediateBelow.type;
     }
 
-    // Isolate only the items in the target section
-    final sectionItems = displayList.whereType<ListItem>().where((i) => isSameSection(i, targetItem)).toList();
-    final draggedWasInSection = isSameSection(draggedItem, targetItem);
-
-    if (draggedWasInSection) {
-      sectionItems.removeWhere((i) => i.id == draggedId);
+    // 3. FRACTIONAL MATH: Ignore headers, find the nearest physical ListItems
+    ListItem? nearestAbove;
+    for (int i = newIndex - 1; i >= 0; i--) {
+      if (virtualList[i] is ListItem) {
+        nearestAbove = virtualList[i] as ListItem;
+        break;
+      }
     }
 
-    final newTargetIndex = sectionItems.indexWhere((i) => i.id == targetId);
-    if (newTargetIndex == -1) return;
+    ListItem? nearestBelow;
+    for (int i = newIndex + 1; i < virtualList.length; i++) {
+      if (virtualList[i] is ListItem) {
+        nearestBelow = virtualList[i] as ListItem;
+        break;
+      }
+    }
 
-    // Determine physical direction to place before or after target
-    final globalOld = displayList.indexWhere((i) => i is ListItem && i.id == draggedId);
-    final globalTarget = displayList.indexWhere((i) => i is ListItem && i.id == targetId);
-    final movingDown = globalOld != -1 && globalOld < globalTarget;
-
-    final insertIndex = movingDown ? newTargetIndex + 1 : newTargetIndex;
-    sectionItems.insert(insertIndex, draggedItem);
-
+    // 4. Apply O(1) Geometry
     double newOrder = 0.0;
-    bool needsHealing = false;
-
-    // 1. O(1) Fractional Math Attempt
-    if (sectionItems.length == 1) {
+    if (nearestAbove != null && nearestBelow != null) { // Middle Drop
+      newOrder = (nearestAbove.globalCustomOrder + nearestBelow.globalCustomOrder) / 2.0;
+    } else if (nearestAbove != null && nearestBelow == null) { // Absolute Bottom
+      newOrder = nearestAbove.globalCustomOrder + 100.0;
+    } else if (nearestAbove == null && nearestBelow != null) { // Absolute Top
+      newOrder = nearestBelow.globalCustomOrder / 2.0;
+    } else { // Empty List
       newOrder = 100.0;
-    } else if (insertIndex == 0) {
-      newOrder = sectionItems[1].globalCustomOrder - 100.0;
-    } else if (insertIndex == sectionItems.length - 1) {
-      newOrder = sectionItems[insertIndex - 1].globalCustomOrder + 100.0;
-    } else {
-      double prev = sectionItems[insertIndex - 1].globalCustomOrder;
-      double next = sectionItems[insertIndex + 1].globalCustomOrder;
-
-      // If items are tied (0.0 defaults), fractional math fails. Flag for healing.
-      if (next - prev < 0.001) {
-        needsHealing = true;
-      } else {
-        newOrder = (prev + next) / 2.0;
-      }
     }
 
-    // Validate the rest of the section isn't tied
-    if (!needsHealing) {
-      for (int i = 1; i < sectionItems.length; i++) {
-        if (sectionItems[i].globalCustomOrder <= sectionItems[i-1].globalCustomOrder) {
-          needsHealing = true; break;
-        }
-      }
+    // 5. Execute Single Database Write
+    final rawIndex = _items.indexWhere((i) => i.id == draggedItem.id);
+    if (rawIndex != -1) {
+      _items[rawIndex] = _items[rawIndex].copyWith(
+        globalCustomOrder: newOrder,
+        category: newCategory,
+        type: newType,
+      );
+
+      _buildDisplayList();
+      notifyListeners();
     }
-
-    // 2. Fallback: Self-Heal the section in memory to guarantee perfect sorting
-    if (needsHealing) {
-      for (int i = 0; i < sectionItems.length; i++) {
-        final rawIndex = _items.indexWhere((db) => db.id == sectionItems[i].id);
-        if (rawIndex != -1) {
-          if (sectionItems[i].id == draggedId) {
-            _items[rawIndex] = _items[rawIndex].copyWith(
-              globalCustomOrder: i * 100.0,
-              category: targetItem.category,
-              type: targetItem.type,
-            );
-          } else {
-            _items[rawIndex] = _items[rawIndex].copyWith(globalCustomOrder: i * 100.0);
-          }
-        }
-      }
-    } else {
-      // 99% of the time, execute single O(1) write
-      final rawIndex = _items.indexWhere((db) => db.id == draggedId);
-      if (rawIndex != -1) {
-        _items[rawIndex] = _items[rawIndex].copyWith(
-          globalCustomOrder: newOrder,
-          category: targetItem.category,
-          type: targetItem.type,
-        );
-      }
-    }
-
-    _buildDisplayList();
-    notifyListeners();
-  }
-
-  // --- Header Drop Target Logic ---
-  void reorderToSectionTop(String draggedId, String sectionName) {
-    if (currentSortMode == SortMode.az || currentSortMode == SortMode.customFlat) return;
-
-    final draggedItem = _items.firstWhere((i) => i.id == draggedId);
-
-    final sectionItems = displayList.whereType<ListItem>()
-        .where((i) => (currentSortMode == SortMode.categories ? i.category : i.type) == sectionName).toList();
-
-    final draggedWasInSection = (currentSortMode == SortMode.categories ? draggedItem.category : draggedItem.type) == sectionName;
-    if (draggedWasInSection) sectionItems.removeWhere((i) => i.id == draggedId);
-
-    sectionItems.insert(0, draggedItem);
-
-    bool needsHealing = false;
-    double newOrder = sectionItems.length > 1 ? sectionItems[1].globalCustomOrder - 100.0 : 100.0;
-
-    for (int i = 1; i < sectionItems.length; i++) {
-      if (sectionItems[i].globalCustomOrder <= sectionItems[i-1].globalCustomOrder) {
-        needsHealing = true; break;
-      }
-    }
-
-    if (needsHealing) {
-      for (int i = 0; i < sectionItems.length; i++) {
-        final rawIndex = _items.indexWhere((db) => db.id == sectionItems[i].id);
-        if (rawIndex != -1) {
-          if (sectionItems[i].id == draggedId) {
-            _items[rawIndex] = _items[rawIndex].copyWith(
-              globalCustomOrder: i * 100.0,
-              category: currentSortMode == SortMode.categories ? sectionName : draggedItem.category,
-              type: currentSortMode == SortMode.types ? sectionName : draggedItem.type,
-            );
-          } else {
-            _items[rawIndex] = _items[rawIndex].copyWith(globalCustomOrder: i * 100.0);
-          }
-        }
-      }
-    } else {
-      final rawIndex = _items.indexWhere((db) => db.id == draggedId);
-      if (rawIndex != -1) {
-        _items[rawIndex] = _items[rawIndex].copyWith(
-          globalCustomOrder: newOrder,
-          category: currentSortMode == SortMode.categories ? sectionName : draggedItem.category,
-          type: currentSortMode == SortMode.types ? sectionName : draggedItem.type,
-        );
-      }
-    }
-
-    _buildDisplayList();
-    notifyListeners();
   }
 
   SortMode get currentSortMode => _currentSortMode;
 
   List<ListItem> get activeItems {
-    final filtered = _items.where((item) => !item.isDeleted && !item.isCompleted).toList();
-    // We no longer sort by globalCustomOrder here! The Strategy Engine handles all sorting.
-    return filtered;
+    return _items.where((item) => !item.isDeleted && !item.isCompleted).toList();
   }
-
-  // --- ACTIONS ---
 
   void setSortMode(SortMode newMode) {
     if (_currentSortMode != newMode) {
@@ -322,7 +262,6 @@ class ListProvider extends ChangeNotifier {
   String? get flashItemId => _flashItemId;
   Timer? _flashTimer;
 
-  // $O(N)$ lookup that utilizes our $O(1)$ spatial cache
   double? getOffsetForItem(String id) {
     final index = displayList.indexWhere((element) => element is ListItem && element.id == id);
     if (index != -1 && index < cumulativeYOffsets.length) {
@@ -332,13 +271,12 @@ class ListProvider extends ChangeNotifier {
   }
 
   void addItem(String title, List<String> attributes, String type, String category) {
-    double newCustomOrder = 1000.0;
-
-    if (_items.isNotEmpty) {
-      final double currentMin = _items
-          .map((item) => item.globalCustomOrder)
-          .reduce((a, b) => a < b ? a : b);
-      newCustomOrder = currentMin - 1.0;
+    // Determine mathematical floor of database to insert securely at the bottom
+    double maxOrder = 0.0;
+    for (var item in _items) {
+      if (item.globalCustomOrder > maxOrder) {
+        maxOrder = item.globalCustomOrder;
+      }
     }
 
     final newItem = ListItem(
@@ -347,16 +285,13 @@ class ListProvider extends ChangeNotifier {
       attributeRows: attributes,
       type: type.trim().isEmpty ? "Any" : type.trim(),
       category: category.trim().isEmpty ? "Everything Else" : category.trim(),
-      globalCustomOrder: newCustomOrder,
+      globalCustomOrder: maxOrder + 100.0, // Flawless mathematical spacing
     );
 
     _items.add(newItem);
-
-    // Rebuild spatial layout
     _recalculateWraps();
     _buildDisplayList();
 
-    // Trigger the flash state, extended to 4 seconds to safely outlive the staggered animation
     _flashItemId = newItem.id;
     _flashTimer?.cancel();
     _flashTimer = Timer(const Duration(seconds: 4), () {
@@ -377,7 +312,6 @@ class ListProvider extends ChangeNotifier {
         category: category.trim().isEmpty ? "Everything Else" : category.trim(),
       );
 
-      // We must rebuild the display list in case the item moved to a different group
       _recalculateWraps();
       _buildDisplayList();
       notifyListeners();
@@ -387,18 +321,13 @@ class ListProvider extends ChangeNotifier {
   void updateQuantity(String id, int delta) {
     final index = _items.indexWhere((item) => item.id == id);
     if (index != -1) {
-      // Clamp the quantity between 1 and 99
       final newQuantity = (_items[index].quantity + delta).clamp(1, 99);
-
       if (_items[index].quantity != newQuantity) {
         _items[index] = _items[index].copyWith(quantity: newQuantity);
-        // Only a localized UI repaint is needed; no geometry or layout math changes!
         notifyListeners();
       }
     }
   }
-
-  // Location: lib/providers/list_provider.dart
 
   void updateViewportWidth(double width) {
     if (_viewportWidth != width && width > 0) {
@@ -410,14 +339,12 @@ class ListProvider extends ChangeNotifier {
   void _recalculateWraps() {
     bool stateChanged = false;
 
-    // The title stops before the trailing block (Quantity Stepper)
     final double titleAvailableWidth = _viewportWidth -
         (AppConstants.horizontalPadding * 2) -
         AppConstants.leadingBlockWidth -
         (AppConstants.interElementGap * 2) -
         AppConstants.trailingBlockWidth;
 
-    // The tags flow all the way to the right edge padding
     final double tagAvailableWidth = _viewportWidth -
         (AppConstants.horizontalPadding * 2) -
         AppConstants.leadingBlockWidth -
@@ -428,7 +355,6 @@ class ListProvider extends ChangeNotifier {
     for (int i = 0; i < _items.length; i++) {
       final item = _items[i];
 
-      // --- 1. Measure Title Wraps ---
       final TextPainter tp = TextPainter(
         text: TextSpan(
             text: item.title,
@@ -446,12 +372,11 @@ class ListProvider extends ChangeNotifier {
 
       final int calculatedNWrap = (lineCount - 1).clamp(0, 5);
 
-      // --- 2. Measure Tag Badge Wraps ---
       int calculatedTagRows = 0;
       if (item.attributeRows.isNotEmpty) {
         double currentLineWidth = 0.0;
         calculatedTagRows = 1;
-        const double wrapSpacing = 8.0; // Horizontal gap between badges
+        const double wrapSpacing = 8.0;
 
         for (String tag in item.attributeRows) {
           final TextPainter tagTp = TextPainter(
@@ -465,29 +390,22 @@ class ListProvider extends ChangeNotifier {
             textDirection: TextDirection.ltr,
           )..layout();
 
-          // Pixel-perfect physical width of the badge ONLY (no gap)
           final double actualBadgeWidth = tagTp.width +
               (AppConstants.badgeHorizontalPadding * 2) +
               AppConstants.badgeIconSize +
               AppConstants.badgeIconGap;
 
-          // If line is empty, add badge without preceding gap
           if (currentLineWidth == 0.0) {
             currentLineWidth = actualBadgeWidth;
-          }
-          // Check if adding the gap + new badge exceeds the max width
-          else if (currentLineWidth + wrapSpacing + actualBadgeWidth > tagAvailableWidth) {
+          } else if (currentLineWidth + wrapSpacing + actualBadgeWidth > tagAvailableWidth) {
             calculatedTagRows++;
-            currentLineWidth = actualBadgeWidth; // Start a new line
-          }
-          // Otherwise, append to current line with the gap
-          else {
+            currentLineWidth = actualBadgeWidth;
+          } else {
             currentLineWidth += wrapSpacing + actualBadgeWidth;
           }
         }
       }
 
-      // --- 3. Evaluate State Changes ---
       if (item.nWrap != calculatedNWrap || item.nTagRows != calculatedTagRows) {
         _items[i] = item.copyWith(
             nWrap: calculatedNWrap,
@@ -503,12 +421,8 @@ class ListProvider extends ChangeNotifier {
     }
   }
 
-  // ==========================================
-  // ARCHITECTURAL BOUNDARY: STRATEGY ENGINE
-  // ==========================================
-
+  // --- UPGRADED BUILDER: Intercepts the SortModeEngine to force Custom Math ---
   void _buildDisplayList() {
-    // 1. Determine which preference array to pass based on the current mode
     List<String>? activeGroupOrder;
     if (_currentSortMode == SortMode.types) {
       activeGroupOrder = preferredTypeOrder;
@@ -516,18 +430,47 @@ class ListProvider extends ChangeNotifier {
       activeGroupOrder = preferredCategoryOrder;
     }
 
-    // 2. Delegate list flattening and sorting entirely to the pure Strategy Engine
+    // 1. Let the external engine do the grouping
     final flattenedArray = SortModeEngine.execute(
       activeItems,
       _currentSortMode,
       groupOrder: activeGroupOrder,
     );
 
-    // 3. Update state
-    displayList.clear();
-    displayList.addAll(flattenedArray);
+    // 2. THE INTERCEPTOR: Force mathematical sorting within sections
+    List<dynamic> strictlySortedArray = [];
 
-    // 4. Rebuild the Spatial Cache
+    // Only apply math sorting if the user hasn't explicitly selected A-Z mode
+    if (_currentSortMode != SortMode.az) {
+      List<ListItem> currentGroup = [];
+      String? currentHeader;
+
+      for (var item in flattenedArray) {
+        if (item is String) { // We hit a new Header
+          // Sort the previous group by math and commit it to the final array
+          if (currentHeader != null || currentGroup.isNotEmpty) {
+            currentGroup.sort((a, b) => a.globalCustomOrder.compareTo(b.globalCustomOrder));
+            strictlySortedArray.addAll(currentGroup);
+            currentGroup.clear();
+          }
+          currentHeader = item;
+          strictlySortedArray.add(item);
+        } else if (item is ListItem) {
+          currentGroup.add(item);
+        }
+      }
+      // Commit the final group
+      if (currentGroup.isNotEmpty) {
+        currentGroup.sort((a, b) => a.globalCustomOrder.compareTo(b.globalCustomOrder));
+        strictlySortedArray.addAll(currentGroup);
+      }
+    } else {
+      strictlySortedArray = flattenedArray;
+    }
+
+    // 3. Render the strictly sorted array
+    displayList.clear();
+    displayList.addAll(strictlySortedArray);
     _recalculateYOffsets();
   }
 
@@ -545,7 +488,6 @@ class ListProvider extends ChangeNotifier {
     final index = _items.indexWhere((item) => item.id == id);
     if (index != -1) {
       _items[index] = _items[index].copyWith(isCompleted: !_items[index].isCompleted);
-      // Rebuild the flat list when an item is removed
       _buildDisplayList();
       notifyListeners();
     }
@@ -555,7 +497,6 @@ class ListProvider extends ChangeNotifier {
     final index = _items.indexWhere((item) => item.id == id);
     if (index != -1) {
       _items[index] = _items[index].copyWith(isDeleted: true);
-      // Rebuild the flat list when an item is removed
       _buildDisplayList();
       notifyListeners();
     }

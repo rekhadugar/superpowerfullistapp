@@ -172,50 +172,36 @@ class _MainScreenState extends State<MainScreen> {
           },
           child: Stack(
             children: [
-              ListView.builder(
-                controller: _scrollController,
+              // ENTIRELY REPLACED: Native ReorderableListView handling C++ gap physics
+              ReorderableListView.builder(
+                scrollController: _scrollController,
                 padding: EdgeInsets.only(
                     top: 0.0,
                     bottom: listProvider.isEditMode ? menuHeight + safeBottomPadding + 20 : safeBottomPadding + 100.0
                 ),
                 itemCount: displayList.length,
+                buildDefaultDragHandles: false,
+                onReorder: (oldIndex, newIndex) => context.read<ListProvider>().executeNativeReorder(oldIndex, newIndex),
+                proxyDecorator: (child, index, animation) {
+                  return Material(
+                    color: Colors.transparent,
+                    elevation: 8.0,
+                    shadowColor: Colors.black45,
+                    child: child,
+                  );
+                },
                 itemBuilder: (context, index) {
                   final item = displayList[index];
 
-                  // NEW: Headers are now Drop Zones!
+                  // Headers are visually static blocks bound to a key
                   if (item is String) {
-                    return DragTarget<String>(
-                        onWillAcceptWithDetails: (_) => true,
-                        onAcceptWithDetails: (details) => context.read<ListProvider>().reorderToSectionTop(details.data, item),
-                        builder: (context, candidateData, rejectedData) {
-                          final bool isHovered = candidateData.isNotEmpty;
-                          return Column(
-                            mainAxisSize: MainAxisSize.min,
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              AnimatedContainer(
-                                duration: const Duration(milliseconds: 200),
-                                curve: Curves.easeOutCubic,
-                                height: isHovered ? 72.0 : 0.0,
-                                margin: isHovered ? const EdgeInsets.only(bottom: AppConstants.cardMargin) : EdgeInsets.zero,
-                                decoration: BoxDecoration(
-                                  color: AppColors.primaryAction.withOpacity(0.1),
-                                  borderRadius: BorderRadius.circular(12.0),
-                                  border: Border.all(
-                                      color: isHovered ? AppColors.primaryAction.withOpacity(0.5) : Colors.transparent,
-                                      width: 2.0
-                                  ),
-                                ),
-                              ),
-                              SectionHeader(key: ValueKey('header_$item'), title: item),
-                            ],
-                          );
-                        }
+                    return Container(
+                      key: ValueKey('header_$item'),
+                      child: SectionHeader(title: item),
                     );
                   }
 
                   if (item is ListItem) {
-                    final bool isDragging = listProvider.draggingItemId == item.id;
                     final bool isSelected = listProvider.selectedItemIds.contains(item.id);
 
                     Widget coreCard = ListItemCard(
@@ -228,7 +214,7 @@ class _MainScreenState extends State<MainScreen> {
                       sortMode: listProvider.currentSortMode,
                       quantity: item.quantity,
                       isHighlighted: listProvider.flashItemId == item.id,
-                      isDragging: isDragging,
+                      isDragging: false,
                       isEditMode: listProvider.isEditMode,
                       isSelected: isSelected,
                       onTap: () {
@@ -240,68 +226,19 @@ class _MainScreenState extends State<MainScreen> {
                       },
                     );
 
-                    return DragTarget<String>(
-                      onWillAcceptWithDetails: (details) => details.data != item.id,
-                      onAcceptWithDetails: (details) => context.read<ListProvider>().reorderItem(details.data, item.id),
-                      builder: (context, candidateData, rejectedData) {
-                        final bool isHovered = candidateData.isNotEmpty && candidateData.first != item.id;
-
-                        return Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            AnimatedContainer(
-                              duration: const Duration(milliseconds: 200),
-                              curve: Curves.easeOutCubic,
-                              height: isHovered ? 72.0 : 0.0,
-                              margin: isHovered ? const EdgeInsets.only(bottom: AppConstants.cardMargin) : EdgeInsets.zero,
-                              decoration: BoxDecoration(
-                                color: AppColors.primaryAction.withOpacity(0.1),
-                                borderRadius: BorderRadius.circular(12.0),
-                                border: Border.all(
-                                    color: isHovered ? AppColors.primaryAction.withOpacity(0.5) : Colors.transparent,
-                                    width: 2.0
-                                ),
-                              ),
-                            ),
-                            LongPressDraggable<String>(
-                              data: item.id,
-                              delay: const Duration(milliseconds: 250),
-                              // NEW: Collapses the original card to 0 pixels instantly to prevent double-gaps
-                              childWhenDragging: const SizedBox.shrink(),
-                              onDragStarted: () => context.read<ListProvider>().setDraggingItem(item.id),
-                              onDragEnd: (_) => context.read<ListProvider>().setDraggingItem(null),
-                              onDraggableCanceled: (_, __) => context.read<ListProvider>().setDraggingItem(null),
-                              feedback: Material(
-                                color: Colors.transparent,
-                                child: SizedBox(
-                                  width: MediaQuery.of(context).size.width,
-                                  child: ListItemCard(
-                                    title: item.title,
-                                    nWrap: item.nWrap,
-                                    nTagRows: item.nTagRows,
-                                    attributeRows: item.attributeRows,
-                                    type: item.type,
-                                    category: item.category,
-                                    sortMode: listProvider.currentSortMode,
-                                    quantity: item.quantity,
-                                    isFeedback: true,
-                                    onTap: () {},
-                                  ),
-                                ),
-                              ),
-                              child: SwipeActionWrapper(
-                                key: ValueKey('swipe_${item.id}'),
-                                itemId: item.id,
-                                requireConfirm: true,
-                                onCheckout: () => context.read<ListProvider>().toggleCompletion(item.id),
-                                onEdit: () {},
-                                onDelete: () => context.read<ListProvider>().deleteItem(item.id),
-                                child: coreCard,
-                              ),
-                            ),
-                          ],
-                        );
-                      },
+                    // Replaces LongPressDraggable to wire directly to Reorderable physics engine
+                    return ReorderableDelayedDragStartListener(
+                      key: ValueKey('drag_${item.id}'),
+                      index: index,
+                      child: SwipeActionWrapper(
+                        key: ValueKey('swipe_${item.id}'),
+                        itemId: item.id,
+                        requireConfirm: true,
+                        onCheckout: () => context.read<ListProvider>().toggleCompletion(item.id),
+                        onEdit: () {},
+                        onDelete: () => context.read<ListProvider>().deleteItem(item.id),
+                        child: coreCard,
+                      ),
                     );
                   }
                   return const SizedBox.shrink();
@@ -352,7 +289,6 @@ class _MainScreenState extends State<MainScreen> {
                 ),
               ),
 
-              // RESTORED: The Floating Edit Menu
               AnimatedPositioned(
                 duration: const Duration(milliseconds: 300),
                 curve: Curves.easeOutCubic,
