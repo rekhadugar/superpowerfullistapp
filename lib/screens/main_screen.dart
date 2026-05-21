@@ -198,11 +198,20 @@ class _MainScreenState extends State<MainScreen> {
                       onEdit: () {},
                       onDelete: () => context.read<ListProvider>().deleteItem(item.id),
                       child: DragTarget<String>(
-                        onWillAcceptWithDetails: (details) => details.data != item.id, // Can't drop on itself
-                        onAcceptWithDetails: (details) => context.read<ListProvider>().reorderItem(details.data, item.id),
+                        onWillAcceptWithDetails: (details) {
+                          if (details.data != item.id) {
+                            // LIVE SWAP: Trigger the fractional math instantly as you hover over a new item
+                            context.read<ListProvider>().reorderItem(details.data, item.id);
+                            return true;
+                          }
+                          return false;
+                        },
+                        onAcceptWithDetails: (details) {
+                          // Drop logic is empty because the item is already mathematically swapped
+                        },
                         builder: (context, candidateData, rejectedData) {
                           return ListItemCard(
-                            itemId: item.id, // Passed down for Draggable data
+                            itemId: item.id,
                             title: item.title,
                             nWrap: item.nWrap,
                             nTagRows: item.nTagRows,
@@ -214,7 +223,7 @@ class _MainScreenState extends State<MainScreen> {
                             isHighlighted: listProvider.flashItemId == item.id,
                             isEditMode: listProvider.isEditMode,
                             isSelected: isSelected,
-                            isDragHovered: candidateData.isNotEmpty, // Triggers hover background color
+                            isDragging: listProvider.draggingItemId == item.id, // NEW: Links to global drag state
                             onLongPress: () {
                               if (listProvider.openSwipeItemId.value != null) {
                                 listProvider.openSwipeItemId.value = null;

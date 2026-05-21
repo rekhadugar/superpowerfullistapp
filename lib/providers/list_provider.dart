@@ -93,13 +93,22 @@ class ListProvider extends ChangeNotifier {
   double totalListHeight = 0.0;
   final List<dynamic> displayList = [];
 
+  // --- Edit Mode & Selection State ---
   final Set<String> _selectedItemIds = {};
   final Map<String, int> _draftQuantities = {};
+  String? _draggingItemId; // NEW: Global tracker for the ghost gap
 
   Set<String> get selectedItemIds => _selectedItemIds;
   bool get isEditMode => _selectedItemIds.isNotEmpty;
+  String? get draggingItemId => _draggingItemId; // NEW
 
   int getDraftQuantity(String id) => _draftQuantities[id] ?? 1;
+
+  // NEW: Safely tracks the ghost gap across list rebuilds
+  void setDraggingItem(String? id) {
+    _draggingItemId = id;
+    notifyListeners();
+  }
 
   void toggleSelection(String id) {
     if (_selectedItemIds.contains(id)) {
