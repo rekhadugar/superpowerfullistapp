@@ -104,7 +104,6 @@ class _MainScreenState extends State<MainScreen> {
     final listProvider = context.watch<ListProvider>();
     final displayList = listProvider.displayList;
     final theme = Theme.of(context);
-
     final double safeBottomPadding = MediaQuery.of(context).padding.bottom;
     const double menuHeight = 140.0;
 
@@ -130,7 +129,7 @@ class _MainScreenState extends State<MainScreen> {
           ),
           titleSpacing: 0,
           title: const Text('Listicle V2 Prototype'),
-          backgroundColor: theme.cardColor, // Mapped directly to the card color per request
+          backgroundColor: theme.cardColor,
           elevation: 0,
           centerTitle: false,
           titleTextStyle: theme.textTheme.titleMedium?.copyWith(
@@ -177,71 +176,132 @@ class _MainScreenState extends State<MainScreen> {
                 controller: _scrollController,
                 padding: EdgeInsets.only(
                     top: 0.0,
-                    bottom: listProvider.isEditMode ? menuHeight + safeBottomPadding + 20 : 120.0
+                    bottom: listProvider.isEditMode ? menuHeight + safeBottomPadding + 20 : safeBottomPadding + 100.0
                 ),
                 itemCount: displayList.length,
                 itemBuilder: (context, index) {
                   final item = displayList[index];
 
+                  // NEW: Headers are now Drop Zones!
                   if (item is String) {
-                    return SectionHeader(key: ValueKey('header_$item'), title: item);
+                    return DragTarget<String>(
+                        onWillAcceptWithDetails: (_) => true,
+                        onAcceptWithDetails: (details) => context.read<ListProvider>().reorderToSectionTop(details.data, item),
+                        builder: (context, candidateData, rejectedData) {
+                          final bool isHovered = candidateData.isNotEmpty;
+                          return Column(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              AnimatedContainer(
+                                duration: const Duration(milliseconds: 200),
+                                curve: Curves.easeOutCubic,
+                                height: isHovered ? 72.0 : 0.0,
+                                margin: isHovered ? const EdgeInsets.only(bottom: AppConstants.cardMargin) : EdgeInsets.zero,
+                                decoration: BoxDecoration(
+                                  color: AppColors.primaryAction.withOpacity(0.1),
+                                  borderRadius: BorderRadius.circular(12.0),
+                                  border: Border.all(
+                                      color: isHovered ? AppColors.primaryAction.withOpacity(0.5) : Colors.transparent,
+                                      width: 2.0
+                                  ),
+                                ),
+                              ),
+                              SectionHeader(key: ValueKey('header_$item'), title: item),
+                            ],
+                          );
+                        }
+                    );
                   }
 
                   if (item is ListItem) {
+                    final bool isDragging = listProvider.draggingItemId == item.id;
                     final bool isSelected = listProvider.selectedItemIds.contains(item.id);
 
-                    return SwipeActionWrapper(
-                      key: ValueKey('swipe_${item.id}'),
-                      itemId: item.id,
-                      requireConfirm: true,
-                      onCheckout: () => context.read<ListProvider>().toggleCompletion(item.id),
-                      onEdit: () {},
-                      onDelete: () => context.read<ListProvider>().deleteItem(item.id),
-                      child: DragTarget<String>(
-                        onWillAcceptWithDetails: (details) {
-                          if (details.data != item.id) {
-                            // LIVE SWAP: Trigger the fractional math instantly as you hover over a new item
-                            context.read<ListProvider>().reorderItem(details.data, item.id);
-                            return true;
-                          }
-                          return false;
-                        },
-                        onAcceptWithDetails: (details) {
-                          // Drop logic is empty because the item is already mathematically swapped
-                        },
-                        builder: (context, candidateData, rejectedData) {
-                          return ListItemCard(
-                            itemId: item.id,
-                            title: item.title,
-                            nWrap: item.nWrap,
-                            nTagRows: item.nTagRows,
-                            attributeRows: item.attributeRows,
-                            type: item.type,
-                            category: item.category,
-                            sortMode: listProvider.currentSortMode,
-                            quantity: item.quantity,
-                            isHighlighted: listProvider.flashItemId == item.id,
-                            isEditMode: listProvider.isEditMode,
-                            isSelected: isSelected,
-                            isDragging: listProvider.draggingItemId == item.id, // NEW: Links to global drag state
-                            onLongPress: () {
-                              if (listProvider.openSwipeItemId.value != null) {
-                                listProvider.openSwipeItemId.value = null;
-                              }
-                              listProvider.toggleSelection(item.id);
-                            },
-                            onTap: () {
-                              if (listProvider.openSwipeItemId.value != null) {
-                                listProvider.openSwipeItemId.value = null;
-                              } else if (listProvider.isEditMode) {
-                                listProvider.toggleSelection(item.id);
-                              } else {
-                                listProvider.toggleCompletion(item.id);
-                              }
-                            },
-                          );
-                        },
-                      ),
+                    Widget coreCard = ListItemCard(
+                      title: item.title,
+                      nWrap: item.nWrap,
+                      nTagRows: item.nTagRows,
+                      attributeRows: item.attributeRows,
+                      type: item.type,
+                      category: item.category,
+                      sortMode: listProvider.currentSortMode,
+                      quantity: item.quantity,
+                      isHighlighted: listProvider.flashItemId == item.id,
+                      isDragging: isDragging,
+                      isEditMode: listProvider.isEditMode,
+                      isSelected: isSelected,
+                      onTap: () {
+                        if (listProvider.openSwipeItemId.value != null) {
+                          listProvider.openSwipeItemId.value = null;
+                        } else {
+                          context.read<ListProvider>().toggleSelection(item.id);
+                        }
+                      },
+                    );
+
+                    return DragTarget<String>(
+                      onWillAcceptWithDetails: (details) => details.data != item.id,
+                      onAcceptWithDetails: (details) => context.read<ListProvider>().reorderItem(details.data, item.id),
+                      builder: (context, candidateData, rejectedData) {
+                        final bool isHovered = candidateData.isNotEmpty && candidateData.first != item.id;
+
+                        return Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            AnimatedContainer(
+                              duration: const Duration(milliseconds: 200),
+                              curve: Curves.easeOutCubic,
+                              height: isHovered ? 72.0 : 0.0,
+                              margin: isHovered ? const EdgeInsets.only(bottom: AppConstants.cardMargin) : EdgeInsets.zero,
+                              decoration: BoxDecoration(
+                                color: AppColors.primaryAction.withOpacity(0.1),
+                                borderRadius: BorderRadius.circular(12.0),
+                                border: Border.all(
+                                    color: isHovered ? AppColors.primaryAction.withOpacity(0.5) : Colors.transparent,
+                                    width: 2.0
+                                ),
+                              ),
+                            ),
+                            LongPressDraggable<String>(
+                              data: item.id,
+                              delay: const Duration(milliseconds: 250),
+                              // NEW: Collapses the original card to 0 pixels instantly to prevent double-gaps
+                              childWhenDragging: const SizedBox.shrink(),
+                              onDragStarted: () => context.read<ListProvider>().setDraggingItem(item.id),
+                              onDragEnd: (_) => context.read<ListProvider>().setDraggingItem(null),
+                              onDraggableCanceled: (_, __) => context.read<ListProvider>().setDraggingItem(null),
+                              feedback: Material(
+                                color: Colors.transparent,
+                                child: SizedBox(
+                                  width: MediaQuery.of(context).size.width,
+                                  child: ListItemCard(
+                                    title: item.title,
+                                    nWrap: item.nWrap,
+                                    nTagRows: item.nTagRows,
+                                    attributeRows: item.attributeRows,
+                                    type: item.type,
+                                    category: item.category,
+                                    sortMode: listProvider.currentSortMode,
+                                    quantity: item.quantity,
+                                    isFeedback: true,
+                                    onTap: () {},
+                                  ),
+                                ),
+                              ),
+                              child: SwipeActionWrapper(
+                                key: ValueKey('swipe_${item.id}'),
+                                itemId: item.id,
+                                requireConfirm: true,
+                                onCheckout: () => context.read<ListProvider>().toggleCompletion(item.id),
+                                onEdit: () {},
+                                onDelete: () => context.read<ListProvider>().deleteItem(item.id),
+                                child: coreCard,
+                              ),
+                            ),
+                          ],
+                        );
+                      },
                     );
                   }
                   return const SizedBox.shrink();
@@ -292,6 +352,7 @@ class _MainScreenState extends State<MainScreen> {
                 ),
               ),
 
+              // RESTORED: The Floating Edit Menu
               AnimatedPositioned(
                 duration: const Duration(milliseconds: 300),
                 curve: Curves.easeOutCubic,
@@ -319,7 +380,6 @@ class _MainScreenState extends State<MainScreen> {
                               child: listProvider.selectedItemIds.length == 1
                                   ? Builder(
                                   builder: (context) {
-                                    // Live link to the buffered draft value
                                     final singleId = listProvider.selectedItemIds.first;
                                     final draftQty = listProvider.getDraftQuantity(singleId);
 
@@ -412,7 +472,7 @@ class _MainScreenState extends State<MainScreen> {
                             child: SizedBox(
                               height: 48,
                               child: TextButton.icon(
-                                onPressed: () => listProvider.clearSelection(), // Rollback
+                                onPressed: () => listProvider.clearSelection(),
                                 style: TextButton.styleFrom(
                                   backgroundColor: theme.dividerColor.withOpacity(0.1),
                                   foregroundColor: theme.textTheme.titleMedium?.color,
@@ -428,7 +488,7 @@ class _MainScreenState extends State<MainScreen> {
                             child: SizedBox(
                               height: 48,
                               child: ElevatedButton.icon(
-                                onPressed: () => listProvider.commitEdits(), // Commit
+                                onPressed: () => listProvider.commitEdits(),
                                 style: ElevatedButton.styleFrom(
                                   backgroundColor: AppColors.primaryAction,
                                   foregroundColor: Colors.white,
