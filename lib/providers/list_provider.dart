@@ -187,7 +187,6 @@ class ListProvider extends ChangeNotifier {
     final immediateAbove = newIndex > 0 ? virtualList[newIndex - 1] : null;
     final immediateBelow = newIndex < virtualList.length - 1 ? virtualList[newIndex + 1] : null;
 
-    // THE FIX: Conditionally steal ONLY the attribute related to the active view
     if (immediateAbove is String) {
       if (_currentSortMode == SortMode.categories) newCategory = immediateAbove;
       if (_currentSortMode == SortMode.types) newType = immediateAbove;
@@ -202,13 +201,16 @@ class ListProvider extends ChangeNotifier {
       if (_currentSortMode == SortMode.types) newType = immediateBelow.type;
     }
 
+    // THE FIX: "Header Walls". Stop searching the moment we hit a section boundary!
     ListItem? nearestAbove;
     for (int i = newIndex - 1; i >= 0; i--) {
+      if (virtualList[i] is String) break; // Wall hit! We are at the absolute top of this section.
       if (virtualList[i] is ListItem) { nearestAbove = virtualList[i] as ListItem; break; }
     }
 
     ListItem? nearestBelow;
     for (int i = newIndex + 1; i < virtualList.length; i++) {
+      if (virtualList[i] is String) break; // Wall hit! We are at the absolute bottom of this section.
       if (virtualList[i] is ListItem) { nearestBelow = virtualList[i] as ListItem; break; }
     }
 
@@ -225,7 +227,6 @@ class ListProvider extends ChangeNotifier {
 
     final rawIndex = _items.indexWhere((i) => i.id == draggedItem.id);
     if (rawIndex != -1) {
-      // THE FIX: Save the new mathematical order strictly to the active dimension!
       _items[rawIndex] = _items[rawIndex].copyWith(
         category: newCategory,
         type: newType,
