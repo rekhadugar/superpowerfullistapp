@@ -4,6 +4,7 @@ import '../theme/app_theme.dart';
 import '../engine/sort_mode_engine.dart';
 
 class ListItemCard extends StatefulWidget {
+  final String itemId; // NEW: Required to identify the dragging payload
   final String title;
   final int nWrap;
   final int nTagRows;
@@ -11,15 +12,17 @@ class ListItemCard extends StatefulWidget {
   final String type;
   final String category;
   final SortMode sortMode;
-  final int quantity; // NEW: Re-introduced to display the saved value
+  final int quantity;
   final bool isHighlighted;
   final bool isEditMode;
   final bool isSelected;
+  final bool isDragHovered; // NEW: Triggers visual feedback when dropping an item here
   final VoidCallback onTap;
   final VoidCallback onLongPress;
 
   const ListItemCard({
     Key? key,
+    required this.itemId, // NEW
     required this.title,
     this.nWrap = 0,
     this.nTagRows = 0,
@@ -27,10 +30,11 @@ class ListItemCard extends StatefulWidget {
     required this.type,
     required this.category,
     required this.sortMode,
-    required this.quantity, // NEW
+    required this.quantity,
     this.isHighlighted = false,
     this.isEditMode = false,
     this.isSelected = false,
+    this.isDragHovered = false, // NEW
     required this.onTap,
     required this.onLongPress,
   }) : super(key: key);
@@ -150,7 +154,11 @@ class _ListItemCardState extends State<ListItemCard> with SingleTickerProviderSt
           Color? backgroundColor = widget.isSelected
               ? AppColors.primaryAction.withOpacity(0.08)
               : theme.cardColor;
-          if (_flashController.isAnimating) {
+
+          // NEW: Highlight the row if a user is dragging another item over it
+          if (widget.isDragHovered) {
+            backgroundColor = AppColors.primaryAction.withOpacity(0.2);
+          } else if (_flashController.isAnimating) {
             backgroundColor = _colorAnimation.value;
           }
 
@@ -178,10 +186,18 @@ class _ListItemCardState extends State<ListItemCard> with SingleTickerProviderSt
                     width: AppConstants.leadingBlockWidth,
                     height: AppConstants.attributeRowHeight,
                     alignment: Alignment.center,
-                    child: Icon(
-                        widget.isEditMode ? Icons.drag_handle_rounded : Icons.check_box_outline_blank,
-                        color: widget.isSelected ? AppColors.primaryAction : theme.dividerColor
-                    ),
+                    child: widget.isEditMode
+                    // NEW: Make the handle physically draggable, carrying the item ID
+                        ? Draggable<String>(
+                      data: widget.itemId,
+                      feedback: Material(
+                        color: Colors.transparent,
+                        child: Icon(Icons.drag_handle_rounded, color: AppColors.primaryAction, size: 28),
+                      ),
+                      childWhenDragging: Icon(Icons.drag_handle_rounded, color: theme.dividerColor.withOpacity(0.2)),
+                      child: Icon(Icons.drag_handle_rounded, color: widget.isSelected ? AppColors.primaryAction : theme.dividerColor),
+                    )
+                        : Icon(Icons.check_box_outline_blank, color: widget.isSelected ? AppColors.primaryAction : theme.dividerColor),
                   ),
                   const SizedBox(width: AppConstants.interElementGap),
                   Expanded(

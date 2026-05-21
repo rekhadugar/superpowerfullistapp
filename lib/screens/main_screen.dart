@@ -197,32 +197,40 @@ class _MainScreenState extends State<MainScreen> {
                       onCheckout: () => context.read<ListProvider>().toggleCompletion(item.id),
                       onEdit: () {},
                       onDelete: () => context.read<ListProvider>().deleteItem(item.id),
-                      child: ListItemCard(
-                        title: item.title,
-                        nWrap: item.nWrap,
-                        nTagRows: item.nTagRows,
-                        attributeRows: item.attributeRows,
-                        type: item.type,
-                        category: item.category,
-                        sortMode: listProvider.currentSortMode,
-                        quantity: item.quantity, // Passed to ensure true value renders
-                        isHighlighted: listProvider.flashItemId == item.id,
-                        isEditMode: listProvider.isEditMode,
-                        isSelected: isSelected,
-                        onLongPress: () {
-                          if (listProvider.openSwipeItemId.value != null) {
-                            listProvider.openSwipeItemId.value = null;
-                          }
-                          listProvider.toggleSelection(item.id);
-                        },
-                        onTap: () {
-                          if (listProvider.openSwipeItemId.value != null) {
-                            listProvider.openSwipeItemId.value = null;
-                          } else if (listProvider.isEditMode) {
-                            listProvider.toggleSelection(item.id);
-                          } else {
-                            listProvider.toggleCompletion(item.id);
-                          }
+                      child: DragTarget<String>(
+                        onWillAcceptWithDetails: (details) => details.data != item.id, // Can't drop on itself
+                        onAcceptWithDetails: (details) => context.read<ListProvider>().reorderItem(details.data, item.id),
+                        builder: (context, candidateData, rejectedData) {
+                          return ListItemCard(
+                            itemId: item.id, // Passed down for Draggable data
+                            title: item.title,
+                            nWrap: item.nWrap,
+                            nTagRows: item.nTagRows,
+                            attributeRows: item.attributeRows,
+                            type: item.type,
+                            category: item.category,
+                            sortMode: listProvider.currentSortMode,
+                            quantity: item.quantity,
+                            isHighlighted: listProvider.flashItemId == item.id,
+                            isEditMode: listProvider.isEditMode,
+                            isSelected: isSelected,
+                            isDragHovered: candidateData.isNotEmpty, // Triggers hover background color
+                            onLongPress: () {
+                              if (listProvider.openSwipeItemId.value != null) {
+                                listProvider.openSwipeItemId.value = null;
+                              }
+                              listProvider.toggleSelection(item.id);
+                            },
+                            onTap: () {
+                              if (listProvider.openSwipeItemId.value != null) {
+                                listProvider.openSwipeItemId.value = null;
+                              } else if (listProvider.isEditMode) {
+                                listProvider.toggleSelection(item.id);
+                              } else {
+                                listProvider.toggleCompletion(item.id);
+                              }
+                            },
+                          );
                         },
                       ),
                     );

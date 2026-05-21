@@ -246,6 +246,54 @@ class ListProvider extends ChangeNotifier {
     }
   }
 
+  // Location: lib/providers/list_provider.dart
+
+  // --- Add this below your existing edit/commit methods ---
+
+  void reorderItem(String draggedId, String targetId) {
+    if (draggedId == targetId) return;
+
+    // Filter the displayList to ignore headers so we understand the strict visual sequence of the items
+    final visibleItems = displayList.whereType<ListItem>().toList();
+    final draggedIndex = visibleItems.indexWhere((item) => item.id == draggedId);
+    final targetIndex = visibleItems.indexWhere((item) => item.id == targetId);
+
+    if (draggedIndex == -1 || targetIndex == -1) return;
+
+    final bool movingDown = draggedIndex < targetIndex;
+    double newOrder = 0.0;
+
+    // O(1) Fractional Math calculation
+    if (movingDown) {
+      // Dropping below the target: Calculate midpoint between target and the item AFTER the target
+      final prevOrder = visibleItems[targetIndex].globalCustomOrder;
+      final nextOrder = (targetIndex + 1 < visibleItems.length)
+          ? visibleItems[targetIndex + 1].globalCustomOrder
+          : prevOrder + 100.0; // Arbitrary buffer if dropped at the absolute bottom
+      newOrder = (prevOrder + nextOrder) / 2.0;
+    } else {
+      // Dropping above the target: Calculate midpoint between target and the item BEFORE the target
+      final nextOrder = visibleItems[targetIndex].globalCustomOrder;
+      final prevOrder = (targetIndex - 1 >= 0)
+          ? visibleItems[targetIndex - 1].globalCustomOrder
+          : nextOrder - 100.0; // Arbitrary buffer if dropped at the absolute top
+      newOrder = (prevOrder + nextOrder) / 2.0;
+    }
+
+    final rawIndex = _items.indexWhere((item) => item.id == draggedId);
+    if (rawIndex != -1) {
+      _items[rawIndex] = _items[rawIndex].copyWith(globalCustomOrder: newOrder);
+
+      // If we aren't already in Custom Flat sort, forcefully switch to it so the visual drop makes sense
+      if (currentSortMode != SortMode.customFlat) {
+        setSortMode(SortMode.customFlat);
+      } else {
+        _buildDisplayList();
+        notifyListeners();
+      }
+    }
+  }
+
   void updateViewportWidth(double width) {
     if (_viewportWidth != width && width > 0) {
       _viewportWidth = width;
