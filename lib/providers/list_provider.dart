@@ -267,12 +267,17 @@ class ListProvider extends ChangeNotifier {
   }
 
   // --- 2. MULTI-DIMENSIONAL ADD ITEM ---
+  // --- MULTI-DIMENSIONAL ADD ITEM (SECTION AWARE) ---
   void addItem(String title, List<String> attributes, String type, String category) {
+    final safeType = type.trim().isEmpty ? "Any" : type.trim();
+    final safeCategory = category.trim().isEmpty ? "Everything Else" : category.trim();
+
     double maxCat = 0.0, maxType = 0.0, maxGlobal = 0.0;
 
     for (var item in _items) {
-      if (item.categoryOrder > maxCat) maxCat = item.categoryOrder;
-      if (item.typeOrder > maxType) maxType = item.typeOrder;
+      // THE FIX: Only compare numbers against items in the SAME section!
+      if (item.category == safeCategory && item.categoryOrder > maxCat) maxCat = item.categoryOrder;
+      if (item.type == safeType && item.typeOrder > maxType) maxType = item.typeOrder;
       if (item.globalCustomOrder > maxGlobal) maxGlobal = item.globalCustomOrder;
     }
 
@@ -280,27 +285,63 @@ class ListProvider extends ChangeNotifier {
       id: DateTime.now().millisecondsSinceEpoch.toString(),
       title: title,
       attributeRows: attributes,
-      type: type.trim().isEmpty ? "Any" : type.trim(),
-      category: category.trim().isEmpty ? "Everything Else" : category.trim(),
-      categoryOrder: maxCat + 100.0,
-      typeOrder: maxType + 100.0,
+      type: safeType,
+      category: safeCategory,
+      categoryOrder: maxCat + 100.0, // Safely drops it at the bottom of its assigned Category
+      typeOrder: maxType + 100.0,    // Safely drops it at the bottom of its assigned Store
       globalCustomOrder: maxGlobal + 100.0,
     );
 
     _items.add(newItem);
     _recalculateWraps();
     _buildDisplayList();
+
+    _flashItemId = newItem.id;
+    _flashTimer?.cancel();
+    _flashTimer = Timer(const Duration(seconds: 4), () {
+      _flashItemId = null;
+      notifyListeners();
+    });
+
     notifyListeners();
   }
 
+  // --- MULTI-DIMENSIONAL EDIT ITEM (SECTION AWARE) ---
   void editItem(String id, String newTitle, List<String> newAttributes, String type, String category) {
     final index = _items.indexWhere((item) => item.id == id);
     if (index != -1) {
-      _items[index] = _items[index].copyWith(
+      final oldItem = _items[index];
+      final safeType = type.trim().isEmpty ? "Any" : type.trim();
+      final safeCategory = category.trim().isEmpty ? "Everything Else" : category.trim();
+
+      double newCatOrder = oldItem.categoryOrder;
+      double newTypeOrder = oldItem.typeOrder;
+
+      // THE FIX: If the user changed the category, calculate a new order so it doesn't randomly inject into the middle of the new section
+      if (oldItem.category != safeCategory) {
+        double maxCat = 0.0;
+        for (var i in _items) {
+          if (i.category == safeCategory && i.categoryOrder > maxCat) maxCat = i.categoryOrder;
+        }
+        newCatOrder = maxCat + 100.0;
+      }
+
+      // THE FIX: If the user changed the Store (Type), calculate a new order for the Store view
+      if (oldItem.type != safeType) {
+        double maxType = 0.0;
+        for (var i in _items) {
+          if (i.type == safeType && i.typeOrder > maxType) maxType = i.typeOrder;
+        }
+        newTypeOrder = maxType + 100.0;
+      }
+
+      _items[index] = oldItem.copyWith(
         title: newTitle,
         attributeRows: newAttributes,
-        type: type.trim().isEmpty ? "Any" : type.trim(),
-        category: category.trim().isEmpty ? "Everything Else" : category.trim(),
+        type: safeType,
+        category: safeCategory,
+        categoryOrder: newCatOrder,
+        typeOrder: newTypeOrder,
       );
 
       _recalculateWraps();

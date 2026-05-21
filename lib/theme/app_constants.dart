@@ -42,13 +42,13 @@ class AppPhysics {
   static const double deleteSlotRatio = 0.30;
   static const double editSlotRatio = 0.70;
   static const double checkoutThreshold = 0.45;
-  static const double swipeExecuteThreshold = 0.65; // NEW: 65% of screen required to execute left swipe
+  static const double swipeExecuteThreshold = 0.50; // NEW: 65% of screen required to execute left swipe
 
   // 2. Friction & Resistance
   static const double frictionYield = 0.70;
 
   // 3. Momentum Prediction (Replaces rigid Flick limits)
-  static const double momentumMultiplier = 0.07; // Translates velocity into projected distance
+  static const double momentumMultiplier = 0.05; // Translates velocity into projected distance
 
   // 4. Elastic Spring Physics (For snapping back or opening menu)
   static const double springMass = 1.0;
@@ -56,8 +56,8 @@ class AppPhysics {
   static const double springDamping = 28.0;
 
   // 5. Visuals
-  static const double swallowSpeed = 1.3;
-  static const double continuousSwallowSpeed = 2.3;
+  static const double swallowSpeed = 1.6;
+  static const double continuousSwallowSpeed = 4.3;
 
   //6. Glide Physics
   static const double glideStiffness = 120.0; // Increased from 20 to make it exit much faster

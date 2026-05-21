@@ -235,7 +235,24 @@ class _MainScreenState extends State<MainScreen> {
                         itemId: item.id,
                         requireConfirm: true,
                         onCheckout: () => context.read<ListProvider>().toggleCompletion(item.id),
-                        onEdit: () {},
+                        onEdit: () {
+                          // Collapse the swipe menu before opening the sheet
+                          if (listProvider.openSwipeItemId.value != null) {
+                            listProvider.openSwipeItemId.value = null;
+                          }
+                          // Launch the Full Edit Menu
+                          showModalBottomSheet(
+                            context: context,
+                            isScrollControlled: true,
+                            backgroundColor: Colors.transparent,
+                            builder: (context) => EditItemBottomSheet(
+                              item: item,
+                              onSave: (newTitle, newAttributes, newType, newCategory) {
+                                context.read<ListProvider>().editItem(item.id, newTitle, newAttributes, newType, newCategory);
+                              },
+                            ),
+                          );
+                        },
                         onDelete: () => context.read<ListProvider>().deleteItem(item.id),
                         child: coreCard,
                       ),
