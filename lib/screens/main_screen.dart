@@ -105,7 +105,6 @@ class _MainScreenState extends State<MainScreen> {
     final displayList = listProvider.displayList;
     final theme = Theme.of(context);
 
-    // UI Math for Bottom Animations
     final double safeBottomPadding = MediaQuery.of(context).padding.bottom;
     const double menuHeight = 140.0;
 
@@ -130,8 +129,8 @@ class _MainScreenState extends State<MainScreen> {
             ),
           ),
           titleSpacing: 0,
-          title: const Text('Groceries'),
-          backgroundColor: theme.scaffoldBackgroundColor,
+          title: const Text('Listicle V2 Prototype'),
+          backgroundColor: theme.cardColor, // Mapped directly to the card color per request
           elevation: 0,
           centerTitle: false,
           titleTextStyle: theme.textTheme.titleMedium?.copyWith(
@@ -174,7 +173,6 @@ class _MainScreenState extends State<MainScreen> {
           },
           child: Stack(
             children: [
-              // 1. Core ListView
               ListView.builder(
                 controller: _scrollController,
                 padding: EdgeInsets.only(
@@ -207,8 +205,8 @@ class _MainScreenState extends State<MainScreen> {
                         type: item.type,
                         category: item.category,
                         sortMode: listProvider.currentSortMode,
+                        quantity: item.quantity, // Passed to ensure true value renders
                         isHighlighted: listProvider.flashItemId == item.id,
-                        // Context Menu State Links
                         isEditMode: listProvider.isEditMode,
                         isSelected: isSelected,
                         onLongPress: () {
@@ -233,7 +231,6 @@ class _MainScreenState extends State<MainScreen> {
                 },
               ),
 
-              // 2. Phantom Sticky Header
               ValueListenableBuilder<PhantomHeaderData>(
                 valueListenable: _phantomHeaderState,
                 builder: (context, data, child) {
@@ -250,7 +247,6 @@ class _MainScreenState extends State<MainScreen> {
                 },
               ),
 
-              // 3. Dynamic Animated FAB
               AnimatedPositioned(
                 duration: const Duration(milliseconds: 300),
                 curve: Curves.easeOutCubic,
@@ -279,7 +275,6 @@ class _MainScreenState extends State<MainScreen> {
                 ),
               ),
 
-              // 4. The Pill-Based Edit Mode Context Menu
               AnimatedPositioned(
                 duration: const Duration(milliseconds: 300),
                 curve: Curves.easeOutCubic,
@@ -297,35 +292,49 @@ class _MainScreenState extends State<MainScreen> {
                   ),
                   child: Column(
                     children: [
-                      // Scrollable Horizontal Tool Strip
                       SingleChildScrollView(
                         scrollDirection: Axis.horizontal,
                         clipBehavior: Clip.none,
                         child: Row(
                           children: [
-                            // Dynamic Stepper / Counter Pill
                             AnimatedSwitcher(
                               duration: const Duration(milliseconds: 200),
                               child: listProvider.selectedItemIds.length == 1
-                                  ? Container(
-                                key: const ValueKey('stepper'),
-                                height: 44,
-                                padding: const EdgeInsets.symmetric(horizontal: 4.0),
-                                decoration: BoxDecoration(
-                                  color: theme.dividerColor.withOpacity(0.1),
-                                  borderRadius: BorderRadius.circular(50.0), // Pill Shape
-                                ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    IconButton(icon: const Icon(Icons.remove, size: 20), onPressed: () {}, constraints: const BoxConstraints(), padding: const EdgeInsets.all(8.0)),
-                                    Padding(
-                                      padding: const EdgeInsets.symmetric(horizontal: 12.0),
-                                      child: Text('1', style: theme.textTheme.titleMedium?.copyWith(fontSize: 16, fontWeight: FontWeight.bold)),
-                                    ),
-                                    IconButton(icon: const Icon(Icons.add, size: 20), onPressed: () {}, constraints: const BoxConstraints(), padding: const EdgeInsets.all(8.0)),
-                                  ],
-                                ),
+                                  ? Builder(
+                                  builder: (context) {
+                                    // Live link to the buffered draft value
+                                    final singleId = listProvider.selectedItemIds.first;
+                                    final draftQty = listProvider.getDraftQuantity(singleId);
+
+                                    return Container(
+                                      key: const ValueKey('stepper'),
+                                      height: 44,
+                                      padding: const EdgeInsets.symmetric(horizontal: 4.0),
+                                      decoration: BoxDecoration(
+                                        color: theme.dividerColor.withOpacity(0.1),
+                                        borderRadius: BorderRadius.circular(50.0),
+                                      ),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          IconButton(
+                                              icon: const Icon(Icons.remove, size: 20),
+                                              onPressed: () => listProvider.updateDraftQuantity(singleId, -1),
+                                              constraints: const BoxConstraints(), padding: const EdgeInsets.all(8.0)
+                                          ),
+                                          Padding(
+                                            padding: const EdgeInsets.symmetric(horizontal: 12.0),
+                                            child: Text('$draftQty', style: theme.textTheme.titleMedium?.copyWith(fontSize: 16, fontWeight: FontWeight.bold)),
+                                          ),
+                                          IconButton(
+                                              icon: const Icon(Icons.add, size: 20),
+                                              onPressed: () => listProvider.updateDraftQuantity(singleId, 1),
+                                              constraints: const BoxConstraints(), padding: const EdgeInsets.all(8.0)
+                                          ),
+                                        ],
+                                      ),
+                                    );
+                                  }
                               )
                                   : Container(
                                 key: const ValueKey('counter'),
@@ -333,7 +342,7 @@ class _MainScreenState extends State<MainScreen> {
                                 padding: const EdgeInsets.symmetric(horizontal: 16.0),
                                 decoration: BoxDecoration(
                                   color: AppColors.primaryAction.withOpacity(0.15),
-                                  borderRadius: BorderRadius.circular(50.0), // Pill Shape
+                                  borderRadius: BorderRadius.circular(50.0),
                                 ),
                                 child: Row(
                                   mainAxisSize: MainAxisSize.min,
@@ -347,7 +356,6 @@ class _MainScreenState extends State<MainScreen> {
                             ),
                             const SizedBox(width: 12.0),
 
-                            // Copy Pill
                             TextButton.icon(
                               onPressed: () {},
                               style: TextButton.styleFrom(
@@ -363,7 +371,6 @@ class _MainScreenState extends State<MainScreen> {
                             ),
                             const SizedBox(width: 12.0),
 
-                            // Delete Pill
                             TextButton.icon(
                               onPressed: () {},
                               style: TextButton.styleFrom(
@@ -382,15 +389,13 @@ class _MainScreenState extends State<MainScreen> {
                       ),
                       const SizedBox(height: 16.0),
 
-                      // Close Mode Pill
-                      // Cancel & Save Action Row
                       Row(
                         children: [
                           Expanded(
                             child: SizedBox(
                               height: 48,
                               child: TextButton.icon(
-                                onPressed: () => listProvider.clearSelection(), // Will wire up rollback logic in Batch 2
+                                onPressed: () => listProvider.clearSelection(), // Rollback
                                 style: TextButton.styleFrom(
                                   backgroundColor: theme.dividerColor.withOpacity(0.1),
                                   foregroundColor: theme.textTheme.titleMedium?.color,
@@ -406,7 +411,7 @@ class _MainScreenState extends State<MainScreen> {
                             child: SizedBox(
                               height: 48,
                               child: ElevatedButton.icon(
-                                onPressed: () => listProvider.clearSelection(), // Will wire up commit logic in Batch 2
+                                onPressed: () => listProvider.commitEdits(), // Commit
                                 style: ElevatedButton.styleFrom(
                                   backgroundColor: AppColors.primaryAction,
                                   foregroundColor: Colors.white,

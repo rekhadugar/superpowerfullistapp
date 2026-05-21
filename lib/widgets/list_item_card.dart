@@ -11,11 +11,12 @@ class ListItemCard extends StatefulWidget {
   final String type;
   final String category;
   final SortMode sortMode;
+  final int quantity; // NEW: Re-introduced to display the saved value
   final bool isHighlighted;
-  final bool isEditMode;   // NEW
-  final bool isSelected;   // NEW
+  final bool isEditMode;
+  final bool isSelected;
   final VoidCallback onTap;
-  final VoidCallback onLongPress; // NEW
+  final VoidCallback onLongPress;
 
   const ListItemCard({
     Key? key,
@@ -26,6 +27,7 @@ class ListItemCard extends StatefulWidget {
     required this.type,
     required this.category,
     required this.sortMode,
+    required this.quantity, // NEW
     this.isHighlighted = false,
     this.isEditMode = false,
     this.isSelected = false,
@@ -140,12 +142,11 @@ class _ListItemCardState extends State<ListItemCard> with SingleTickerProviderSt
 
     return GestureDetector(
       onTap: widget.onTap,
-      onLongPress: widget.onLongPress, // Trigger selection mode
+      onLongPress: widget.onLongPress,
       behavior: HitTestBehavior.opaque,
       child: AnimatedBuilder(
         animation: _colorAnimation,
         builder: (context, child) {
-          // If selected, apply a permanent subtle tint. If flashing, override with animation color.
           Color? backgroundColor = widget.isSelected
               ? AppColors.primaryAction.withOpacity(0.08)
               : theme.cardColor;
@@ -177,7 +178,6 @@ class _ListItemCardState extends State<ListItemCard> with SingleTickerProviderSt
                     width: AppConstants.leadingBlockWidth,
                     height: AppConstants.attributeRowHeight,
                     alignment: Alignment.center,
-                    // Swap Checkbox for Drag Handle when in Edit Mode
                     child: Icon(
                         widget.isEditMode ? Icons.drag_handle_rounded : Icons.check_box_outline_blank,
                         color: widget.isSelected ? AppColors.primaryAction : theme.dividerColor
@@ -201,12 +201,12 @@ class _ListItemCardState extends State<ListItemCard> with SingleTickerProviderSt
                     height: AppConstants.attributeRowHeight,
                     alignment: Alignment.center,
                     child: Text(
-                      '1',
+                      '${widget.quantity}', // Bound directly to the saved value
                       textAlign: TextAlign.center,
                       style: theme.textTheme.titleMedium?.copyWith(
                         fontSize: AppConstants.titleFontSize,
                         height: AppConstants.titleLineHeight,
-                        color: widget.isEditMode ? theme.dividerColor.withOpacity(0.3) : null, // Dim out in edit mode
+                        color: widget.isEditMode ? theme.dividerColor.withOpacity(0.3) : null,
                       ),
                     ),
                   ),

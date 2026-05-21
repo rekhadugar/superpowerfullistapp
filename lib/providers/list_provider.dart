@@ -94,15 +94,48 @@ class ListProvider extends ChangeNotifier {
   final List<dynamic> displayList = [];
 
   final Set<String> _selectedItemIds = {};
+  final Map<String, int> _draftQuantities = {};
+
   Set<String> get selectedItemIds => _selectedItemIds;
   bool get isEditMode => _selectedItemIds.isNotEmpty;
+
+  int getDraftQuantity(String id) => _draftQuantities[id] ?? 1;
 
   void toggleSelection(String id) {
     if (_selectedItemIds.contains(id)) {
       _selectedItemIds.remove(id);
+      _draftQuantities.remove(id);
     } else {
       _selectedItemIds.add(id);
+      final index = _items.indexWhere((item) => item.id == id);
+      if (index != -1) {
+        _draftQuantities[id] = _items[index].quantity;
+      }
     }
+    notifyListeners();
+  }
+
+  void updateDraftQuantity(String id, int delta) {
+    if (_draftQuantities.containsKey(id)) {
+      _draftQuantities[id] = (_draftQuantities[id]! + delta).clamp(1, 99);
+      notifyListeners(); // Repaints the floating menu, leaves the list untouched
+    }
+  }
+
+  void commitEdits() {
+    bool stateChanged = false;
+    for (int i = 0; i < _items.length; i++) {
+      final id = _items[i].id;
+      if (_draftQuantities.containsKey(id) && _items[i].quantity != _draftQuantities[id]) {
+        _items[i] = _items[i].copyWith(quantity: _draftQuantities[id]);
+        stateChanged = true;
+      }
+    }
+    _selectedItemIds.clear();
+    _draftQuantities.clear();
+
+    // Update the UI if any actual saved values changed
+    if (stateChanged) _buildDisplayList();
     notifyListeners();
   }
 
