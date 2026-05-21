@@ -96,31 +96,34 @@ class ListProvider extends ChangeNotifier {
   }
 
   // --- UPGRADED MIGRATION: Detects ANY duplicates or zeroes and heals them ---
+  // --- 1. ISOLATED DATA MIGRATION ---
+  // Safely assigns perfect 100.0 spacing to all three dimensions independently!
   void runDataMigration() {
-    bool needsMigration = false;
-    final seenOrders = <double>{};
-
-    for (var item in _items) {
-      if (item.globalCustomOrder <= 0.01 || seenOrders.contains(item.globalCustomOrder)) {
-        needsMigration = true;
-        break;
-      }
-      seenOrders.add(item.globalCustomOrder);
-    }
+    bool needsMigration = _items.any((item) =>
+    item.categoryOrder < 100.0 ||
+        item.typeOrder < 100.0 ||
+        item.globalCustomOrder < 100.0);
 
     if (!needsMigration) return;
 
-    double currentOrder = 100.0;
-    // Assigns perfect strict sequencing based on current visual order
-    for (var displayItem in displayList) {
-      if (displayItem is ListItem) {
-        final rawIndex = _items.indexWhere((i) => i.id == displayItem.id);
-        if (rawIndex != -1) {
-          _items[rawIndex] = _items[rawIndex].copyWith(globalCustomOrder: currentOrder);
-          currentOrder += 100.0;
-        }
-      }
+    // Migrate Category Dimension
+    _items.sort((a, b) => a.categoryOrder.compareTo(b.categoryOrder));
+    for(int i=0; i<_items.length; i++) {
+      _items[i] = _items[i].copyWith(categoryOrder: (i+1) * 100.0);
     }
+
+    // Migrate Type (Store) Dimension
+    _items.sort((a, b) => a.typeOrder.compareTo(b.typeOrder));
+    for(int i=0; i<_items.length; i++) {
+      _items[i] = _items[i].copyWith(typeOrder: (i+1) * 100.0);
+    }
+
+    // Migrate Flat/Custom Dimension
+    _items.sort((a, b) => a.globalCustomOrder.compareTo(b.globalCustomOrder));
+    for(int i=0; i<_items.length; i++) {
+      _items[i] = _items[i].copyWith(globalCustomOrder: (i+1) * 100.0);
+    }
+
     _buildDisplayList();
     notifyListeners();
   }
@@ -167,76 +170,68 @@ class ListProvider extends ChangeNotifier {
     clearSelection();
   }
 
-  // --- Pure O(1) Fractional Math Drag Engine ---
+  // --- 4. CONTEXT-ISOLATED NATIVE REORDER MATH ---
   void executeNativeReorder(int oldIndex, int newIndex) {
     if (_currentSortMode == SortMode.az) return;
 
-    // Flutter native reorder adjustment
     if (oldIndex < newIndex) newIndex -= 1;
     if (oldIndex == newIndex) return;
 
-    // 1. Simulate the drop in a virtual list to map the exact visual boundaries
     final virtualList = List.of(displayList);
     final draggedItem = virtualList.removeAt(oldIndex) as ListItem;
     virtualList.insert(newIndex, draggedItem);
 
-    // 2. CATEGORY STEALING: Look at the immediate visual neighbors
     String newCategory = draggedItem.category;
     String newType = draggedItem.type;
 
     final immediateAbove = newIndex > 0 ? virtualList[newIndex - 1] : null;
     final immediateBelow = newIndex < virtualList.length - 1 ? virtualList[newIndex + 1] : null;
 
-    if (immediateAbove is String) { // Dropped right under a header
-      newCategory = _currentSortMode == SortMode.categories ? immediateAbove : draggedItem.category;
-      newType = _currentSortMode == SortMode.types ? immediateAbove : draggedItem.type;
-    } else if (immediateAbove is ListItem) { // Dropped under an item
-      newCategory = immediateAbove.category;
-      newType = immediateAbove.type;
-    } else if (immediateAbove == null && immediateBelow is String) { // Absolute top above first header
-      newCategory = _currentSortMode == SortMode.categories ? immediateBelow : draggedItem.category;
-      newType = _currentSortMode == SortMode.types ? immediateBelow : draggedItem.type;
-    } else if (immediateAbove == null && immediateBelow is ListItem) { // Absolute top above first item
-      newCategory = immediateBelow.category;
-      newType = immediateBelow.type;
+    // THE FIX: Conditionally steal ONLY the attribute related to the active view
+    if (immediateAbove is String) {
+      if (_currentSortMode == SortMode.categories) newCategory = immediateAbove;
+      if (_currentSortMode == SortMode.types) newType = immediateAbove;
+    } else if (immediateAbove is ListItem) {
+      if (_currentSortMode == SortMode.categories) newCategory = immediateAbove.category;
+      if (_currentSortMode == SortMode.types) newType = immediateAbove.type;
+    } else if (immediateAbove == null && immediateBelow is String) {
+      if (_currentSortMode == SortMode.categories) newCategory = immediateBelow;
+      if (_currentSortMode == SortMode.types) newType = immediateBelow;
+    } else if (immediateAbove == null && immediateBelow is ListItem) {
+      if (_currentSortMode == SortMode.categories) newCategory = immediateBelow.category;
+      if (_currentSortMode == SortMode.types) newType = immediateBelow.type;
     }
 
-    // 3. FRACTIONAL MATH: Ignore headers, find the nearest physical ListItems
     ListItem? nearestAbove;
     for (int i = newIndex - 1; i >= 0; i--) {
-      if (virtualList[i] is ListItem) {
-        nearestAbove = virtualList[i] as ListItem;
-        break;
-      }
+      if (virtualList[i] is ListItem) { nearestAbove = virtualList[i] as ListItem; break; }
     }
 
     ListItem? nearestBelow;
     for (int i = newIndex + 1; i < virtualList.length; i++) {
-      if (virtualList[i] is ListItem) {
-        nearestBelow = virtualList[i] as ListItem;
-        break;
-      }
+      if (virtualList[i] is ListItem) { nearestBelow = virtualList[i] as ListItem; break; }
     }
 
-    // 4. Apply O(1) Geometry
     double newOrder = 0.0;
-    if (nearestAbove != null && nearestBelow != null) { // Middle Drop
-      newOrder = (nearestAbove.globalCustomOrder + nearestBelow.globalCustomOrder) / 2.0;
-    } else if (nearestAbove != null && nearestBelow == null) { // Absolute Bottom
-      newOrder = nearestAbove.globalCustomOrder + 100.0;
-    } else if (nearestAbove == null && nearestBelow != null) { // Absolute Top
-      newOrder = nearestBelow.globalCustomOrder / 2.0;
-    } else { // Empty List
+    if (nearestAbove != null && nearestBelow != null) {
+      newOrder = (_getActiveOrder(nearestAbove) + _getActiveOrder(nearestBelow)) / 2.0;
+    } else if (nearestAbove != null && nearestBelow == null) {
+      newOrder = _getActiveOrder(nearestAbove) + 100.0;
+    } else if (nearestAbove == null && nearestBelow != null) {
+      newOrder = _getActiveOrder(nearestBelow) / 2.0;
+    } else {
       newOrder = 100.0;
     }
 
-    // 5. Execute Single Database Write
     final rawIndex = _items.indexWhere((i) => i.id == draggedItem.id);
     if (rawIndex != -1) {
+      // THE FIX: Save the new mathematical order strictly to the active dimension!
       _items[rawIndex] = _items[rawIndex].copyWith(
-        globalCustomOrder: newOrder,
         category: newCategory,
         type: newType,
+        categoryOrder: _currentSortMode == SortMode.categories ? newOrder : _items[rawIndex].categoryOrder,
+        typeOrder: _currentSortMode == SortMode.types ? newOrder : _items[rawIndex].typeOrder,
+        globalCustomOrder: _currentSortMode == SortMode.customFlat ? newOrder : _items[rawIndex].globalCustomOrder,
       );
 
       _buildDisplayList();
@@ -270,13 +265,14 @@ class ListProvider extends ChangeNotifier {
     return null;
   }
 
+  // --- 2. MULTI-DIMENSIONAL ADD ITEM ---
   void addItem(String title, List<String> attributes, String type, String category) {
-    // Determine mathematical floor of database to insert securely at the bottom
-    double maxOrder = 0.0;
+    double maxCat = 0.0, maxType = 0.0, maxGlobal = 0.0;
+
     for (var item in _items) {
-      if (item.globalCustomOrder > maxOrder) {
-        maxOrder = item.globalCustomOrder;
-      }
+      if (item.categoryOrder > maxCat) maxCat = item.categoryOrder;
+      if (item.typeOrder > maxType) maxType = item.typeOrder;
+      if (item.globalCustomOrder > maxGlobal) maxGlobal = item.globalCustomOrder;
     }
 
     final newItem = ListItem(
@@ -285,20 +281,14 @@ class ListProvider extends ChangeNotifier {
       attributeRows: attributes,
       type: type.trim().isEmpty ? "Any" : type.trim(),
       category: category.trim().isEmpty ? "Everything Else" : category.trim(),
-      globalCustomOrder: maxOrder + 100.0, // Flawless mathematical spacing
+      categoryOrder: maxCat + 100.0,
+      typeOrder: maxType + 100.0,
+      globalCustomOrder: maxGlobal + 100.0,
     );
 
     _items.add(newItem);
     _recalculateWraps();
     _buildDisplayList();
-
-    _flashItemId = newItem.id;
-    _flashTimer?.cancel();
-    _flashTimer = Timer(const Duration(seconds: 4), () {
-      _flashItemId = null;
-      notifyListeners();
-    });
-
     notifyListeners();
   }
 
@@ -424,32 +414,30 @@ class ListProvider extends ChangeNotifier {
   // --- UPGRADED BUILDER: Intercepts the SortModeEngine to force Custom Math ---
   void _buildDisplayList() {
     List<String>? activeGroupOrder;
-    if (_currentSortMode == SortMode.types) {
-      activeGroupOrder = preferredTypeOrder;
-    } else if (_currentSortMode == SortMode.categories) {
-      activeGroupOrder = preferredCategoryOrder;
-    }
+    if (_currentSortMode == SortMode.types) activeGroupOrder = preferredTypeOrder;
+    else if (_currentSortMode == SortMode.categories) activeGroupOrder = preferredCategoryOrder;
 
-    // 1. Let the external engine do the grouping
     final flattenedArray = SortModeEngine.execute(
       activeItems,
       _currentSortMode,
       groupOrder: activeGroupOrder,
     );
 
-    // 2. THE INTERCEPTOR: Force mathematical sorting within sections
     List<dynamic> strictlySortedArray = [];
 
-    // Only apply math sorting if the user hasn't explicitly selected A-Z mode
     if (_currentSortMode != SortMode.az) {
       List<ListItem> currentGroup = [];
       String? currentHeader;
 
       for (var item in flattenedArray) {
-        if (item is String) { // We hit a new Header
-          // Sort the previous group by math and commit it to the final array
+        if (item is String) {
           if (currentHeader != null || currentGroup.isNotEmpty) {
-            currentGroup.sort((a, b) => a.globalCustomOrder.compareTo(b.globalCustomOrder));
+            // THE FIX: Sort the internal blocks strictly by the ACTIVE view's order!
+            currentGroup.sort((a, b) {
+              if (_currentSortMode == SortMode.categories) return a.categoryOrder.compareTo(b.categoryOrder);
+              if (_currentSortMode == SortMode.types) return a.typeOrder.compareTo(b.typeOrder);
+              return a.globalCustomOrder.compareTo(b.globalCustomOrder);
+            });
             strictlySortedArray.addAll(currentGroup);
             currentGroup.clear();
           }
@@ -459,19 +447,28 @@ class ListProvider extends ChangeNotifier {
           currentGroup.add(item);
         }
       }
-      // Commit the final group
       if (currentGroup.isNotEmpty) {
-        currentGroup.sort((a, b) => a.globalCustomOrder.compareTo(b.globalCustomOrder));
+        currentGroup.sort((a, b) {
+          if (_currentSortMode == SortMode.categories) return a.categoryOrder.compareTo(b.categoryOrder);
+          if (_currentSortMode == SortMode.types) return a.typeOrder.compareTo(b.typeOrder);
+          return a.globalCustomOrder.compareTo(b.globalCustomOrder);
+        });
         strictlySortedArray.addAll(currentGroup);
       }
     } else {
       strictlySortedArray = flattenedArray;
     }
 
-    // 3. Render the strictly sorted array
     displayList.clear();
     displayList.addAll(strictlySortedArray);
     _recalculateYOffsets();
+  }
+
+  // --- Helper to fetch the correct active sequence number ---
+  double _getActiveOrder(ListItem item) {
+    if (_currentSortMode == SortMode.categories) return item.categoryOrder;
+    if (_currentSortMode == SortMode.types) return item.typeOrder;
+    return item.globalCustomOrder;
   }
 
   void _recalculateYOffsets() {
