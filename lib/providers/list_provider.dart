@@ -90,6 +90,43 @@ class ListProvider extends ChangeNotifier {
   final Set<String> _selectedItemIds = {};
   final Map<String, int> _draftQuantities = {};
 
+  // --- AGILE DICTIONARY STATE ---
+  // In the future, this will be fetched from the Parent List object.
+  final String currentListType = 'Shopping';
+
+  final Map<String, List<String>> _globalCategories = {
+    'Shopping': ['Produce', 'Dairy', 'Bakery', 'Pantry', 'Meat', 'Household', 'Frozen', 'Snacks'],
+  };
+  final Map<String, List<String>> _globalStores = {
+    'Shopping': ['Costco', 'Target', 'Walmart', 'Aldi', 'Trader Joes', 'Jewel-Osco'],
+  };
+  final Map<String, List<String>> _globalTags = {
+    'Shopping': ['vegan', 'urgent', 'bulk', 'sale', 'low sodium', 'organic'],
+  };
+
+  // Helper to merge user history with global defaults
+  List<String> _getMergedDictionary(String propertyType, List<String> globalDefaults) {
+    final Set<String> userHistory = {};
+    for (var item in _items) {
+      if (!item.isDeleted) {
+        if (propertyType == 'category' && item.category.isNotEmpty && item.category != 'Everything Else') userHistory.add(item.category);
+        if (propertyType == 'type' && item.type.isNotEmpty && item.type != 'Any') userHistory.add(item.type);
+        if (propertyType == 'tags') userHistory.addAll(item.attributeRows);
+      }
+    }
+
+    // Combine history first, then pad with global defaults, keeping unique values
+    final List<String> mergedList = userHistory.toList();
+    for (var defaultVal in globalDefaults) {
+      if (!mergedList.contains(defaultVal)) mergedList.add(defaultVal);
+    }
+    return mergedList.take(10).toList(); // Limit to top 10 badges for quick tapping
+  }
+
+  List<String> get activeCategoryDictionary => _getMergedDictionary('category', _globalCategories[currentListType] ?? []);
+  List<String> get activeStoreDictionary => _getMergedDictionary('type', _globalStores[currentListType] ?? []);
+  List<String> get activeTagDictionary => _getMergedDictionary('tags', _globalTags[currentListType] ?? []);
+
   ListProvider() {
     _buildDisplayList();
     runDataMigration(); // Fixes legacy 0.0 ties immediately on startup
@@ -268,7 +305,7 @@ class ListProvider extends ChangeNotifier {
 
   // --- 2. MULTI-DIMENSIONAL ADD ITEM ---
   // --- MULTI-DIMENSIONAL ADD ITEM (SECTION AWARE) ---
-  void addItem(String title, List<String> attributes, String type, String category) {
+  void addItem(String title, List<String> attributes, String type, String category, int newQty, String newUnit) {
     final safeType = type.trim().isEmpty ? "Any" : type.trim();
     final safeCategory = category.trim().isEmpty ? "Everything Else" : category.trim();
 
@@ -307,7 +344,7 @@ class ListProvider extends ChangeNotifier {
   }
 
   // --- MULTI-DIMENSIONAL EDIT ITEM (SECTION AWARE) ---
-  void editItem(String id, String newTitle, List<String> newAttributes, String type, String category) {
+  void editItem(String id, String newTitle, List<String> newAttributes, String type, String category, int newQty, String newUnit) {
     final index = _items.indexWhere((item) => item.id == id);
     if (index != -1) {
       final oldItem = _items[index];

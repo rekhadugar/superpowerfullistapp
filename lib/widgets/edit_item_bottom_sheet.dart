@@ -1,17 +1,18 @@
-// Location: lib/widgets/edit_item_bottom_sheet.dart
-
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../models/list_item.dart';
+import '../providers/list_provider.dart';
+
 import '../theme/app_theme.dart';
-import '../theme/app_constants.dart';
+import 'agile_chip_selector.dart';
 
 class EditItemBottomSheet extends StatefulWidget {
-  final ListItem item;
-  final Function(String newTitle, List<String> newAttributes, String newType, String newCategory) onSave;
+  final ListItem? item;
+  final Function(String title, List<String> attributes, String type, String category, int quantity, String unit) onSave;
 
   const EditItemBottomSheet({
     Key? key,
-    required this.item,
+    this.item,
     required this.onSave,
   }) : super(key: key);
 
@@ -21,180 +22,105 @@ class EditItemBottomSheet extends StatefulWidget {
 
 class _EditItemBottomSheetState extends State<EditItemBottomSheet> {
   late TextEditingController _titleController;
-  late TextEditingController _attributesController;
-  late TextEditingController _typeController;
-  late TextEditingController _categoryController;
+  late int _quantity;
+  late String _unit;
+  late String _selectedCategory;
+  late String _selectedStore;
+  late List<String> _selectedTags;
 
-  final FocusNode _titleFocus = FocusNode();
+  final List<String> _units = ['pcs', 'lbs', 'oz', 'gal', 'pk', 'box', 'bag'];
 
   @override
   void initState() {
     super.initState();
-    _titleController = TextEditingController(text: widget.item.title);
-    _attributesController = TextEditingController(text: widget.item.attributeRows.join(', '));
+    _titleController = TextEditingController(text: widget.item?.title ?? '');
+    _quantity = widget.item?.quantity ?? 1;
+    _unit = _units.contains(widget.item?.unit) ? (widget.item?.unit ?? 'pcs') : 'pcs';
 
-    // Initialize the new routing controllers, masking the default placeholders
-    _typeController = TextEditingController(
-        text: (widget.item.type == 'Any' || widget.item.type == 'Generic') ? '' : widget.item.type
-    );
-    _categoryController = TextEditingController(
-        text: (widget.item.category == 'Everything Else' || widget.item.category == 'Uncategorized') ? '' : widget.item.category
-    );
-
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _titleFocus.requestFocus();
-    });
+    _selectedCategory = widget.item?.category.isNotEmpty == true && widget.item!.category != 'Everything Else' ? widget.item!.category : '';
+    _selectedStore = widget.item?.type.isNotEmpty == true && widget.item!.type != 'Any' ? widget.item!.type : '';
+    _selectedTags = List.from(widget.item?.attributeRows ?? []);
   }
 
   @override
   void dispose() {
     _titleController.dispose();
-    _attributesController.dispose();
-    _typeController.dispose();
-    _categoryController.dispose();
-    _titleFocus.dispose();
     super.dispose();
-  }
-
-  void _handleSave() {
-    final newTitle = _titleController.text.trim();
-    if (newTitle.isEmpty) return;
-
-    final newAttributes = _attributesController.text
-        .split(',')
-        .map((e) => e.trim())
-        .where((e) => e.isNotEmpty)
-        .toList();
-
-    widget.onSave(
-        newTitle,
-        newAttributes,
-        _typeController.text.trim(),
-        _categoryController.text.trim()
-    );
-    Navigator.of(context).pop();
   }
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
+    // Fetch dynamic dictionaries from provider
+    final provider = context.read<ListProvider>();
+    final categoriesDict = provider.activeCategoryDictionary;
+    final storesDict = provider.activeStoreDictionary;
+    final tagsDict = provider.activeTagDictionary;
 
     return Container(
-      padding: EdgeInsets.only(
-        bottom: MediaQuery.of(context).viewInsets.bottom + 24.0,
-        left: AppConstants.horizontalPadding,
-        right: AppConstants.horizontalPadding,
-        top: 16.0,
-      ),
       decoration: BoxDecoration(
-        color: theme.scaffoldBackgroundColor,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(16.0)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.1),
-            blurRadius: 10,
-            offset: const Offset(0, -2),
-          )
-        ],
+        color: Theme.of(context).scaffoldBackgroundColor,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(24.0)),
+      ),
+      padding: EdgeInsets.only(
+        bottom: MediaQuery.of(context).viewInsets.bottom + 24.0, // Reactive padding for keyboard
+        top: 16.0,
+        left: 20.0,
+        right: 20.0,
       ),
       child: SingleChildScrollView(
+        // Swipe down to dismiss keyboard natively
+        keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
         child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Center(
               child: Container(
-                width: 40.0,
-                height: 4.0,
+                width: 40, height: 4,
                 margin: const EdgeInsets.only(bottom: 24.0),
-                decoration: BoxDecoration(
-                  color: theme.dividerColor,
-                  borderRadius: BorderRadius.circular(2.0),
-                ),
+                decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(2.0)),
               ),
             ),
 
-            Text(
-              widget.item.id.isEmpty ? 'NEW ITEM' : 'EDIT ITEM',
-              style: theme.textTheme.labelSmall?.copyWith(
-                fontWeight: FontWeight.bold,
-                letterSpacing: 0.8,
-                color: theme.textTheme.titleMedium?.color?.withOpacity(0.5),
-              ),
-            ),
-            const SizedBox(height: 12.0),
-
-            // Item Title TextField
             TextField(
               controller: _titleController,
-              focusNode: _titleFocus,
-              textInputAction: TextInputAction.next,
-              style: theme.textTheme.titleMedium?.copyWith(fontSize: 16.0, height: 1.25),
+              autofocus: widget.item?.id.isEmpty ?? true,
+              textCapitalization: TextCapitalization.words,
               decoration: InputDecoration(
-                hintText: 'Item name...',
-                border: InputBorder.none,
-                filled: true,
-                fillColor: theme.cardColor,
-                contentPadding: const EdgeInsets.all(16.0),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(8.0),
-                  borderSide: BorderSide(color: theme.dividerColor.withOpacity(0.5)),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(8.0),
-                  borderSide: BorderSide(color: AppColors.primaryAction, width: 2.0),
-                ),
+                hintText: 'Item Name',
+                filled: true, fillColor: Colors.white,
+                contentPadding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 16.0),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12.0), borderSide: BorderSide(color: AppColors.primaryAction, width: 1.5)),
+                enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12.0), borderSide: BorderSide(color: AppColors.primaryAction.withOpacity(0.5), width: 1.5)),
+                focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12.0), borderSide: const BorderSide(color: AppColors.primaryAction, width: 2.0)),
               ),
             ),
             const SizedBox(height: 16.0),
 
-            // Store & Category Row
             Row(
               children: [
-                Expanded(
-                  child: TextField(
-                    controller: _typeController,
-                    textInputAction: TextInputAction.next,
-                    style: theme.textTheme.labelSmall?.copyWith(fontSize: 14.0),
-                    decoration: InputDecoration(
-                      hintText: 'Store (e.g. Target)',
-                      border: InputBorder.none,
-                      filled: true,
-                      fillColor: theme.cardColor,
-                      contentPadding: const EdgeInsets.all(16.0),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8.0),
-                        borderSide: BorderSide(color: theme.dividerColor.withOpacity(0.5)),
-                      ),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8.0),
-                        borderSide: BorderSide(color: AppColors.primaryAction, width: 2.0),
-                      ),
-                      prefixIcon: Icon(Icons.storefront, size: 18.0, color: theme.dividerColor),
-                    ),
+                Container(
+                  decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12.0), border: Border.all(color: Colors.grey.shade300)),
+                  child: Row(
+                    children: [
+                      IconButton(icon: const Icon(Icons.remove), onPressed: () => setState(() => _quantity = (_quantity - 1).clamp(1, 99))),
+                      SizedBox(width: 24, child: Text('$_quantity', textAlign: TextAlign.center, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold))),
+                      IconButton(icon: const Icon(Icons.add), onPressed: () => setState(() => _quantity = (_quantity + 1).clamp(1, 99))),
+                    ],
                   ),
                 ),
-                const SizedBox(width: 12.0),
+                const SizedBox(width: 16.0),
                 Expanded(
-                  child: TextField(
-                    controller: _categoryController,
-                    textInputAction: TextInputAction.next,
-                    style: theme.textTheme.labelSmall?.copyWith(fontSize: 14.0),
-                    decoration: InputDecoration(
-                      hintText: 'Aisle (e.g. Dairy)',
-                      border: InputBorder.none,
-                      filled: true,
-                      fillColor: theme.cardColor,
-                      contentPadding: const EdgeInsets.all(16.0),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8.0),
-                        borderSide: BorderSide(color: theme.dividerColor.withOpacity(0.5)),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                    decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12.0), border: Border.all(color: Colors.grey.shade300)),
+                    child: DropdownButtonHideUnderline(
+                      child: DropdownButton<String>(
+                        value: _unit,
+                        isExpanded: true,
+                        items: _units.map((u) => DropdownMenuItem(value: u, child: Text(u, style: const TextStyle(fontWeight: FontWeight.bold)))).toList(),
+                        onChanged: (val) { if (val != null) setState(() => _unit = val); },
                       ),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8.0),
-                        borderSide: BorderSide(color: AppColors.primaryAction, width: 2.0),
-                      ),
-                      prefixIcon: Icon(Icons.category_outlined, size: 18.0, color: theme.dividerColor),
                     ),
                   ),
                 ),
@@ -202,64 +128,53 @@ class _EditItemBottomSheetState extends State<EditItemBottomSheet> {
             ),
             const SizedBox(height: 16.0),
 
-            // Attributes TextField
-            TextField(
-              controller: _attributesController,
-              textInputAction: TextInputAction.done,
-              onSubmitted: (_) => _handleSave(),
-              style: theme.textTheme.labelSmall?.copyWith(fontSize: 14.0),
-              decoration: InputDecoration(
-                hintText: 'Tags (comma separated)...',
-                border: InputBorder.none,
-                filled: true,
-                fillColor: theme.cardColor,
-                contentPadding: const EdgeInsets.all(16.0),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(8.0),
-                  borderSide: BorderSide(color: theme.dividerColor.withOpacity(0.5)),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(8.0),
-                  borderSide: BorderSide(color: AppColors.primaryAction, width: 2.0),
-                ),
-                prefixIcon: Icon(Icons.sell_outlined, size: 18.0, color: theme.dividerColor),
-              ),
+            AgileChipSelector(
+              title: 'Category',
+              dictionary: categoriesDict,
+              initialSelections: _selectedCategory.isNotEmpty ? [_selectedCategory] : [],
+              isMultiSelect: false,
+              onSelectionChanged: (vals) => _selectedCategory = vals.isNotEmpty ? vals.first : '',
+            ),
+            const SizedBox(height: 16.0),
+
+            AgileChipSelector(
+              title: 'Store',
+              dictionary: storesDict,
+              initialSelections: _selectedStore.isNotEmpty ? [_selectedStore] : [],
+              isMultiSelect: false,
+              onSelectionChanged: (vals) => _selectedStore = vals.isNotEmpty ? vals.first : '',
+            ),
+            const SizedBox(height: 16.0),
+
+            AgileChipSelector(
+              title: 'Tags',
+              dictionary: tagsDict,
+              initialSelections: _selectedTags,
+              isMultiSelect: true,
+              onSelectionChanged: (vals) => _selectedTags = vals,
             ),
             const SizedBox(height: 24.0),
 
-            // Action Buttons
-            Row(
-              children: [
-                Expanded(
-                  child: TextButton(
-                    onPressed: () => Navigator.of(context).pop(),
-                    style: TextButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 16.0),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8.0)),
-                    ),
-                    child: Text(
-                      'Cancel',
-                      style: TextStyle(color: theme.textTheme.titleMedium?.color, fontWeight: FontWeight.w600),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 12.0),
-                Expanded(
-                  child: ElevatedButton(
-                    onPressed: _handleSave,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.primaryAction,
-                      padding: const EdgeInsets.symmetric(vertical: 16.0),
-                      elevation: 0,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8.0)),
-                    ),
-                    child: const Text(
-                      'Save Changes',
-                      style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
-                    ),
-                  ),
-                ),
-              ],
+            ElevatedButton(
+              onPressed: () {
+                if (_titleController.text.trim().isEmpty) return;
+                widget.onSave(
+                  _titleController.text.trim(),
+                  _selectedTags,
+                  _selectedStore,
+                  _selectedCategory,
+                  _quantity, // Passed from state
+                  _unit,     // Passed from state
+                );
+                Navigator.of(context).pop();
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primaryAction,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 16.0),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12.0)),
+              ),
+              child: const Text('Save Item', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
             ),
           ],
         ),

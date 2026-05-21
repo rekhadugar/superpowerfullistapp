@@ -247,8 +247,10 @@ class _MainScreenState extends State<MainScreen> {
                             backgroundColor: Colors.transparent,
                             builder: (context) => EditItemBottomSheet(
                               item: item,
-                              onSave: (newTitle, newAttributes, newType, newCategory) {
-                                context.read<ListProvider>().editItem(item.id, newTitle, newAttributes, newType, newCategory);
+                              onSave: (newTitle, newAttributes, newType, newCategory, newQty, newUnit) { // Added newQty, newUnit
+                                context.read<ListProvider>().editItem(
+                                    item.id, newTitle, newAttributes, newType, newCategory, newQty, newUnit
+                                );
                               },
                             ),
                           );
@@ -294,8 +296,10 @@ class _MainScreenState extends State<MainScreen> {
                       backgroundColor: Colors.transparent,
                       builder: (context) => EditItemBottomSheet(
                         item: ListItem(id: '', title: ''),
-                        onSave: (newTitle, newAttributes, newType, newCategory) {
-                          context.read<ListProvider>().addItem(newTitle, newAttributes, newType, newCategory);
+                        onSave: (newTitle, newAttributes, newType, newCategory, newQty, newUnit) { // Added newQty, newUnit
+                          context.read<ListProvider>().addItem(
+                              newTitle, newAttributes, newType, newCategory, newQty, newUnit
+                          );
                         },
                       ),
                     );

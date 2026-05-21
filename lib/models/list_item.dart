@@ -14,6 +14,7 @@ class ListItem {
 
   // NEW: Item Quantity
   final int quantity;
+  final String unit; // Add this line
 
   // --- Layout Geometry ---
   final int nWrap;
@@ -34,6 +35,7 @@ class ListItem {
     this.isCompleted = false,
     this.isDeleted = false,
     this.quantity = 1, // Default to 1
+    this.unit = 'pcs', // Add this
     this.nWrap = 0,
     this.nTagRows = 0,
     this.typeOrder = 0.0,
@@ -51,6 +53,7 @@ class ListItem {
     bool? isCompleted,
     bool? isDeleted,
     int? quantity,
+    String? unit,
     int? nWrap,
     int? nTagRows,
     double? typeOrder,
@@ -67,6 +70,7 @@ class ListItem {
       isCompleted: isCompleted ?? this.isCompleted,
       isDeleted: isDeleted ?? this.isDeleted,
       quantity: quantity ?? this.quantity,
+      unit: unit ?? this.unit,
       nWrap: nWrap ?? this.nWrap,
       nTagRows: nTagRows ?? this.nTagRows,
       typeOrder: typeOrder ?? this.typeOrder,
