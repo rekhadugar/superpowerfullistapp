@@ -153,14 +153,40 @@ class _MainScreenState extends State<MainScreen> {
                 );
               },
             ),
-            IconButton(icon: Icon(Icons.more_vert_rounded, color: theme.textTheme.titleMedium?.color), onPressed: () {}),
+            // THE FIX: Add explicit Multi-Select trigger to the options menu
+            PopupMenuButton<String>(
+              icon: Icon(Icons.more_vert_rounded, color: theme.textTheme.titleMedium?.color),
+              onSelected: (value) {
+                if (value == 'select_multiple') {
+                  context.read<ListProvider>().toggleMultiSelectMode();
+                }
+              },
+              itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
+                const PopupMenuItem<String>(
+                  value: 'select_multiple',
+                  child: Text('Select Multiple Items'),
+                ),
+              ],
+            ),
           ],
         ),
         body: displayList.isEmpty
             ? Center(child: Text('All caught up!', style: theme.textTheme.bodyMedium))
-            : NotificationListener<ScrollStartNotification>(
-          onNotification: (_) {
-            if (listProvider.openSwipeItemId.value != null) listProvider.openSwipeItemId.value = null;
+            : NotificationListener<ScrollNotification>(
+          onNotification: (ScrollNotification notification) {
+            // Dismiss swipe menus
+            if (listProvider.openSwipeItemId.value != null) {
+              listProvider.openSwipeItemId.value = null;
+            }
+
+            // THE FIX: Scroll-to-Dismiss Logic
+            // If the user physically drags the main list, instantly drop the edit sheet
+            if (notification is ScrollUpdateNotification && notification.dragDetails != null) {
+              if (!listProvider.isMultiSelectMode && listProvider.selectedItemIds.isNotEmpty) {
+                listProvider.clearSelection();
+                FocusManager.instance.primaryFocus?.unfocus(); // Drops the keyboard
+              }
+            }
             return false;
           },
           child: Stack(
@@ -204,8 +230,12 @@ class _MainScreenState extends State<MainScreen> {
                         if (listProvider.openSwipeItemId.value != null) {
                           listProvider.openSwipeItemId.value = null;
                         } else {
-                          // Clicking a card toggles it and keeps the sheet in Glance/Batch mode
-                          context.read<ListProvider>().toggleSelection(item.id);
+                          // THE FIX: Route taps based on the active mode
+                          if (listProvider.isMultiSelectMode) {
+                            context.read<ListProvider>().toggleSelection(item.id);
+                          } else {
+                            context.read<ListProvider>().selectSingleItem(item.id);
+                          }
                         }
                       },
                     );

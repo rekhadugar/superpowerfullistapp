@@ -177,12 +177,11 @@ class ListProvider extends ChangeNotifier {
       final item = _items.firstWhere((element) => element.id == id);
       _draftQuantities[id] = item.quantity;
     }
-
-    // FIX: Any direct tap on a card resets the sheet to Glance/Batch view!
     _isFullEditRequested = false;
-
     notifyListeners();
   }
+
+
 
   int getDraftQuantity(String id) => _draftQuantities[id] ?? 1;
 
@@ -198,6 +197,8 @@ class ListProvider extends ChangeNotifier {
   void clearSelection() {
     _selectedItemIds.clear();
     _draftQuantities.clear();
+    _isFullEditRequested = false;
+    _isMultiSelectMode = false;
     notifyListeners();
   }
 
@@ -347,15 +348,40 @@ class ListProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  // --- FLUID SHEET STATE ---
+  // --- FLUID SHEET & SELECTION STATE ---
   bool _isFullEditRequested = false;
   bool get isFullEditRequested => _isFullEditRequested;
+
+  bool _isMultiSelectMode = false;
+  bool get isMultiSelectMode => _isMultiSelectMode;
 
   void setFullEditRequest(bool requested) {
     if (_isFullEditRequested != requested) {
       _isFullEditRequested = requested;
       notifyListeners();
     }
+  }
+
+  void toggleMultiSelectMode() {
+    _isMultiSelectMode = !_isMultiSelectMode;
+    if (!_isMultiSelectMode) {
+      clearSelection();
+    }
+    notifyListeners();
+  }
+
+  // NEW: Exclusive Single Selection
+  void selectSingleItem(String id) {
+    _selectedItemIds.clear();
+    _draftQuantities.clear();
+    _selectedItemIds.add(id);
+
+    final item = _items.firstWhere((element) => element.id == id);
+    _draftQuantities[id] = item.quantity;
+
+    _isFullEditRequested = false;
+    _isMultiSelectMode = false; // Ensure we aren't stuck in batch mode
+    notifyListeners();
   }
 
 

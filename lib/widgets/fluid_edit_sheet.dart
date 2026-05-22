@@ -92,7 +92,8 @@ class _FluidEditSheetState extends State<FluidEditSheet> {
     _syncDraftWithProvider(provider);
 
     final bool isVisible = provider.selectedItemIds.isNotEmpty;
-    final bool isMulti = provider.selectedItemIds.length > 1;
+    // THE FIX: Force Batch View if the user enters explicit Multi-Select mode
+    final bool isMulti = provider.isMultiSelectMode || provider.selectedItemIds.length > 1;
     final bool isFull = provider.isFullEditRequested;
 
     final double screenHeight = MediaQuery.of(context).size.height;
