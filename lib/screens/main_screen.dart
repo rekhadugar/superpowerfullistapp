@@ -116,6 +116,7 @@ class _MainScreenState extends State<MainScreen> {
       },
       behavior: HitTestBehavior.translucent,
       child: Scaffold(
+        resizeToAvoidBottomInset: false, // <--- ADD THIS EXACT LINE HERE
         backgroundColor: theme.scaffoldBackgroundColor,
         appBar: AppBar(
           leadingWidth: AppConstants.horizontalPadding + AppConstants.leadingBlockWidth + AppConstants.interElementGap,

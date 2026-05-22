@@ -92,19 +92,20 @@ class _FluidEditSheetState extends State<FluidEditSheet> {
     _syncDraftWithProvider(provider);
 
     final bool isVisible = provider.selectedItemIds.isNotEmpty;
-    // THE FIX: Force Batch View if the user enters explicit Multi-Select mode
     final bool isMulti = provider.isMultiSelectMode || provider.selectedItemIds.length > 1;
     final bool isFull = provider.isFullEditRequested;
 
     final double screenHeight = MediaQuery.of(context).size.height;
+    final double keyboardHeight = MediaQuery.of(context).viewInsets.bottom;
+    final double safeBottom = MediaQuery.of(context).padding.bottom;
 
-    // Base structural height prevents RenderFlex crushing during dismissal
-    double sheetHeight = 280.0 + MediaQuery.of(context).padding.bottom;
+    // THE FIX: Fixed proportions. The sheet size is now independent of the keyboard!
+    double sheetHeight = 280.0 + safeBottom;
 
     if (isMulti) {
-      sheetHeight = 180.0 + MediaQuery.of(context).padding.bottom;
+      sheetHeight = 200.0 + safeBottom;
     } else if (isFull) {
-      sheetHeight = screenHeight * 0.70;
+      sheetHeight = screenHeight * 0.85; // Fixed at 85% of physical screen
     }
 
     return AnimatedPositioned(
@@ -122,13 +123,12 @@ class _FluidEditSheetState extends State<FluidEditSheet> {
         ),
         child: Column(
           children: [
-            // TOP BAR: Cancel | Drag Handle | Save
+            // TOP BAR: Anchored permanently to the top of the container
             GestureDetector(
-              behavior: HitTestBehavior.opaque, // MASSIVE HITBOX for easy swiping
+              behavior: HitTestBehavior.opaque,
               onVerticalDragEnd: (details) {
                 final velocity = details.primaryVelocity ?? 0.0;
-
-                if (velocity > 200) { // Swift swipe down
+                if (velocity > 200) {
                   if (isFull) {
                     provider.setFullEditRequest(false);
                     _titleFocus.unfocus();
@@ -136,7 +136,7 @@ class _FluidEditSheetState extends State<FluidEditSheet> {
                     _titleFocus.unfocus();
                     provider.clearSelection();
                   }
-                } else if (velocity < -200 && !isMulti) { // Swift swipe up
+                } else if (velocity < -200 && !isMulti) {
                   provider.setFullEditRequest(true);
                 }
               },
@@ -173,7 +173,8 @@ class _FluidEditSheetState extends State<FluidEditSheet> {
               child: SingleChildScrollView(
                 physics: isFull ? const BouncingScrollPhysics() : const NeverScrollableScrollPhysics(),
                 keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-                padding: const EdgeInsets.only(left: 20.0, right: 20.0, bottom: 20.0),
+                // THE FIX: Push the inner contents up by the keyboard height
+                padding: EdgeInsets.only(left: 20.0, right: 20.0, bottom: keyboardHeight + 20.0),
                 child: isMulti
                     ? _buildBatchView(provider)
                     : _buildSingleEditView(provider, isFull),
