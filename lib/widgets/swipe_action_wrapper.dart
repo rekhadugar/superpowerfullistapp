@@ -10,7 +10,7 @@ class SwipeActionWrapper extends StatefulWidget {
   final String itemId;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
-  final VoidCallback onCheckout; // NEW: Action for the right swipe
+  final VoidCallback onCheckout;
   final bool requireConfirm;
 
   const SwipeActionWrapper({
@@ -36,18 +36,13 @@ class _SwipeActionWrapperState extends State<SwipeActionWrapper> with TickerProv
   double _rawDragDistance = 0.0;
   double _currentVisualOffset = 0.0;
 
-  double _dragStartPosition = 0.0;
-  bool _isExecutingAction = false; // Renamed from _isDeleting to support both sides
+  bool _isExecutingAction = false;
   bool _isConfirmingDelete = false;
 
   ListProvider? _provider;
 
   double get _menuSnapWidth => MediaQuery.of(context).size.width * AppPhysics.menuWidth;
   double get _checkoutThreshold => MediaQuery.of(context).size.width * AppPhysics.checkoutThreshold;
-
-  double get _activeSwallowSpeed => (_dragStartPosition.abs() < 1.0)
-      ? AppPhysics.continuousSwallowSpeed
-      : AppPhysics.swallowSpeed;
 
   @override
   void initState() {
@@ -109,7 +104,6 @@ class _SwipeActionWrapperState extends State<SwipeActionWrapper> with TickerProv
       _confirmController.reverse();
     }
 
-    _dragStartPosition = _currentVisualOffset;
     _rawDragDistance = _currentVisualOffset;
   }
 
@@ -150,7 +144,6 @@ class _SwipeActionWrapperState extends State<SwipeActionWrapper> with TickerProv
     final double screenWidth = MediaQuery.of(context).size.width;
 
     // PROJECT THE MOMENTUM
-    // Calculates exactly where the card would naturally stop given current velocity
     final double projectedOffset = _currentVisualOffset + (velocity * AppPhysics.momentumMultiplier);
 
     // === RIGHT SWIPE (Checkout) ===
@@ -158,10 +151,8 @@ class _SwipeActionWrapperState extends State<SwipeActionWrapper> with TickerProv
       final double checkoutTriggerPoint = screenWidth * AppPhysics.checkoutThreshold;
 
       if (projectedOffset >= checkoutTriggerPoint) {
-        // Momentum carries it past threshold -> Lose stiffness and glide off screen
         _glideOffScreen(screenWidth, velocity, () => widget.onCheckout());
       } else {
-        // Not enough momentum -> Spring tightly back to 0
         _snapTo(0.0, velocity);
       }
       return;
@@ -173,19 +164,15 @@ class _SwipeActionWrapperState extends State<SwipeActionWrapper> with TickerProv
 
     if (projectedOffset <= deleteTriggerPoint) {
       if (widget.requireConfirm) {
-        // Ask for confirmation (Snap tightly to menu)
         setState(() => _isConfirmingDelete = true);
         _confirmController.forward();
         _snapTo(-_menuSnapWidth, velocity);
       } else {
-        // Auto Delete -> Lose stiffness and glide off screen
         _glideOffScreen(-screenWidth, velocity, () => widget.onDelete());
       }
     } else if (projectedOffset <= menuTriggerPoint) {
-      // Snap tightly to open menu
       _snapTo(-_menuSnapWidth, velocity);
     } else {
-      // Snap tightly back to zero
       _snapTo(0.0, velocity);
     }
   }
@@ -211,8 +198,6 @@ class _SwipeActionWrapperState extends State<SwipeActionWrapper> with TickerProv
     _offsetController.animateWith(simulation);
   }
 
-  // LOOSE SPRING (Follow-Through Momentum)
-  // LOOSE SPRING (Follow-Through Momentum) -> REPLACED WITH HIGH-SPEED EXIT
   void _glideOffScreen(double targetOffset, double velocity, VoidCallback onComplete) {
     setState(() => _isExecutingAction = true);
 
@@ -221,16 +206,12 @@ class _SwipeActionWrapperState extends State<SwipeActionWrapper> with TickerProv
       _confirmController.reverse();
     }
 
-    // FIX: We completely drop the SpringSimulation for exits.
-    // Springs have a "settling tail" that causes the delay.
-    // Instead, we force the card off-screen on a strict 150ms deadline.
     _offsetController.animateTo(
       targetOffset,
-      duration: const Duration(milliseconds: 150), // Guaranteed to finish and fire the action instantly
+      duration: const Duration(milliseconds: 150),
       curve: Curves.easeOutSine,
     ).then((_) {
       onComplete();
-
       _offsetController.value = 0.0;
       if (mounted) {
         setState(() => _isExecutingAction = false);
@@ -240,6 +221,7 @@ class _SwipeActionWrapperState extends State<SwipeActionWrapper> with TickerProv
 
   @override
   Widget build(BuildContext context) {
+    final double screenWidth = MediaQuery.of(context).size.width;
     final double exposedWidth = _currentVisualOffset.abs();
     final bool isRightSwipe = _currentVisualOffset > 0;
 
@@ -248,18 +230,27 @@ class _SwipeActionWrapperState extends State<SwipeActionWrapper> with TickerProv
 
     double baseDeleteWidth = 0.0;
     if (_isExecutingAction && !isRightSwipe) {
-      baseDeleteWidth = exposedWidth; // Left wipe execution locks Red box to full width
+      baseDeleteWidth = exposedWidth;
     } else if (exposedWidth <= _menuSnapWidth) {
       baseDeleteWidth = exposedWidth * AppPhysics.deleteSlotRatio;
     } else {
-      final double extraVisualDrag = exposedWidth - _menuSnapWidth;
-      baseDeleteWidth = deleteSlotWidth + (extraVisualDrag * _activeSwallowSpeed);
-    }
-    baseDeleteWidth = baseDeleteWidth.clamp(0.0, exposedWidth);
+      // THE FIX: Smart Auto-Calculating Swallow Speed
+      final double executeThresholdPixels = screenWidth * AppPhysics.swipeExecuteThreshold;
+      final double distanceToThreshold = executeThresholdPixels - _menuSnapWidth;
 
+      // Calculate the geometric growth multiplier so the box perfectly fills the screen exactly at the threshold
+      final double dynamicSwallowSpeed = distanceToThreshold > 0
+          ? ((executeThresholdPixels - deleteSlotWidth) / distanceToThreshold)
+          : 1.0;
+
+      final double extraVisualDrag = exposedWidth - _menuSnapWidth;
+      baseDeleteWidth = deleteSlotWidth + (extraVisualDrag * dynamicSwallowSpeed);
+    }
+
+    // Safety clamp to ensure it never exceeds the container
+    baseDeleteWidth = baseDeleteWidth.clamp(0.0, exposedWidth);
     final double deleteWidth = baseDeleteWidth + ((exposedWidth - baseDeleteWidth) * _confirmAnimation.value);
 
-    // Visual feedback logic for Right Swipe readiness
     final bool isCheckoutReady = _rawDragDistance >= _checkoutThreshold;
 
     return Stack(
@@ -269,10 +260,6 @@ class _SwipeActionWrapperState extends State<SwipeActionWrapper> with TickerProv
             margin: const EdgeInsets.only(bottom: AppConstants.cardMargin),
             child: ClipRect(
               child: isRightSwipe
-
-              // ==========================================
-              // RIGHT SWIPE BACKGROUND (Green Checkout)
-              // ==========================================
                   ? Align(
                 alignment: Alignment.centerLeft,
                 child: SizedBox(
@@ -310,10 +297,6 @@ class _SwipeActionWrapperState extends State<SwipeActionWrapper> with TickerProv
                   ),
                 ),
               )
-
-              // ==========================================
-              // LEFT SWIPE BACKGROUND (Blue/Red Menu)
-              // ==========================================
                   : Align(
                 alignment: Alignment.centerRight,
                 child: SizedBox(

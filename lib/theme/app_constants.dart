@@ -37,30 +37,25 @@ class AppConstants {
 }
 
 class AppPhysics {
-  // 1. Layout
-  static const double menuWidth = 0.45;
-  static const double deleteSlotRatio = 0.30;
-  static const double editSlotRatio = 0.70;
-  static const double checkoutThreshold = 0.45;
-  static const double swipeExecuteThreshold = 0.50; // NEW: 65% of screen required to execute left swipe
+  // 1. Core Layout & Thresholds (TWEAK THESE)
+  static const double menuWidth = 0.45;              // How far the menu opens initially
+  static const double swipeExecuteThreshold = 0.60;  // Distance required to trigger left-swipe Delete
+  static const double checkoutThreshold = 0.45;      // Distance required to trigger right-swipe Checkout
 
-  // 2. Friction & Resistance
-  static const double frictionYield = 0.70;
+  static const double deleteSlotRatio = 0.30;        // Initial size of the Red box
+  static const double editSlotRatio = 0.70;          // Initial size of the Blue box
 
-  // 3. Momentum Prediction (Replaces rigid Flick limits)
-  static const double momentumMultiplier = 0.05; // Translates velocity into projected distance
+  // 2. Friction & Resistance (TWEAK THESE)
+  static const double frictionYield = 0.70;          // Rubber-banding when dragged past thresholds (1.0 = slippery, 0.1 = stiff)
+  static const double momentumMultiplier = 0.05;     // Translates flick velocity into projected distance
 
-  // 4. Elastic Spring Physics (For snapping back or opening menu)
+  // 3. Elastic Spring Physics (For snapping back or opening menu)
   static const double springMass = 1.0;
   static const double springStiffness = 400.0;
   static const double springDamping = 28.0;
 
-  // 5. Visuals
-  static const double swallowSpeed = 1.6;
-  static const double continuousSwallowSpeed = 4.3;
-
-  //6. Glide Physics
-  static const double glideStiffness = 120.0; // Increased from 20 to make it exit much faster
+  // 4. Glide Physics (For exiting the screen)
+  static const double glideStiffness = 120.0;
   static const double glideDamping = 20.0;
 }
 
