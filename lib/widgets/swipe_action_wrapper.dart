@@ -382,7 +382,7 @@ class _SwipeActionWrapperState extends State<SwipeActionWrapper> with TickerProv
                                         opacity: _confirmAnimation.value.clamp(0.0, 1.0),
                                         child: const Center(
                                           child: Text(
-                                            'Confirm Delete',
+                                            'Tap To Delete',
                                             style: TextStyle(
                                               color: Colors.white,
                                               fontWeight: FontWeight.w600,

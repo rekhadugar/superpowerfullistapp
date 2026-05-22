@@ -8,6 +8,7 @@ import '../widgets/fluid_edit_sheet.dart';
 import '../widgets/list_item_card.dart';
 import '../theme/app_theme.dart';
 import '../theme/app_constants.dart';
+import '../widgets/main_options_sheet.dart';
 import '../widgets/section_header.dart';
 import '../widgets/swipe_action_wrapper.dart';
 import '../models/list_item.dart';
@@ -169,34 +170,16 @@ class _MainScreenState extends State<MainScreen> {
             fontWeight: FontWeight.w700,
           ),
           actions: [
-            IconButton(icon: Icon(Icons.unfold_more_rounded, color: theme.textTheme.titleMedium?.color), onPressed: () {}),
-            Consumer<ListProvider>(
-              builder: (context, provider, child) {
-                return PopupMenuButton<SortMode>(
-                  icon: Icon(Icons.sort_rounded, color: theme.textTheme.titleMedium?.color),
-                  onSelected: (SortMode mode) => provider.setSortMode(mode),
-                  itemBuilder: (BuildContext context) => <PopupMenuEntry<SortMode>>[
-                    const PopupMenuItem<SortMode>(value: SortMode.categories, child: Text('Group by Aisle')),
-                    const PopupMenuItem<SortMode>(value: SortMode.types, child: Text('Group by Store')),
-                    const PopupMenuItem<SortMode>(value: SortMode.az, child: Text('Alphabetical (A-Z)')),
-                    const PopupMenuItem<SortMode>(value: SortMode.customFlat, child: Text('Custom Order (Flat)')),
-                  ],
+            IconButton(
+              icon: Icon(Icons.more_vert_rounded, color: theme.textTheme.titleMedium?.color),
+              onPressed: () {
+                showModalBottomSheet(
+                  context: context,
+                  isScrollControlled: true,
+                  backgroundColor: Colors.transparent,
+                  builder: (ctx) => const MainOptionsSheet(),
                 );
               },
-            ),
-            PopupMenuButton<String>(
-              icon: Icon(Icons.more_vert_rounded, color: theme.textTheme.titleMedium?.color),
-              onSelected: (value) {
-                if (value == 'select_multiple') {
-                  context.read<ListProvider>().toggleMultiSelectMode();
-                }
-              },
-              itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
-                const PopupMenuItem<String>(
-                  value: 'select_multiple',
-                  child: Text('Select Multiple Items'),
-                ),
-              ],
             ),
           ],
         ),

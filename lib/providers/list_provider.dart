@@ -324,6 +324,14 @@ class ListProvider extends ChangeNotifier {
   bool _isMultiSelectMode = false;
   bool get isMultiSelectMode => _isMultiSelectMode;
 
+  bool _isCompactView = false;
+  bool get isCompactView => _isCompactView;
+
+  void toggleCompactView() {
+    _isCompactView = !_isCompactView;
+    notifyListeners();
+  }
+
   void setFullEditRequest(bool requested) {
     if (_isFullEditRequested != requested) {
       _isFullEditRequested = requested;
@@ -353,6 +361,36 @@ class ListProvider extends ChangeNotifier {
   }
 
   // --- BATCH ACTIONS ---
+  void checkAllActiveItems() {
+    bool changed = false;
+    for (int i = 0; i < _items.length; i++) {
+      if (!_items[i].isDeleted && !_items[i].isCompleted) {
+        _items[i] = _items[i].copyWith(isCompleted: true);
+        changed = true;
+      }
+    }
+    if (changed) {
+      _buildDisplayList();
+      _saveItemsToStorage();
+      notifyListeners();
+    }
+  }
+
+  void deleteCompletedItems() {
+    bool changed = false;
+    for (int i = 0; i < _items.length; i++) {
+      if (_items[i].isCompleted && !_items[i].isDeleted) {
+        _items[i] = _items[i].copyWith(isDeleted: true);
+        changed = true;
+      }
+    }
+    if (changed) {
+      _buildDisplayList();
+      _saveItemsToStorage();
+      notifyListeners();
+    }
+  }
+
   List<String> checkSelectedItems() {
     final checkedIds = List<String>.from(_selectedItemIds);
     for (String id in checkedIds) {
