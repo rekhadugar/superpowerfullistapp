@@ -6,9 +6,13 @@ import '../models/list_item.dart';
 import '../theme/app_constants.dart';
 import '../engine/sticky_header_engine.dart';
 import '../engine/sort_mode_engine.dart';
+import 'dart:convert';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class ListProvider extends ChangeNotifier {
+  String? _currentListId; // Tracks the active query scope
   double _viewportWidth = 0.0;
+  double _textScaleFactor = 1.0; // NEW: Tracks current text scale
 
   // --- SORTING STATE & PREFERENCES ---
   SortMode _currentSortMode = SortMode.categories;
@@ -16,69 +20,8 @@ class ListProvider extends ChangeNotifier {
   List<String> preferredTypeOrder = [];
   List<String> preferredCategoryOrder = [];
 
-  final List<ListItem> _items = [
-    // --- Costco (Bulk & Groceries) ---
-    ListItem(id: 'c1', title: 'Almond Milk (3-Pack)', type: 'Costco', category: 'Dairy', typeOrder: 1.1, categoryOrder: 1.5, globalCustomOrder: 45.0),
-    ListItem(id: 'c2', title: 'Avocados (Bag)', type: 'Costco', category: 'Produce', typeOrder: 1.2, categoryOrder: 3.1, globalCustomOrder: 12.0),
-    ListItem(id: 'c3', title: 'Croissants (12-Count)', type: 'Costco', category: 'Bakery', typeOrder: 1.3, categoryOrder: 2.2, globalCustomOrder: 8.5),
-    ListItem(id: 'c4', title: 'Frozen Chicken Breasts', type: 'Costco', category: 'Frozen', typeOrder: 1.4, categoryOrder: 4.0, globalCustomOrder: 22.1),
-    ListItem(id: 'c5', title: 'Kirkland Paper Towels', type: 'Costco', category: 'Household', typeOrder: 1.5, categoryOrder: 5.5, globalCustomOrder: 1.0),
-    ListItem(id: 'c6', title: 'Mixed Nuts', type: 'Costco', category: 'Pantry', typeOrder: 1.6, categoryOrder: 6.2, globalCustomOrder: 15.0),
-    ListItem(id: 'c7', title: 'Organic Spinach', type: 'Costco', category: 'Produce', typeOrder: 1.7, categoryOrder: 3.2, globalCustomOrder: 13.0),
-    ListItem(id: 'c8', title: 'Protein Bars', type: 'Costco', category: 'Snacks', typeOrder: 1.8, categoryOrder: 7.1, globalCustomOrder: 16.5),
-    ListItem(id: 'c9', title: 'Rotisserie Chicken', type: 'Costco', category: 'Deli', typeOrder: 1.9, categoryOrder: 8.0, globalCustomOrder: 3.0),
-    ListItem(id: 'c10', title: 'Toilet Paper', type: 'Costco', category: 'Household', typeOrder: 2.0, categoryOrder: 5.6, globalCustomOrder: 2.0),
-
-    // --- Target (General, Electronics, Home) ---
-    ListItem(id: 't1', title: 'AA Batteries (24-Pack)', type: 'Target', category: 'Electronics', typeOrder: 3.1, categoryOrder: 1.1, globalCustomOrder: 25.0),
-    ListItem(id: 't2', title: 'Baby Wipes', type: 'Target', category: 'Baby', typeOrder: 3.2, categoryOrder: 2.1, globalCustomOrder: 5.0),
-    ListItem(id: 't3', title: 'Bath Towels', type: 'Target', category: 'Home', typeOrder: 3.3, categoryOrder: 3.1, globalCustomOrder: 33.0),
-    ListItem(id: 't4', title: 'Coffee Beans', type: 'Target', category: 'Pantry', typeOrder: 3.4, categoryOrder: 6.3, globalCustomOrder: 14.0),
-    ListItem(id: 't5', title: 'Desk Lamp', type: 'Target', category: 'Home', typeOrder: 3.5, categoryOrder: 3.2, globalCustomOrder: 35.0),
-    ListItem(id: 't6', title: 'Diapers (Size 4)', type: 'Target', category: 'Baby', typeOrder: 3.6, categoryOrder: 2.2, globalCustomOrder: 4.0),
-    ListItem(id: 't7', title: 'Gift Wrapping Paper', type: 'Target', category: 'Seasonal', typeOrder: 3.7, categoryOrder: 9.1, globalCustomOrder: 42.0),
-    ListItem(id: 't8', title: 'Hand Soap', type: 'Target', category: 'Personal Care', typeOrder: 3.8, categoryOrder: 10.1, globalCustomOrder: 18.0),
-    ListItem(id: 't9', title: 'Nintendo Switch Controller', type: 'Target', category: 'Electronics', typeOrder: 3.9, categoryOrder: 1.2, globalCustomOrder: 50.0),
-    ListItem(id: 't10', title: 'Toothpaste', type: 'Target', category: 'Personal Care', typeOrder: 4.0, categoryOrder: 10.2, globalCustomOrder: 19.0),
-
-    // --- Home Depot (Hardware & DIY) ---
-    ListItem(id: 'hd1', title: 'Air Filters (20x20x1)', type: 'Home Depot', category: 'Hardware', typeOrder: 5.1, categoryOrder: 1.1, globalCustomOrder: 28.0),
-    ListItem(id: 'hd2', title: 'Blue Painter’s Tape', type: 'Home Depot', category: 'Paint', typeOrder: 5.2, categoryOrder: 2.1, globalCustomOrder: 30.0),
-    ListItem(id: 'hd3', title: 'Drywall Anchors', type: 'Home Depot', category: 'Hardware', typeOrder: 5.3, categoryOrder: 1.2, globalCustomOrder: 29.0),
-    ListItem(id: 'hd4', title: 'Eggshell White Paint (1 Gal)', type: 'Home Depot', category: 'Paint', typeOrder: 5.4, categoryOrder: 2.2, globalCustomOrder: 31.0),
-    ListItem(id: 'hd5', title: 'Extension Cord (50ft)', type: 'Home Depot', category: 'Electrical', typeOrder: 5.5, categoryOrder: 3.1, globalCustomOrder: 32.0),
-    ListItem(id: 'hd6', title: 'Furnace Filter', type: 'Home Depot', category: 'Hardware', typeOrder: 5.6, categoryOrder: 1.3, globalCustomOrder: 28.5),
-    ListItem(id: 'hd7', title: 'Light Bulbs (LED 60W)', type: 'Home Depot', category: 'Electrical', typeOrder: 5.7, categoryOrder: 3.2, globalCustomOrder: 26.0),
-    ListItem(id: 'hd8', title: 'Matte Polycrylic Finish', type: 'Home Depot', category: 'Paint', typeOrder: 5.8, categoryOrder: 2.3, globalCustomOrder: 31.5),
-    ListItem(id: 'hd9', title: 'Sanding Sponges', type: 'Home Depot', category: 'Hardware', typeOrder: 5.9, categoryOrder: 1.4, globalCustomOrder: 29.5),
-    ListItem(id: 'hd10', title: 'Wood Glue', type: 'Home Depot', category: 'Hardware', typeOrder: 6.0, categoryOrder: 1.5, globalCustomOrder: 29.8),
-
-    // --- Panda Express (Restaurants/Takeout) ---
-    ListItem(id: 'pe1', title: 'Beijing Beef', type: 'Panda Express', category: 'Entree', typeOrder: 7.1, categoryOrder: 1.1, globalCustomOrder: 48.0),
-    ListItem(id: 'pe2', title: 'Chow Mein', type: 'Panda Express', category: 'Side', typeOrder: 7.2, categoryOrder: 2.1, globalCustomOrder: 46.0),
-    ListItem(id: 'pe3', title: 'Cream Cheese Rangoons', type: 'Panda Express', category: 'Appetizer', typeOrder: 7.3, categoryOrder: 3.1, globalCustomOrder: 49.0),
-    ListItem(id: 'pe4', title: 'Fried Rice', type: 'Panda Express', category: 'Side', typeOrder: 7.4, categoryOrder: 2.2, globalCustomOrder: 46.5),
-    ListItem(id: 'pe5', title: 'Kung Pao Chicken', type: 'Panda Express', category: 'Entree', typeOrder: 7.5, categoryOrder: 1.2, globalCustomOrder: 47.0),
-
-    // --- Jewel-Osco / Local Grocery (Standard Groceries) ---
-    ListItem(id: 'jo1', title: 'Bananas', type: 'Jewel-Osco', category: 'Produce', typeOrder: 9.1, categoryOrder: 3.3, globalCustomOrder: 9.0),
-    ListItem(id: 'jo2', title: 'Black Beans (Canned)', type: 'Jewel-Osco', category: 'Pantry', typeOrder: 9.2, categoryOrder: 6.4, globalCustomOrder: 21.0),
-    ListItem(id: 'jo3', title: 'Cheddar Cheese Block', type: 'Jewel-Osco', category: 'Dairy', typeOrder: 9.3, categoryOrder: 1.6, globalCustomOrder: 11.0),
-    ListItem(id: 'jo4', title: 'Eggs (Dozen)', type: 'Jewel-Osco', category: 'Dairy', typeOrder: 9.4, categoryOrder: 1.7, globalCustomOrder: 7.0),
-    ListItem(id: 'jo5', title: 'Fuji Apples', type: 'Jewel-Osco', category: 'Produce', typeOrder: 9.5, categoryOrder: 3.4, globalCustomOrder: 10.5),
-    ListItem(id: 'jo6', title: 'Ground Turkey (1 lb)', type: 'Jewel-Osco', category: 'Meat', typeOrder: 9.6, categoryOrder: 11.1, globalCustomOrder: 23.0),
-    ListItem(id: 'jo7', title: 'Olive Oil', type: 'Jewel-Osco', category: 'Pantry', typeOrder: 9.7, categoryOrder: 6.5, globalCustomOrder: 20.0),
-    ListItem(id: 'jo8', title: 'Pasta Sauce', type: 'Jewel-Osco', category: 'Pantry', typeOrder: 9.8, categoryOrder: 6.6, globalCustomOrder: 20.5),
-    ListItem(id: 'jo9', title: 'Spaghetti Noodles', type: 'Jewel-Osco', category: 'Pantry', typeOrder: 9.9, categoryOrder: 6.7, globalCustomOrder: 20.8),
-    ListItem(id: 'jo10', title: 'Whole Milk (Gallon)', type: 'Jewel-Osco', category: 'Dairy', typeOrder: 10.0, categoryOrder: 1.8, globalCustomOrder: 6.0),
-
-    // --- Miscellaneous / Uncategorized ---
-    ListItem(id: 'm1', title: 'Dog Food (30lb Bag)', type: 'PetSmart', category: 'Pets', typeOrder: 11.1, categoryOrder: 12.1, globalCustomOrder: 38.0),
-    ListItem(id: 'm2', title: 'Cat Litter', type: 'PetSmart', category: 'Pets', typeOrder: 11.2, categoryOrder: 12.2, globalCustomOrder: 39.0),
-    ListItem(id: 'm3', title: 'Ibuprofen', type: 'Walgreens', category: 'Pharmacy', typeOrder: 12.1, categoryOrder: 13.1, globalCustomOrder: 24.0),
-    ListItem(id: 'm4', title: 'Band-Aids', type: 'Walgreens', category: 'Pharmacy', typeOrder: 12.2, categoryOrder: 13.2, globalCustomOrder: 24.5),
-    ListItem(id: 'm5', title: 'Pizza (Alfredo Sauce)', type: 'Papa Johns', category: 'Takeout', typeOrder: 13.1, categoryOrder: 14.1, globalCustomOrder: 45.0),
-  ];
+  // True Blank Slate - Mock data removed
+  List<ListItem> _items = [];
 
   // --- GESTURE & SPATIAL CACHE STATE ---
   final ValueNotifier<String?> openSwipeItemId = ValueNotifier(null);
@@ -132,9 +75,34 @@ class ListProvider extends ChangeNotifier {
     runDataMigration(); // Fixes legacy 0.0 ties immediately on startup
   }
 
-  // --- UPGRADED MIGRATION: Detects ANY duplicates or zeroes and heals them ---
+  // --- LOCAL ISOLATED STORAGE ENGINE ---
+  Future<void> loadItemsForList(String listId) async {
+    if (_currentListId == listId) return; // Prevent duplicate loads
+
+    _currentListId = listId;
+    final prefs = await SharedPreferences.getInstance();
+    final String? itemsJson = prefs.getString('items_$_currentListId');
+
+    if (itemsJson != null) {
+      final List<dynamic> decoded = jsonDecode(itemsJson);
+      _items = decoded.map((map) => ListItem.fromMap(map)).toList();
+    } else {
+      _items = []; // True blank slate for new lists
+    }
+
+    _recalculateWraps(); // FIX: Recalculate geometry so loaded items get their badges back
+    _buildDisplayList();
+    notifyListeners();
+  }
+
+  Future<void> _saveItemsToStorage() async {
+    if (_currentListId == null) return;
+    final prefs = await SharedPreferences.getInstance();
+    final String encoded = jsonEncode(_items.map((i) => i.toMap()).toList());
+    await prefs.setString('items_$_currentListId', encoded);
+  }
+
   // --- 1. ISOLATED DATA MIGRATION ---
-  // Safely assigns perfect 100.0 spacing to all three dimensions independently!
   void runDataMigration() {
     bool needsMigration = _items.any((item) =>
     item.categoryOrder < 100.0 ||
@@ -162,6 +130,7 @@ class ListProvider extends ChangeNotifier {
     }
 
     _buildDisplayList();
+    _saveItemsToStorage();
     notifyListeners();
   }
 
@@ -180,8 +149,6 @@ class ListProvider extends ChangeNotifier {
     _isFullEditRequested = false;
     notifyListeners();
   }
-
-
 
   int getDraftQuantity(String id) => _draftQuantities[id] ?? 1;
 
@@ -203,12 +170,15 @@ class ListProvider extends ChangeNotifier {
   }
 
   void commitEdits() {
+    bool changed = false;
     for (String id in _selectedItemIds) {
       final rawIndex = _items.indexWhere((item) => item.id == id);
       if (rawIndex != -1 && _draftQuantities.containsKey(id)) {
         _items[rawIndex] = _items[rawIndex].copyWith(quantity: _draftQuantities[id]!);
+        changed = true;
       }
     }
+    if (changed) _saveItemsToStorage();
     clearSelection();
   }
 
@@ -243,16 +213,15 @@ class ListProvider extends ChangeNotifier {
       if (_currentSortMode == SortMode.types) newType = immediateBelow.type;
     }
 
-    // THE FIX: "Header Walls". Stop searching the moment we hit a section boundary!
     ListItem? nearestAbove;
     for (int i = newIndex - 1; i >= 0; i--) {
-      if (virtualList[i] is String) break; // Wall hit! We are at the absolute top of this section.
+      if (virtualList[i] is String) break;
       if (virtualList[i] is ListItem) { nearestAbove = virtualList[i] as ListItem; break; }
     }
 
     ListItem? nearestBelow;
     for (int i = newIndex + 1; i < virtualList.length; i++) {
-      if (virtualList[i] is String) break; // Wall hit! We are at the absolute bottom of this section.
+      if (virtualList[i] is String) break;
       if (virtualList[i] is ListItem) { nearestBelow = virtualList[i] as ListItem; break; }
     }
 
@@ -278,6 +247,7 @@ class ListProvider extends ChangeNotifier {
       );
 
       _buildDisplayList();
+      _saveItemsToStorage();
       notifyListeners();
     }
   }
@@ -309,7 +279,6 @@ class ListProvider extends ChangeNotifier {
   }
 
   // --- 2. MULTI-DIMENSIONAL ADD ITEM ---
-  // --- MULTI-DIMENSIONAL ADD ITEM (SECTION AWARE) ---
   void addItem(String title, List<String> attributes, String type, String category, int newQty, String newUnit) {
     final safeType = type.trim().isEmpty ? "Any" : type.trim();
     final safeCategory = category.trim().isEmpty ? "Everything Else" : category.trim();
@@ -317,7 +286,6 @@ class ListProvider extends ChangeNotifier {
     double maxCat = 0.0, maxType = 0.0, maxGlobal = 0.0;
 
     for (var item in _items) {
-      // THE FIX: Only compare numbers against items in the SAME section!
       if (item.category == safeCategory && item.categoryOrder > maxCat) maxCat = item.categoryOrder;
       if (item.type == safeType && item.typeOrder > maxType) maxType = item.typeOrder;
       if (item.globalCustomOrder > maxGlobal) maxGlobal = item.globalCustomOrder;
@@ -329,14 +297,15 @@ class ListProvider extends ChangeNotifier {
       attributeRows: attributes,
       type: safeType,
       category: safeCategory,
-      categoryOrder: maxCat + 100.0, // Safely drops it at the bottom of its assigned Category
-      typeOrder: maxType + 100.0,    // Safely drops it at the bottom of its assigned Store
+      categoryOrder: maxCat + 100.0,
+      typeOrder: maxType + 100.0,
       globalCustomOrder: maxGlobal + 100.0,
     );
 
     _items.add(newItem);
     _recalculateWraps();
     _buildDisplayList();
+    _saveItemsToStorage();
 
     _flashItemId = newItem.id;
     _flashTimer?.cancel();
@@ -370,7 +339,6 @@ class ListProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  // NEW: Exclusive Single Selection
   void selectSingleItem(String id) {
     _selectedItemIds.clear();
     _draftQuantities.clear();
@@ -380,13 +348,9 @@ class ListProvider extends ChangeNotifier {
     _draftQuantities[id] = item.quantity;
 
     _isFullEditRequested = false;
-    _isMultiSelectMode = false; // Ensure we aren't stuck in batch mode
+    _isMultiSelectMode = false;
     notifyListeners();
   }
-
-
-
-
 
   // --- BATCH ACTIONS ---
   List<String> checkSelectedItems() {
@@ -397,7 +361,8 @@ class ListProvider extends ChangeNotifier {
     }
     clearSelection();
     _buildDisplayList();
-    return checkedIds; // Return IDs for the Undo Toast
+    _saveItemsToStorage();
+    return checkedIds;
   }
 
   List<String> deleteSelectedItems() {
@@ -408,7 +373,8 @@ class ListProvider extends ChangeNotifier {
     }
     clearSelection();
     _buildDisplayList();
-    return deletedIds; // Return IDs for the Undo Toast
+    _saveItemsToStorage();
+    return deletedIds;
   }
 
   // --- UNDO ENGINE ---
@@ -417,13 +383,13 @@ class ListProvider extends ChangeNotifier {
     for (String id in ids) {
       final index = _items.indexWhere((item) => item.id == id);
       if (index != -1) {
-        // Flipping flags back to false natively restores their exact position in the math engine
         _items[index] = _items[index].copyWith(isDeleted: false, isCompleted: false);
         changed = true;
       }
     }
     if (changed) {
       _buildDisplayList();
+      _saveItemsToStorage();
       notifyListeners();
     }
   }
@@ -437,16 +403,18 @@ class ListProvider extends ChangeNotifier {
         newItems.add(original.copyWith(
           id: DateTime.now().microsecondsSinceEpoch.toString() + original.id,
           title: '${original.title} (Copy)',
-          globalCustomOrder: original.globalCustomOrder + 10.0, // Slight offset
+          globalCustomOrder: original.globalCustomOrder + 10.0,
         ));
       }
     }
-    _items.addAll(newItems);
-    clearSelection();
-    _buildDisplayList();
+    if (newItems.isNotEmpty) {
+      _items.addAll(newItems);
+      clearSelection();
+      _buildDisplayList();
+      _saveItemsToStorage();
+    }
   }
 
-  // --- MULTI-DIMENSIONAL EDIT ITEM (SECTION AWARE) ---
   // --- MULTI-DIMENSIONAL EDIT ITEM (SECTION AWARE) ---
   void editItem(String id, String newTitle, List<String> newAttributes, String type, String category, int newQty, String newUnit) {
     final index = _items.indexWhere((item) => item.id == id);
@@ -458,7 +426,6 @@ class ListProvider extends ChangeNotifier {
       double newCatOrder = oldItem.categoryOrder;
       double newTypeOrder = oldItem.typeOrder;
 
-      // Calculate a new order if the category changed
       if (oldItem.category != safeCategory) {
         double maxCat = 0.0;
         for (var i in _items) {
@@ -467,7 +434,6 @@ class ListProvider extends ChangeNotifier {
         newCatOrder = maxCat + 100.0;
       }
 
-      // Calculate a new order if the Store (Type) changed
       if (oldItem.type != safeType) {
         double maxType = 0.0;
         for (var i in _items) {
@@ -476,7 +442,6 @@ class ListProvider extends ChangeNotifier {
         newTypeOrder = maxType + 100.0;
       }
 
-      // THE FIX: Explicitly assign newQty and newUnit to the database write!
       _items[index] = oldItem.copyWith(
         title: newTitle,
         attributeRows: newAttributes,
@@ -490,6 +455,7 @@ class ListProvider extends ChangeNotifier {
 
       _recalculateWraps();
       _buildDisplayList();
+      _saveItemsToStorage();
       notifyListeners();
     }
   }
@@ -500,15 +466,27 @@ class ListProvider extends ChangeNotifier {
       final newQuantity = (_items[index].quantity + delta).clamp(1, 99);
       if (_items[index].quantity != newQuantity) {
         _items[index] = _items[index].copyWith(quantity: newQuantity);
+        _saveItemsToStorage();
         notifyListeners();
       }
     }
   }
 
-  void updateViewportWidth(double width) {
+  void updateViewportMetrics(double width, double textScaleFactor) {
+    bool changed = false;
     if (_viewportWidth != width && width > 0) {
       _viewportWidth = width;
+      changed = true;
+    }
+    if (_textScaleFactor != textScaleFactor && textScaleFactor > 0) {
+      _textScaleFactor = textScaleFactor;
+      changed = true;
+    }
+
+    if (changed) {
       _recalculateWraps();
+      _recalculateYOffsets(); // Force spatial cache update if scale changed
+      notifyListeners();
     }
   }
 
@@ -538,12 +516,13 @@ class ListProvider extends ChangeNotifier {
         ),
         textDirection: TextDirection.ltr,
         maxLines: AppConstants.maxTitleLines,
+        textScaler: TextScaler.linear(_textScaleFactor), // Scaler aware
       )..layout(maxWidth: titleAvailableWidth);
 
       final int lineCount = tp.didExceedMaxLines
           ? AppConstants.maxTitleLines
           : tp.getBoxesForSelection(TextSelection(baseOffset: 0, extentOffset: item.title.length)).isNotEmpty
-          ? (tp.height / (AppConstants.titleFontSize * AppConstants.titleLineHeight)).round()
+          ? (tp.height / (AppConstants.titleFontSize * AppConstants.titleLineHeight * _textScaleFactor)).round()
           : 1;
 
       final int calculatedNWrap = (lineCount - 1).clamp(0, 5);
@@ -564,6 +543,7 @@ class ListProvider extends ChangeNotifier {
                     letterSpacing: 0.2,
                     height: 1.1)),
             textDirection: TextDirection.ltr,
+            textScaler: TextScaler.linear(_textScaleFactor), // Scaler aware
           )..layout();
 
           final double actualBadgeWidth = tagTp.width +
@@ -597,7 +577,6 @@ class ListProvider extends ChangeNotifier {
     }
   }
 
-  // --- UPGRADED BUILDER: Intercepts the SortModeEngine to force Custom Math ---
   void _buildDisplayList() {
     List<String>? activeGroupOrder;
     if (_currentSortMode == SortMode.types) activeGroupOrder = preferredTypeOrder;
@@ -618,7 +597,6 @@ class ListProvider extends ChangeNotifier {
       for (var item in flattenedArray) {
         if (item is String) {
           if (currentHeader != null || currentGroup.isNotEmpty) {
-            // THE FIX: Sort the internal blocks strictly by the ACTIVE view's order!
             currentGroup.sort((a, b) {
               if (_currentSortMode == SortMode.categories) return a.categoryOrder.compareTo(b.categoryOrder);
               if (_currentSortMode == SortMode.types) return a.typeOrder.compareTo(b.typeOrder);
@@ -650,7 +628,6 @@ class ListProvider extends ChangeNotifier {
     _recalculateYOffsets();
   }
 
-  // --- Helper to fetch the correct active sequence number ---
   double _getActiveOrder(ListItem item) {
     if (_currentSortMode == SortMode.categories) return item.categoryOrder;
     if (_currentSortMode == SortMode.types) return item.typeOrder;
@@ -659,7 +636,10 @@ class ListProvider extends ChangeNotifier {
 
   void _recalculateYOffsets() {
     cumulativeYOffsets.clear();
-    final calculatedOffsets = StickyHeaderEngine.calculateSpatialCache(displayList);
+    final calculatedOffsets = StickyHeaderEngine.calculateSpatialCache(
+        displayList,
+        textScaleFactor: _textScaleFactor
+    );
     cumulativeYOffsets.addAll(calculatedOffsets);
 
     if (cumulativeYOffsets.isNotEmpty) {
@@ -673,9 +653,10 @@ class ListProvider extends ChangeNotifier {
     if (index != -1) {
       _items[index] = _items[index].copyWith(isCompleted: !_items[index].isCompleted);
       _buildDisplayList();
+      _saveItemsToStorage();
       notifyListeners();
     }
-    return id; // Return ID for the Undo Toast
+    return id;
   }
 
   String deleteItem(String id) {
@@ -683,8 +664,9 @@ class ListProvider extends ChangeNotifier {
     if (index != -1) {
       _items[index] = _items[index].copyWith(isDeleted: true);
       _buildDisplayList();
+      _saveItemsToStorage();
       notifyListeners();
     }
-    return id; // Return ID for the Undo Toast
+    return id;
   }
 }

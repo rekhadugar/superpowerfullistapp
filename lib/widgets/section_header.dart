@@ -14,13 +14,13 @@ class SectionHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final textScale = MediaQuery.textScalerOf(context).scale(1.0); // Fetch Scale
 
     return Container(
-      height: AppConstants.headerHeight,
+      height: AppConstants.headerHeight * textScale,
       width: double.infinity,
       alignment: Alignment.bottomLeft,
       padding: const EdgeInsets.only(
-        // FIX: Matches the exact indent of the AppBar and ListItem titles
         left: AppConstants.horizontalPadding + AppConstants.leadingBlockWidth + AppConstants.interElementGap,
         right: AppConstants.horizontalPadding,
         bottom: AppConstants.headerBottomPadding,

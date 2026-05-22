@@ -14,7 +14,7 @@ class ListItem {
 
   // NEW: Item Quantity
   final int quantity;
-  final String unit; // Add this line
+  final String unit;
 
   // --- Layout Geometry ---
   final int nWrap;
@@ -34,8 +34,8 @@ class ListItem {
     this.locations = const [],
     this.isCompleted = false,
     this.isDeleted = false,
-    this.quantity = 1, // Default to 1
-    this.unit = 'pcs', // Add this
+    this.quantity = 1,
+    this.unit = 'pcs',
     this.nWrap = 0,
     this.nTagRows = 0,
     this.typeOrder = 0.0,
@@ -76,6 +76,47 @@ class ListItem {
       typeOrder: typeOrder ?? this.typeOrder,
       categoryOrder: categoryOrder ?? this.categoryOrder,
       globalCustomOrder: globalCustomOrder ?? this.globalCustomOrder,
+    );
+  }
+
+  // --- NEW: Serialization for Local Storage / Firestore ---
+  Map<String, dynamic> toMap() {
+    return {
+      'id': id,
+      'title': title,
+      'attributeRows': attributeRows,
+      'category': category,
+      'type': type,
+      'locations': locations,
+      'isCompleted': isCompleted,
+      'isDeleted': isDeleted,
+      'quantity': quantity,
+      'unit': unit,
+      'nWrap': nWrap,
+      'nTagRows': nTagRows,
+      'typeOrder': typeOrder,
+      'categoryOrder': categoryOrder,
+      'globalCustomOrder': globalCustomOrder,
+    };
+  }
+
+  factory ListItem.fromMap(Map<String, dynamic> map) {
+    return ListItem(
+      id: map['id'] ?? '',
+      title: map['title'] ?? '',
+      attributeRows: List<String>.from(map['attributeRows'] ?? []),
+      category: map['category'] ?? 'Everything Else',
+      type: map['type'] ?? 'Any',
+      locations: List<String>.from(map['locations'] ?? []),
+      isCompleted: map['isCompleted'] ?? false,
+      isDeleted: map['isDeleted'] ?? false,
+      quantity: map['quantity']?.toInt() ?? 1,
+      unit: map['unit'] ?? 'pcs',
+      nWrap: map['nWrap']?.toInt() ?? 0,
+      nTagRows: map['nTagRows']?.toInt() ?? 0,
+      typeOrder: (map['typeOrder'] ?? 0.0).toDouble(),
+      categoryOrder: (map['categoryOrder'] ?? 0.0).toDouble(),
+      globalCustomOrder: (map['globalCustomOrder'] ?? 0.0).toDouble(),
     );
   }
 }

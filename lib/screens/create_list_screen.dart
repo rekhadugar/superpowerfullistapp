@@ -4,7 +4,9 @@ import '../models/list_type.dart';
 import '../providers/macro_list_provider.dart';
 
 class CreateListScreen extends StatefulWidget {
-  const CreateListScreen({Key? key}) : super(key: key);
+  final bool isFirstLaunch; // Supports the True Blank Slate UI
+
+  const CreateListScreen({Key? key, this.isFirstLaunch = false}) : super(key: key);
 
   @override
   State<CreateListScreen> createState() => _CreateListScreenState();
@@ -15,11 +17,16 @@ class _CreateListScreenState extends State<CreateListScreen> {
   String _listName = '';
   ListType _selectedType = ListType.shopping;
 
-  void _saveList() {
+  void _saveList() async {
     if (_formKey.currentState!.validate()) {
       _formKey.currentState!.save();
-      context.read<MacroListProvider>().createNewList(_listName, _selectedType);
-      Navigator.pop(context);
+      await context.read<MacroListProvider>().createNewList(_listName, _selectedType);
+
+      // If it's the first launch, the MainScreen automatically dismisses this UI
+      // when the provider finishes. We only manually pop if it's NOT the first launch.
+      if (!widget.isFirstLaunch) {
+        if (mounted) Navigator.pop(context);
+      }
     }
   }
 
@@ -27,6 +34,7 @@ class _CreateListScreenState extends State<CreateListScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
+        automaticallyImplyLeading: !widget.isFirstLaunch, // Hides back button if forced
         title: const Text('New List'),
         actions: [
           TextButton(

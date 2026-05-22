@@ -94,9 +94,10 @@ class _ListItemCardState extends State<ListItemCard> with SingleTickerProviderSt
     super.dispose();
   }
 
-  Widget _buildBadge(ThemeData theme, String text, IconData icon) {
+  // Modified to take textScale
+  Widget _buildBadge(ThemeData theme, String text, IconData icon, double textScale) {
     return Container(
-      height: AppConstants.badgeHeight,
+      height: AppConstants.badgeHeight * textScale,
       padding: const EdgeInsets.symmetric(horizontal: AppConstants.badgeHorizontalPadding),
       decoration: BoxDecoration(
         color: theme.dividerColor.withOpacity(0.3),
@@ -131,6 +132,7 @@ class _ListItemCardState extends State<ListItemCard> with SingleTickerProviderSt
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final textScale = MediaQuery.textScalerOf(context).scale(1.0); // Fetch Scale
 
     final String contextBadgeText = widget.sortMode == SortMode.categories ? widget.type : widget.category;
     final IconData contextIcon = widget.sortMode == SortMode.categories ? Icons.storefront : Icons.category_outlined;
@@ -170,23 +172,22 @@ class _ListItemCardState extends State<ListItemCard> with SingleTickerProviderSt
           mainAxisSize: widget.isFeedback ? MainAxisSize.min : MainAxisSize.max,
           children: [
             SizedBox(
-              height: AppConstants.baseCardHeight + (widget.nWrap * AppConstants.nameWrapHeightStep) - AppConstants.borderWidth,
+              height: ((AppConstants.baseCardHeight + (widget.nWrap * AppConstants.nameWrapHeightStep)) * textScale) - AppConstants.borderWidth,
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  // THE FIX: Intercept the tap before it reaches the card background
                   GestureDetector(
                     onTap: () {
                       if (widget.isEditMode) {
-                        widget.onTap(); // Batch selection mode logic
+                        widget.onTap();
                       } else {
-                        widget.onCheck(); // Standard checkout logic
+                        widget.onCheck();
                       }
                     },
-                    behavior: HitTestBehavior.opaque, // Ensures the entire square is tappable
+                    behavior: HitTestBehavior.opaque,
                     child: Container(
                       width: AppConstants.leadingBlockWidth,
-                      height: AppConstants.baseCardHeight, // Enlarged hit target
+                      height: AppConstants.baseCardHeight * textScale,
                       alignment: Alignment.center,
                       child: widget.isEditMode
                           ? Icon(
@@ -211,7 +212,7 @@ class _ListItemCardState extends State<ListItemCard> with SingleTickerProviderSt
                   const SizedBox(width: AppConstants.interElementGap),
                   Container(
                     width: AppConstants.trailingBlockWidth,
-                    height: AppConstants.attributeRowHeight,
+                    height: AppConstants.attributeRowHeight * textScale,
                     alignment: Alignment.center,
                     child: Text(
                       '${widget.quantity}',
@@ -228,12 +229,12 @@ class _ListItemCardState extends State<ListItemCard> with SingleTickerProviderSt
             ),
 
             SizedBox(
-              height: AppConstants.attributeRowHeight,
+              height: AppConstants.attributeRowHeight * textScale,
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const SizedBox(width: AppConstants.leadingBlockWidth + AppConstants.interElementGap),
-                  _buildBadge(theme, contextBadgeText, contextIcon),
+                  _buildBadge(theme, contextBadgeText, contextIcon, textScale),
                 ],
               ),
             ),
@@ -241,7 +242,7 @@ class _ListItemCardState extends State<ListItemCard> with SingleTickerProviderSt
             if (widget.attributeRows.isNotEmpty && widget.nTagRows > 0)
               Container(
                 width: double.infinity,
-                height: widget.nTagRows * AppConstants.attributeRowHeight,
+                height: (widget.nTagRows * AppConstants.attributeRowHeight) * textScale,
                 padding: const EdgeInsets.only(
                   left: AppConstants.leadingBlockWidth + AppConstants.interElementGap,
                   top: 0.0,
@@ -249,7 +250,7 @@ class _ListItemCardState extends State<ListItemCard> with SingleTickerProviderSt
                 child: Wrap(
                   spacing: 8.0,
                   runSpacing: 6.0,
-                  children: widget.attributeRows.map((attr) => _buildBadge(theme, attr, Icons.sell_outlined)).toList(),
+                  children: widget.attributeRows.map((attr) => _buildBadge(theme, attr, Icons.sell_outlined, textScale)).toList(),
                 ),
               ),
           ],
