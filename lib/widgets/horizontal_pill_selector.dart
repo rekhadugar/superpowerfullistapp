@@ -7,6 +7,7 @@ class HorizontalPillSelector extends StatelessWidget {
   final List<String> dictionary;
   final List<String> selectedItems;
   final bool isMultiSelect;
+  final bool isTag; // NEW: Controls the compact, boundary-highlighted styling
   final Function(List<String>) onSelectionChanged;
 
   const HorizontalPillSelector({
@@ -15,6 +16,7 @@ class HorizontalPillSelector extends StatelessWidget {
     required this.dictionary,
     required this.selectedItems,
     this.isMultiSelect = false,
+    this.isTag = false, // Defaults to false for Store and Category
     required this.onSelectionChanged,
   }) : super(key: key);
 
@@ -43,11 +45,9 @@ class HorizontalPillSelector extends StatelessWidget {
 
     List<String> pillsToDisplay = [];
     if (isMultiSelect) {
-      // Tags: Show all selected first, then the rest
       pillsToDisplay.addAll(selectedItems);
       pillsToDisplay.addAll(dictionary.where((d) => !selectedItems.contains(d)));
     } else {
-      // Store/Category: Show active selection (or fallback) first, then the rest
       final activeItem = selectedItems.isNotEmpty && selectedItems.first.isNotEmpty ? selectedItems.first : emptyFallback;
       pillsToDisplay.add(activeItem);
       pillsToDisplay.addAll(dictionary.where((d) => d != activeItem && d != emptyFallback));
@@ -56,7 +56,6 @@ class HorizontalPillSelector extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Header Row with Add Button
         Padding(
           padding: const EdgeInsets.only(bottom: 12.0),
           child: Row(
@@ -91,15 +90,40 @@ class HorizontalPillSelector extends StatelessWidget {
           ),
         ),
 
-        // Scrollable Pills Row
         SingleChildScrollView(
           scrollDirection: Axis.horizontal,
           child: Row(
             children: pillsToDisplay.map((item) {
+              final bool isFallback = item == emptyFallback;
               final bool isSelected = isMultiSelect
                   ? selectedItems.contains(item)
                   : (selectedItems.isNotEmpty && selectedItems.first == item) ||
-                  (selectedItems.isEmpty && (item == emptyFallback));
+                  (selectedItems.isEmpty && isFallback);
+
+              // We only show the 'x' if it's selected AND it's not the default fallback state
+              final bool showX = isSelected && !isFallback;
+
+              // Style Definitions based on isTag and isSelected
+              Color bgColor;
+              Color textColor;
+              Border border;
+
+              if (isSelected) {
+                if (isTag) {
+                  // NEW: Boundary highlighted only for tags
+                  bgColor = theme.scaffoldBackgroundColor; // Match the background
+                  textColor = AppColors.primaryAction;
+                  border = Border.all(color: AppColors.primaryAction, width: 1.5);
+                } else {
+                  bgColor = AppColors.primaryAction;
+                  textColor = Colors.white;
+                  border = Border.all(color: AppColors.primaryAction, width: 1.0);
+                }
+              } else {
+                bgColor = theme.cardColor;
+                textColor = theme.textTheme.titleMedium?.color ?? Colors.black;
+                border = Border.all(color: theme.dividerColor, width: 1.0);
+              }
 
               return Padding(
                 padding: const EdgeInsets.only(right: 8.0),
@@ -107,34 +131,49 @@ class HorizontalPillSelector extends StatelessWidget {
                   onTap: () {
                     if (isMultiSelect) {
                       List<String> newSelections = List.from(selectedItems);
-                      if (newSelections.contains(item)) {
+                      if (isSelected) {
                         newSelections.remove(item);
                       } else {
                         newSelections.add(item);
                       }
                       onSelectionChanged(newSelections);
                     } else {
-                      onSelectionChanged([item]);
+                      // NEW: Unselect to empty if it's already selected
+                      if (isSelected && !isFallback) {
+                        onSelectionChanged([]);
+                      } else {
+                        onSelectionChanged([item]);
+                      }
                     }
                   },
                   child: AnimatedContainer(
                     duration: const Duration(milliseconds: 200),
-                    padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-                    decoration: BoxDecoration(
-                      color: isSelected ? AppColors.primaryAction : theme.cardColor,
-                      borderRadius: BorderRadius.circular(20.0),
-                      border: Border.all(
-                        color: isSelected ? AppColors.primaryAction : theme.dividerColor,
-                        width: 1.0,
-                      ),
+                    // NEW: Smaller padding for tags
+                    padding: EdgeInsets.symmetric(
+                        horizontal: isTag ? 12.0 : 16.0,
+                        vertical: isTag ? 6.0 : 8.0
                     ),
-                    child: Text(
-                      item,
-                      style: TextStyle(
-                        color: isSelected ? Colors.white : theme.textTheme.titleMedium?.color,
-                        fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
-                        fontSize: 14.0,
-                      ),
+                    decoration: BoxDecoration(
+                      color: bgColor,
+                      borderRadius: BorderRadius.circular(20.0),
+                      border: border,
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          item,
+                          style: TextStyle(
+                            color: textColor,
+                            fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
+                            fontSize: isTag ? 12.0 : 14.0, // NEW: Smaller text for tags
+                          ),
+                        ),
+                        if (showX) ...[
+                          const SizedBox(width: 4.0),
+                          Icon(Icons.close, size: isTag ? 14 : 16, color: textColor),
+                        ]
+                      ],
                     ),
                   ),
                 ),
@@ -142,7 +181,7 @@ class HorizontalPillSelector extends StatelessWidget {
             }).toList(),
           ),
         ),
-        const SizedBox(height: 24),
+        const SizedBox(height: 12), // Reduced bottom margin slightly to account for the new dividers
       ],
     );
   }

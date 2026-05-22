@@ -303,6 +303,9 @@ class _FluidEditSheetState extends State<FluidEditSheet> {
           ),
 
         if (isFull) ...[
+          // NEW: Added Dividers and updated to HorizontalPillSelector
+          const Divider(height: 32.0, thickness: 1.0),
+
           HorizontalPillSelector(
             title: 'Category',
             dictionary: provider.activeCategoryDictionary,
@@ -310,7 +313,9 @@ class _FluidEditSheetState extends State<FluidEditSheet> {
             isMultiSelect: false,
             onSelectionChanged: (vals) => setState(() => _draftItem = _draftItem!.copyWith(category: vals.isNotEmpty ? vals.first : '')),
           ),
-          const SizedBox(height: 16),
+
+          const Divider(height: 32.0, thickness: 1.0),
+
           HorizontalPillSelector(
             title: 'Store',
             dictionary: provider.activeStoreDictionary,
@@ -318,12 +323,15 @@ class _FluidEditSheetState extends State<FluidEditSheet> {
             isMultiSelect: false,
             onSelectionChanged: (vals) => setState(() => _draftItem = _draftItem!.copyWith(type: vals.isNotEmpty ? vals.first : '')),
           ),
-          const SizedBox(height: 16),
+
+          const Divider(height: 32.0, thickness: 1.0),
+
           HorizontalPillSelector(
             title: 'Tags',
             dictionary: provider.activeTagDictionary,
             selectedItems: _draftItem!.attributeRows,
             isMultiSelect: true,
+            isTag: true, // NEW: Triggers the compact, boundary-highlighted style
             onSelectionChanged: (vals) => setState(() => _draftItem = _draftItem!.copyWith(attributeRows: vals)),
           ),
         ]

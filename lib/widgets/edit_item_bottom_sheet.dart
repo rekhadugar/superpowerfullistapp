@@ -90,7 +90,7 @@ class _EditItemBottomSheetState extends State<EditItemBottomSheet> {
                 hintText: 'Item Name',
                 filled: true, fillColor: Colors.white,
                 contentPadding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 16.0),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12.0), borderSide: BorderSide(color: AppColors.primaryAction, width: 1.5)),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12.0), borderSide: const BorderSide(color: AppColors.primaryAction, width: 1.5)),
                 enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12.0), borderSide: BorderSide(color: AppColors.primaryAction.withOpacity(0.5), width: 1.5)),
                 focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12.0), borderSide: const BorderSide(color: AppColors.primaryAction, width: 2.0)),
               ),
@@ -128,6 +128,9 @@ class _EditItemBottomSheetState extends State<EditItemBottomSheet> {
             ),
             const SizedBox(height: 16.0),
 
+            // NEW: Added Dividers and updated to HorizontalPillSelector
+            const Divider(height: 32.0, thickness: 1.0),
+
             HorizontalPillSelector(
               title: 'Category',
               dictionary: categoriesDict,
@@ -135,7 +138,8 @@ class _EditItemBottomSheetState extends State<EditItemBottomSheet> {
               isMultiSelect: false,
               onSelectionChanged: (vals) => setState(() => _selectedCategory = vals.isNotEmpty ? vals.first : ''),
             ),
-            const SizedBox(height: 16.0),
+
+            const Divider(height: 32.0, thickness: 1.0),
 
             HorizontalPillSelector(
               title: 'Store',
@@ -144,13 +148,15 @@ class _EditItemBottomSheetState extends State<EditItemBottomSheet> {
               isMultiSelect: false,
               onSelectionChanged: (vals) => setState(() => _selectedStore = vals.isNotEmpty ? vals.first : ''),
             ),
-            const SizedBox(height: 16.0),
+
+            const Divider(height: 32.0, thickness: 1.0),
 
             HorizontalPillSelector(
               title: 'Tags',
               dictionary: tagsDict,
               selectedItems: _selectedTags,
               isMultiSelect: true,
+              isTag: true, // NEW: Triggers the compact, boundary-highlighted style
               onSelectionChanged: (vals) => setState(() => _selectedTags = vals),
             ),
             const SizedBox(height: 24.0),
@@ -163,8 +169,8 @@ class _EditItemBottomSheetState extends State<EditItemBottomSheet> {
                   _selectedTags,
                   _selectedStore,
                   _selectedCategory,
-                  _quantity, // Passed from state
-                  _unit,     // Passed from state
+                  _quantity,
+                  _unit,
                 );
                 Navigator.of(context).pop();
               },
