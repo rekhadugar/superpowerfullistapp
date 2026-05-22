@@ -1,10 +1,12 @@
 // Location: lib/main.dart
 
 import 'package:flutter/material.dart';
+import 'package:listicle_v2/providers/macro_list_provider.dart';
 import 'package:provider/provider.dart';
 import 'theme/app_theme.dart';
 import 'providers/list_provider.dart';
 import 'screens/main_screen.dart';
+
 // Note: Firebase core initialization will be added here in Phase 4.
 
 void main() {
@@ -14,6 +16,7 @@ void main() {
   runApp(
     MultiProvider(
       providers: [
+        ChangeNotifierProvider(create: (_) => MacroListProvider()),
         ChangeNotifierProvider(create: (_) => ListProvider()),
       ],
       child: const ListicleApp(),

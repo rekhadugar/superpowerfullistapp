@@ -13,6 +13,8 @@ import '../widgets/swipe_action_wrapper.dart';
 import '../models/list_item.dart';
 import '../engine/sticky_header_engine.dart'; // IMPORT THE ENGINE
 import '../engine/sort_mode_engine.dart'; // IMPORT THE SORT ENGINE
+import '../providers/macro_list_provider.dart'; // <--- NEW
+import '../widgets/app_drawer.dart'; // <--- NEW
 
 class MainScreen extends StatefulWidget {
   const MainScreen({Key? key}) : super(key: key);
@@ -103,6 +105,7 @@ class _MainScreenState extends State<MainScreen> {
     });
 
     final listProvider = context.watch<ListProvider>();
+    final activeList = context.watch<MacroListProvider>().activeList; // <--- ADD THIS LINE
     final displayList = listProvider.displayList;
     final theme = Theme.of(context);
     final double safeBottomPadding = MediaQuery.of(context).padding.bottom;
@@ -116,21 +119,24 @@ class _MainScreenState extends State<MainScreen> {
       },
       behavior: HitTestBehavior.translucent,
       child: Scaffold(
+        drawer: const AppDrawer(), // <--- ADD THIS EXACT LINE HERE
         resizeToAvoidBottomInset: false, // <--- ADD THIS EXACT LINE HERE
         backgroundColor: theme.scaffoldBackgroundColor,
         appBar: AppBar(
           leadingWidth: AppConstants.horizontalPadding + AppConstants.leadingBlockWidth + AppConstants.interElementGap,
           leading: Padding(
             padding: const EdgeInsets.only(left: AppConstants.horizontalPadding),
-            child: IconButton(
-              icon: Icon(Icons.menu_rounded, color: theme.textTheme.titleMedium?.color),
-              padding: EdgeInsets.zero,
-              alignment: Alignment.centerLeft,
-              onPressed: () {},
+            child: Builder( // Wrapped in Builder to access the Scaffold context
+              builder: (context) => IconButton(
+                icon: Icon(Icons.menu_rounded, color: theme.textTheme.titleMedium?.color),
+                padding: EdgeInsets.zero,
+                alignment: Alignment.centerLeft,
+                onPressed: () => Scaffold.of(context).openDrawer(), // Opens Drawer
+              ),
             ),
           ),
           titleSpacing: 0,
-          title: const Text('Listicle V2 Prototype'),
+          title: Text(activeList?.name ?? 'Listicle'), // Dynamically updates title
           backgroundColor: theme.cardColor,
           elevation: 0,
           centerTitle: false,
