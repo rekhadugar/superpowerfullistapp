@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-
 import '../theme/app_theme.dart';
 
 class AgileChipSelector extends StatefulWidget {
@@ -35,7 +34,7 @@ class _AgileChipSelectorState extends State<AgileChipSelector> {
 
     _focusNode.addListener(() {
       if (!_focusNode.hasFocus && _isEditing) {
-        _commitText(); // Auto-commit if user taps away to dismiss keyboard
+        _commitText();
       }
     });
   }
@@ -51,7 +50,6 @@ class _AgileChipSelectorState extends State<AgileChipSelector> {
     setState(() => _isEditing = true);
     _focusNode.requestFocus();
 
-    // Natively glide this specific widget to the center of the screen above the keyboard
     Future.delayed(const Duration(milliseconds: 350), () {
       if (mounted) {
         Scrollable.ensureVisible(context, alignment: 0.5, duration: const Duration(milliseconds: 300), curve: Curves.easeOut);
@@ -81,7 +79,7 @@ class _AgileChipSelectorState extends State<AgileChipSelector> {
       } else {
         _selectedItems = [item];
         if (!forceAdd) {
-          _isEditing = false; // Close keyboard if single selecting from chips
+          _isEditing = false;
           _focusNode.unfocus();
         }
       }
@@ -93,102 +91,125 @@ class _AgileChipSelectorState extends State<AgileChipSelector> {
   Widget build(BuildContext context) {
     final query = _textController.text.trim().toLowerCase();
 
-    // Filter the dictionary based on what they are typing
-    final filteredDictionary = widget.dictionary.where((item) => item.toLowerCase().contains(query)).toList();
+    // The bottom row should only show items that are NOT currently selected
+    final unselectedDictionary = widget.dictionary.where(
+            (item) => item.toLowerCase().contains(query) && !_selectedItems.contains(item)
+    ).toList();
 
-    // Add any currently selected items to the list so they don't disappear while typing
-    final displayChips = <String>{..._selectedItems, ...filteredDictionary}.toList();
-
-    return Container(
-      padding: const EdgeInsets.all(16.0),
-      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12.0), border: Border.all(color: Colors.grey.shade200)),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // The Transforming Header
-          AnimatedSwitcher(
-            duration: const Duration(milliseconds: 200),
-            child: _isEditing
-                ? TextField(
-              controller: _textController,
-              focusNode: _focusNode,
-              autofocus: true,
-              onChanged: (_) => setState(() {}),
-              onSubmitted: (_) => _commitText(),
-              decoration: InputDecoration(
-                hintText: 'Type new ${widget.title.toLowerCase()}...',
-                isDense: true,
-                contentPadding: const EdgeInsets.symmetric(vertical: 8.0),
-                border: const UnderlineInputBorder(),
-                suffixIcon: IconButton(icon: const Icon(Icons.check, color: AppColors.primaryAction), onPressed: _commitText),
-              ),
-            )
-                : GestureDetector(
-              onTap: _startEditing,
-              behavior: HitTestBehavior.opaque,
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(widget.title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                  const Icon(Icons.add_circle, color: AppColors.primaryAction),
-                ],
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        // ROW 1: Header + Selected Items (Horizontally Scrollable)
+        Row(
+          children: [
+            AnimatedSwitcher(
+              duration: const Duration(milliseconds: 200),
+              child: _isEditing
+                  ? SizedBox(
+                width: 140,
+                child: TextField(
+                  controller: _textController,
+                  focusNode: _focusNode,
+                  autofocus: true,
+                  onChanged: (_) => setState(() {}),
+                  onSubmitted: (_) => _commitText(),
+                  style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+                  decoration: InputDecoration(
+                    hintText: 'New ${widget.title}...',
+                    isDense: true,
+                    contentPadding: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 8.0),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8.0), borderSide: BorderSide.none),
+                    filled: true,
+                    fillColor: Colors.grey.shade200,
+                  ),
+                ),
+              )
+                  : GestureDetector(
+                onTap: _startEditing,
+                behavior: HitTestBehavior.opaque,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text('${widget.title}:', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: Colors.black54)),
+                    const SizedBox(width: 6),
+                    const Icon(Icons.add_circle, color: AppColors.primaryAction, size: 20),
+                    const SizedBox(width: 12),
+                  ],
+                ),
               ),
             ),
-          ),
-          const SizedBox(height: 12.0),
 
-          // The Dynamic Chip Wrap
-          Wrap(
-            spacing: 8.0,
-            runSpacing: 8.0,
+            // The Selected Chips
+            Expanded(
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                physics: const BouncingScrollPhysics(),
+                child: Row(
+                  children: _selectedItems.map((item) {
+                    return Padding(
+                      padding: const EdgeInsets.only(right: 8.0),
+                      child: InputChip(
+                        label: Text(item, style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.primaryAction)),
+                        backgroundColor: AppColors.primaryAction.withOpacity(0.12),
+                        deleteIcon: const Icon(Icons.close, size: 16, color: AppColors.primaryAction),
+                        onDeleted: () => _toggleItem(item), // Tapping the 'X' removes it
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8.0), side: const BorderSide(color: Colors.transparent)),
+                      ),
+                    );
+                  }).toList(),
+                ),
+              ),
+            ),
+          ],
+        ),
+
+        const SizedBox(height: 8.0),
+
+        // ROW 2: Available Dictionary Items (Horizontally Scrollable)
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          physics: const BouncingScrollPhysics(),
+          child: Row(
             children: [
-              if (!widget.isMultiSelect)
-                ChoiceChip(
-                  label: const Text('None'),
-                  selected: _selectedItems.isEmpty,
-                  onSelected: (_) => setState(() { _selectedItems.clear(); widget.onSelectionChanged(_selectedItems); }),
-                  selectedColor: Colors.grey.shade200,
-                  backgroundColor: Colors.grey.shade50,
-                  labelStyle: TextStyle(color: _selectedItems.isEmpty ? Colors.black87 : Colors.grey.shade600, fontWeight: _selectedItems.isEmpty ? FontWeight.bold : FontWeight.normal),
+              // Show 'None' option for single-select if empty
+              if (!widget.isMultiSelect && _selectedItems.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(right: 8.0),
+                  child: ActionChip(
+                    label: const Text('None', style: TextStyle(color: Colors.black54)),
+                    backgroundColor: Colors.grey.shade100,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8.0), side: BorderSide(color: Colors.grey.shade300)),
+                  ),
                 ),
 
-              ...displayChips.map((item) {
-                final isSelected = _selectedItems.contains(item);
-                return widget.isMultiSelect
-                    ? FilterChip(
-                  label: Text(item),
-                  selected: isSelected,
-                  onSelected: (_) => _toggleItem(item),
-                  selectedColor: AppColors.primaryAction.withOpacity(0.15),
-                  backgroundColor: Colors.grey.shade50,
-                  checkmarkColor: AppColors.primaryAction,
-                  labelStyle: TextStyle(color: isSelected ? AppColors.primaryAction : Colors.black87, fontWeight: isSelected ? FontWeight.bold : FontWeight.normal),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8.0), side: BorderSide(color: isSelected ? AppColors.primaryAction : Colors.grey.shade300)),
-                )
-                    : ChoiceChip(
-                  label: Text(item),
-                  selected: isSelected,
-                  onSelected: (_) => _toggleItem(item),
-                  selectedColor: AppColors.primaryAction.withOpacity(0.15),
-                  backgroundColor: Colors.grey.shade50,
-                  labelStyle: TextStyle(color: isSelected ? AppColors.primaryAction : Colors.black87, fontWeight: isSelected ? FontWeight.bold : FontWeight.normal),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8.0), side: BorderSide(color: isSelected ? AppColors.primaryAction : Colors.grey.shade300)),
+              // The Available Chips
+              ...unselectedDictionary.map((item) {
+                return Padding(
+                  padding: const EdgeInsets.only(right: 8.0),
+                  child: ActionChip(
+                    label: Text(item),
+                    onPressed: () => _toggleItem(item), // Tapping moves it to the Top Row
+                    backgroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8.0), side: BorderSide(color: Colors.grey.shade300)),
+                  ),
                 );
               }).toList(),
 
-              // The Create New Chip (Appears dynamically while typing)
-              if (_isEditing && query.isNotEmpty && !displayChips.any((c) => c.toLowerCase() == query))
+              // The Dynamic "+ Create" Chip
+              if (_isEditing && query.isNotEmpty && !widget.dictionary.any((c) => c.toLowerCase() == query))
                 ActionChip(
                   label: Text('+ Create "$query"'),
                   onPressed: _commitText,
                   backgroundColor: AppColors.primaryAction,
                   labelStyle: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8.0)),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8.0), side: const BorderSide(color: Colors.transparent)),
                 ),
             ],
           ),
-        ],
-      ),
+        ),
+        const SizedBox(height: 12.0), // Bottom padding before the next section
+      ],
     );
   }
 }

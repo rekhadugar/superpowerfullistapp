@@ -177,6 +177,10 @@ class ListProvider extends ChangeNotifier {
       final item = _items.firstWhere((element) => element.id == id);
       _draftQuantities[id] = item.quantity;
     }
+
+    // FIX: Any direct tap on a card resets the sheet to Glance/Batch view!
+    _isFullEditRequested = false;
+
     notifyListeners();
   }
 
@@ -341,6 +345,58 @@ class ListProvider extends ChangeNotifier {
     });
 
     notifyListeners();
+  }
+
+  // --- FLUID SHEET STATE ---
+  bool _isFullEditRequested = false;
+  bool get isFullEditRequested => _isFullEditRequested;
+
+  void setFullEditRequest(bool requested) {
+    if (_isFullEditRequested != requested) {
+      _isFullEditRequested = requested;
+      notifyListeners();
+    }
+  }
+
+
+
+
+
+  // --- BATCH ACTIONS ---
+  void checkSelectedItems() {
+    for (String id in _selectedItemIds) {
+      final index = _items.indexWhere((item) => item.id == id);
+      if (index != -1) _items[index] = _items[index].copyWith(isCompleted: true);
+    }
+    clearSelection();
+    _buildDisplayList();
+  }
+
+  void deleteSelectedItems() {
+    for (String id in _selectedItemIds) {
+      final index = _items.indexWhere((item) => item.id == id);
+      if (index != -1) _items[index] = _items[index].copyWith(isDeleted: true);
+    }
+    clearSelection();
+    _buildDisplayList();
+  }
+
+  void copySelectedItems() {
+    List<ListItem> newItems = [];
+    for (String id in _selectedItemIds) {
+      final index = _items.indexWhere((item) => item.id == id);
+      if (index != -1) {
+        final original = _items[index];
+        newItems.add(original.copyWith(
+          id: DateTime.now().microsecondsSinceEpoch.toString() + original.id,
+          title: '${original.title} (Copy)',
+          globalCustomOrder: original.globalCustomOrder + 10.0, // Slight offset
+        ));
+      }
+    }
+    _items.addAll(newItems);
+    clearSelection();
+    _buildDisplayList();
   }
 
   // --- MULTI-DIMENSIONAL EDIT ITEM (SECTION AWARE) ---

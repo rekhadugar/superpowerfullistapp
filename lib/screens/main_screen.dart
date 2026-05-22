@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/list_provider.dart';
 import '../widgets/edit_item_bottom_sheet.dart';
+import '../widgets/fluid_edit_sheet.dart';
 import '../widgets/list_item_card.dart';
 import '../theme/app_theme.dart';
 import '../theme/app_constants.dart';
@@ -105,8 +106,8 @@ class _MainScreenState extends State<MainScreen> {
     final displayList = listProvider.displayList;
     final theme = Theme.of(context);
     final double safeBottomPadding = MediaQuery.of(context).padding.bottom;
-    const double menuHeight = 140.0;
 
+    // Remove focus if tapping the background list
     return GestureDetector(
       onTap: () {
         if (listProvider.openSwipeItemId.value != null) {
@@ -137,10 +138,7 @@ class _MainScreenState extends State<MainScreen> {
             fontWeight: FontWeight.w700,
           ),
           actions: [
-            IconButton(
-              icon: Icon(Icons.unfold_more_rounded, color: theme.textTheme.titleMedium?.color),
-              onPressed: () {},
-            ),
+            IconButton(icon: Icon(Icons.unfold_more_rounded, color: theme.textTheme.titleMedium?.color), onPressed: () {}),
             Consumer<ListProvider>(
               builder: (context, provider, child) {
                 return PopupMenuButton<SortMode>(
@@ -155,50 +153,35 @@ class _MainScreenState extends State<MainScreen> {
                 );
               },
             ),
-            IconButton(
-              icon: Icon(Icons.more_vert_rounded, color: theme.textTheme.titleMedium?.color),
-              onPressed: () {},
-            ),
+            IconButton(icon: Icon(Icons.more_vert_rounded, color: theme.textTheme.titleMedium?.color), onPressed: () {}),
           ],
         ),
         body: displayList.isEmpty
             ? Center(child: Text('All caught up!', style: theme.textTheme.bodyMedium))
             : NotificationListener<ScrollStartNotification>(
           onNotification: (_) {
-            if (listProvider.openSwipeItemId.value != null) {
-              listProvider.openSwipeItemId.value = null;
-            }
+            if (listProvider.openSwipeItemId.value != null) listProvider.openSwipeItemId.value = null;
             return false;
           },
           child: Stack(
             children: [
-              // ENTIRELY REPLACED: Native ReorderableListView handling C++ gap physics
               ReorderableListView.builder(
                 scrollController: _scrollController,
                 padding: EdgeInsets.only(
                     top: 0.0,
-                    bottom: listProvider.isEditMode ? menuHeight + safeBottomPadding + 20 : safeBottomPadding + 100.0
+                    bottom: listProvider.isEditMode ? 300 : safeBottomPadding + 100.0 // Extra padding when sheet is open
                 ),
                 itemCount: displayList.length,
                 buildDefaultDragHandles: false,
                 onReorder: (oldIndex, newIndex) => context.read<ListProvider>().executeNativeReorder(oldIndex, newIndex),
                 proxyDecorator: (child, index, animation) {
-                  return Material(
-                    color: Colors.transparent,
-                    elevation: 8.0,
-                    shadowColor: Colors.black45,
-                    child: child,
-                  );
+                  return Material(color: Colors.transparent, elevation: 8.0, shadowColor: Colors.black45, child: child);
                 },
                 itemBuilder: (context, index) {
                   final item = displayList[index];
 
-                  // Headers are visually static blocks bound to a key
                   if (item is String) {
-                    return Container(
-                      key: ValueKey('header_$item'),
-                      child: SectionHeader(title: item),
-                    );
+                    return Container(key: ValueKey('header_$item'), child: SectionHeader(title: item));
                   }
 
                   if (item is ListItem) {
@@ -221,12 +204,12 @@ class _MainScreenState extends State<MainScreen> {
                         if (listProvider.openSwipeItemId.value != null) {
                           listProvider.openSwipeItemId.value = null;
                         } else {
+                          // Clicking a card toggles it and keeps the sheet in Glance/Batch mode
                           context.read<ListProvider>().toggleSelection(item.id);
                         }
                       },
                     );
 
-                    // Replaces LongPressDraggable to wire directly to Reorderable physics engine
                     return ReorderableDelayedDragStartListener(
                       key: ValueKey('drag_${item.id}'),
                       index: index,
@@ -236,24 +219,11 @@ class _MainScreenState extends State<MainScreen> {
                         requireConfirm: true,
                         onCheckout: () => context.read<ListProvider>().toggleCompletion(item.id),
                         onEdit: () {
-                          // Collapse the swipe menu before opening the sheet
-                          if (listProvider.openSwipeItemId.value != null) {
-                            listProvider.openSwipeItemId.value = null;
-                          }
-                          // Launch the Full Edit Menu
-                          showModalBottomSheet(
-                            context: context,
-                            isScrollControlled: true,
-                            backgroundColor: Colors.transparent,
-                            builder: (context) => EditItemBottomSheet(
-                              item: item,
-                              onSave: (newTitle, newAttributes, newType, newCategory, newQty, newUnit) { // Added newQty, newUnit
-                                context.read<ListProvider>().editItem(
-                                    item.id, newTitle, newAttributes, newType, newCategory, newQty, newUnit
-                                );
-                              },
-                            ),
-                          );
+                          // FIX: Clear existing selection, select this item, and force Full View
+                          listProvider.clearSelection();
+                          listProvider.toggleSelection(item.id);
+                          listProvider.setFullEditRequest(true);
+                          listProvider.openSwipeItemId.value = null;
                         },
                         onDelete: () => context.read<ListProvider>().deleteItem(item.id),
                         child: coreCard,
@@ -271,38 +241,21 @@ class _MainScreenState extends State<MainScreen> {
                   return Positioned(
                     top: 0, left: 0, right: 0,
                     child: RepaintBoundary(
-                      child: Transform.translate(
-                        offset: Offset(0, data.yOffset),
-                        child: SectionHeader(title: data.title!),
-                      ),
+                      child: Transform.translate(offset: Offset(0, data.yOffset), child: SectionHeader(title: data.title!)),
                     ),
                   );
                 },
               ),
 
+              // The Floating Action Button (Only visible if sheet is closed)
               AnimatedPositioned(
                 duration: const Duration(milliseconds: 300),
                 curve: Curves.easeOutCubic,
                 right: AppConstants.horizontalPadding,
-                bottom: listProvider.isEditMode
-                    ? (menuHeight + safeBottomPadding + 16.0)
-                    : (safeBottomPadding + 16.0),
+                bottom: listProvider.isEditMode ? -100 : (safeBottomPadding + 16.0),
                 child: FloatingActionButton(
                   onPressed: () {
-                    if (listProvider.openSwipeItemId.value != null) listProvider.openSwipeItemId.value = null;
-                    showModalBottomSheet(
-                      context: context,
-                      isScrollControlled: true,
-                      backgroundColor: Colors.transparent,
-                      builder: (context) => EditItemBottomSheet(
-                        item: ListItem(id: '', title: ''),
-                        onSave: (newTitle, newAttributes, newType, newCategory, newQty, newUnit) { // Added newQty, newUnit
-                          context.read<ListProvider>().addItem(
-                              newTitle, newAttributes, newType, newCategory, newQty, newUnit
-                          );
-                        },
-                      ),
-                    );
+                    // Logic to open an empty sheet for adding will go here
                   },
                   backgroundColor: AppColors.primaryAction,
                   elevation: 4,
@@ -310,159 +263,8 @@ class _MainScreenState extends State<MainScreen> {
                 ),
               ),
 
-              AnimatedPositioned(
-                duration: const Duration(milliseconds: 300),
-                curve: Curves.easeOutCubic,
-                left: 0, right: 0,
-                bottom: listProvider.isEditMode ? 0 : -(menuHeight + safeBottomPadding + 20),
-                child: Container(
-                  height: menuHeight + safeBottomPadding,
-                  padding: EdgeInsets.only(bottom: safeBottomPadding, top: 16.0, left: 24.0, right: 24.0),
-                  decoration: BoxDecoration(
-                    color: theme.scaffoldBackgroundColor,
-                    borderRadius: const BorderRadius.vertical(top: Radius.circular(24.0)),
-                    boxShadow: [
-                      BoxShadow(color: Colors.black.withOpacity(0.15), blurRadius: 15, offset: const Offset(0, -5))
-                    ],
-                  ),
-                  child: Column(
-                    children: [
-                      SingleChildScrollView(
-                        scrollDirection: Axis.horizontal,
-                        clipBehavior: Clip.none,
-                        child: Row(
-                          children: [
-                            AnimatedSwitcher(
-                              duration: const Duration(milliseconds: 200),
-                              child: listProvider.selectedItemIds.length == 1
-                                  ? Builder(
-                                  builder: (context) {
-                                    final singleId = listProvider.selectedItemIds.first;
-                                    final draftQty = listProvider.getDraftQuantity(singleId);
-
-                                    return Container(
-                                      key: const ValueKey('stepper'),
-                                      height: 44,
-                                      padding: const EdgeInsets.symmetric(horizontal: 4.0),
-                                      decoration: BoxDecoration(
-                                        color: theme.dividerColor.withOpacity(0.1),
-                                        borderRadius: BorderRadius.circular(50.0),
-                                      ),
-                                      child: Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          IconButton(
-                                              icon: const Icon(Icons.remove, size: 20),
-                                              onPressed: () => listProvider.updateDraftQuantity(singleId, -1),
-                                              constraints: const BoxConstraints(), padding: const EdgeInsets.all(8.0)
-                                          ),
-                                          Padding(
-                                            padding: const EdgeInsets.symmetric(horizontal: 12.0),
-                                            child: Text('$draftQty', style: theme.textTheme.titleMedium?.copyWith(fontSize: 16, fontWeight: FontWeight.bold)),
-                                          ),
-                                          IconButton(
-                                              icon: const Icon(Icons.add, size: 20),
-                                              onPressed: () => listProvider.updateDraftQuantity(singleId, 1),
-                                              constraints: const BoxConstraints(), padding: const EdgeInsets.all(8.0)
-                                          ),
-                                        ],
-                                      ),
-                                    );
-                                  }
-                              )
-                                  : Container(
-                                key: const ValueKey('counter'),
-                                height: 44,
-                                padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                                decoration: BoxDecoration(
-                                  color: AppColors.primaryAction.withOpacity(0.15),
-                                  borderRadius: BorderRadius.circular(50.0),
-                                ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Icon(Icons.layers_rounded, color: AppColors.primaryAction, size: 20),
-                                    const SizedBox(width: 8.0),
-                                    Text('${listProvider.selectedItemIds.length} Selected', style: theme.textTheme.titleMedium?.copyWith(color: AppColors.primaryAction, fontWeight: FontWeight.w700)),
-                                  ],
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 12.0),
-
-                            TextButton.icon(
-                              onPressed: () {},
-                              style: TextButton.styleFrom(
-                                backgroundColor: theme.dividerColor.withOpacity(0.1),
-                                foregroundColor: theme.textTheme.titleMedium?.color,
-                                padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                                minimumSize: const Size(0, 44),
-                                shape: const StadiumBorder(),
-                                elevation: 0,
-                              ),
-                              icon: const Icon(Icons.copy_rounded, size: 18),
-                              label: const Text('Copy', style: TextStyle(fontWeight: FontWeight.w600)),
-                            ),
-                            const SizedBox(width: 12.0),
-
-                            TextButton.icon(
-                              onPressed: () {},
-                              style: TextButton.styleFrom(
-                                backgroundColor: Colors.redAccent.withOpacity(0.15),
-                                foregroundColor: Colors.redAccent,
-                                padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                                minimumSize: const Size(0, 44),
-                                shape: const StadiumBorder(),
-                                elevation: 0,
-                              ),
-                              icon: const Icon(Icons.delete_outline_rounded, size: 18),
-                              label: const Text('Delete', style: TextStyle(fontWeight: FontWeight.w600)),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 16.0),
-
-                      Row(
-                        children: [
-                          Expanded(
-                            child: SizedBox(
-                              height: 48,
-                              child: TextButton.icon(
-                                onPressed: () => listProvider.clearSelection(),
-                                style: TextButton.styleFrom(
-                                  backgroundColor: theme.dividerColor.withOpacity(0.1),
-                                  foregroundColor: theme.textTheme.titleMedium?.color,
-                                  shape: const StadiumBorder(),
-                                ),
-                                icon: const Icon(Icons.close_rounded, size: 20),
-                                label: Text('Cancel', style: theme.textTheme.titleMedium?.copyWith(fontSize: 16, fontWeight: FontWeight.w600)),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 12.0),
-                          Expanded(
-                            child: SizedBox(
-                              height: 48,
-                              child: ElevatedButton.icon(
-                                onPressed: () => listProvider.commitEdits(),
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: AppColors.primaryAction,
-                                  foregroundColor: Colors.white,
-                                  elevation: 0,
-                                  shape: const StadiumBorder(),
-                                ),
-                                icon: const Icon(Icons.check_rounded, size: 20),
-                                label: const Text('Save', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              ),
+              // THE NEW FLUID CONTEXT SHEET
+              const FluidEditSheet(),
             ],
           ),
         ),
