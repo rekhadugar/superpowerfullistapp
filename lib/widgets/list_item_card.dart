@@ -12,13 +12,14 @@ class ListItemCard extends StatefulWidget {
   final String category;
   final SortMode sortMode;
   final int quantity;
+  final String unit;
   final bool isHighlighted;
   final bool isDragging;
   final bool isFeedback;
   final bool isEditMode;
   final bool isSelected;
   final VoidCallback onTap;
-  final VoidCallback onCheck; // THE FIX: Added onCheck to the signature
+  final VoidCallback onCheck;
 
   const ListItemCard({
     Key? key,
@@ -30,13 +31,14 @@ class ListItemCard extends StatefulWidget {
     required this.category,
     required this.sortMode,
     required this.quantity,
+    required this.unit,
     this.isHighlighted = false,
     this.isDragging = false,
     this.isFeedback = false,
     this.isEditMode = false,
     this.isSelected = false,
     required this.onTap,
-    required this.onCheck, // THE FIX: Required parameter
+    required this.onCheck,
   }) : super(key: key);
 
   @override
@@ -200,27 +202,14 @@ class _ListItemCardState extends State<ListItemCard> with SingleTickerProviderSt
                   const SizedBox(width: AppConstants.interElementGap),
                   Expanded(
                     child: Text(
-                      widget.title,
+                      widget.quantity > 0
+                          ? '${widget.title} - ${widget.quantity} ${widget.unit}'
+                          : widget.title,
                       maxLines: AppConstants.maxTitleLines,
                       overflow: TextOverflow.ellipsis,
                       style: theme.textTheme.titleMedium?.copyWith(
                         fontSize: AppConstants.titleFontSize,
                         height: AppConstants.titleLineHeight,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: AppConstants.interElementGap),
-                  Container(
-                    width: AppConstants.trailingBlockWidth,
-                    height: AppConstants.attributeRowHeight * textScale,
-                    alignment: Alignment.center,
-                    child: Text(
-                      '${widget.quantity}',
-                      textAlign: TextAlign.center,
-                      style: theme.textTheme.titleMedium?.copyWith(
-                        fontSize: AppConstants.titleFontSize,
-                        height: AppConstants.titleLineHeight,
-                        color: widget.isEditMode ? theme.dividerColor.withOpacity(0.3) : null,
                       ),
                     ),
                   ),

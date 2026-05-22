@@ -103,9 +103,9 @@ class _EditItemBottomSheetState extends State<EditItemBottomSheet> {
                   decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12.0), border: Border.all(color: Colors.grey.shade300)),
                   child: Row(
                     children: [
-                      IconButton(icon: const Icon(Icons.remove), onPressed: () => setState(() => _quantity = (_quantity - 1).clamp(1, 99))),
+                      IconButton(icon: const Icon(Icons.remove), onPressed: () => setState(() => _quantity = (_quantity - 1).clamp(0, 99))),
                       SizedBox(width: 24, child: Text('$_quantity', textAlign: TextAlign.center, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold))),
-                      IconButton(icon: const Icon(Icons.add), onPressed: () => setState(() => _quantity = (_quantity + 1).clamp(1, 99))),
+                      IconButton(icon: const Icon(Icons.add), onPressed: () => setState(() => _quantity = (_quantity + 1).clamp(0, 99))),
                     ],
                   ),
                 ),

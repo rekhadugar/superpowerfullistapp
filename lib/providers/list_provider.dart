@@ -150,12 +150,12 @@ class ListProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  int getDraftQuantity(String id) => _draftQuantities[id] ?? 1;
+  int getDraftQuantity(String id) => _draftQuantities[id] ?? 0;
 
   void updateDraftQuantity(String id, int delta) {
     if (!_draftQuantities.containsKey(id)) return;
     final newQty = _draftQuantities[id]! + delta;
-    if (newQty > 0) {
+    if (newQty >= 0) { // FIX: Changed > 0 to >= 0
       _draftQuantities[id] = newQty;
       notifyListeners();
     }
@@ -463,7 +463,7 @@ class ListProvider extends ChangeNotifier {
   void updateQuantity(String id, int delta) {
     final index = _items.indexWhere((item) => item.id == id);
     if (index != -1) {
-      final newQuantity = (_items[index].quantity + delta).clamp(1, 99);
+      final newQuantity = (_items[index].quantity + delta).clamp(0, 99);
       if (_items[index].quantity != newQuantity) {
         _items[index] = _items[index].copyWith(quantity: newQuantity);
         _saveItemsToStorage();

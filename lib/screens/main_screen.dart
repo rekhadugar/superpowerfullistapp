@@ -264,6 +264,7 @@ class _MainScreenState extends State<MainScreen> {
                           category: item.category,
                           sortMode: listProvider.currentSortMode,
                           quantity: item.quantity,
+                          unit: item.unit,
                           isHighlighted: listProvider.flashItemId == item.id,
                           isDragging: false,
                           isEditMode: listProvider.isEditMode,
