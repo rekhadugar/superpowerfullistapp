@@ -60,7 +60,7 @@ class _FluidEditSheetState extends State<FluidEditSheet> {
         _draftItem!.attributeRows,
         _draftItem!.type,
         _draftItem!.category,
-        _draftItem!.quantity,
+        provider.getDraftQuantity(_draftItem!.id), // THE FIX: Read directly from provider engine!
         _draftItem!.unit,
       );
     }
@@ -236,9 +236,23 @@ class _FluidEditSheetState extends State<FluidEditSheet> {
               decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12.0)),
               child: Row(
                 children: [
-                  IconButton(icon: const Icon(Icons.remove), onPressed: () => setState(() => _draftItem = _draftItem!.copyWith(quantity: (_draftItem!.quantity - 1).clamp(1, 99)))),
-                  SizedBox(width: 24, child: Text('${_draftItem!.quantity}', textAlign: TextAlign.center, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold))),
-                  IconButton(icon: const Icon(Icons.add), onPressed: () => setState(() => _draftItem = _draftItem!.copyWith(quantity: (_draftItem!.quantity + 1).clamp(1, 99)))),
+                  // THE FIX: Push adjustments straight to the Provider and read live
+                  IconButton(
+                    icon: const Icon(Icons.remove),
+                    onPressed: () => provider.updateDraftQuantity(_draftItem!.id, -1),
+                  ),
+                  SizedBox(
+                    width: 24,
+                    child: Text(
+                      '${provider.getDraftQuantity(_draftItem!.id)}',
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.add),
+                    onPressed: () => provider.updateDraftQuantity(_draftItem!.id, 1),
+                  ),
                 ],
               ),
             ),

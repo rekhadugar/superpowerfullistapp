@@ -400,6 +400,7 @@ class ListProvider extends ChangeNotifier {
   }
 
   // --- MULTI-DIMENSIONAL EDIT ITEM (SECTION AWARE) ---
+  // --- MULTI-DIMENSIONAL EDIT ITEM (SECTION AWARE) ---
   void editItem(String id, String newTitle, List<String> newAttributes, String type, String category, int newQty, String newUnit) {
     final index = _items.indexWhere((item) => item.id == id);
     if (index != -1) {
@@ -410,7 +411,7 @@ class ListProvider extends ChangeNotifier {
       double newCatOrder = oldItem.categoryOrder;
       double newTypeOrder = oldItem.typeOrder;
 
-      // THE FIX: If the user changed the category, calculate a new order so it doesn't randomly inject into the middle of the new section
+      // Calculate a new order if the category changed
       if (oldItem.category != safeCategory) {
         double maxCat = 0.0;
         for (var i in _items) {
@@ -419,7 +420,7 @@ class ListProvider extends ChangeNotifier {
         newCatOrder = maxCat + 100.0;
       }
 
-      // THE FIX: If the user changed the Store (Type), calculate a new order for the Store view
+      // Calculate a new order if the Store (Type) changed
       if (oldItem.type != safeType) {
         double maxType = 0.0;
         for (var i in _items) {
@@ -428,11 +429,14 @@ class ListProvider extends ChangeNotifier {
         newTypeOrder = maxType + 100.0;
       }
 
+      // THE FIX: Explicitly assign newQty and newUnit to the database write!
       _items[index] = oldItem.copyWith(
         title: newTitle,
         attributeRows: newAttributes,
         type: safeType,
         category: safeCategory,
+        quantity: newQty,
+        unit: newUnit,
         categoryOrder: newCatOrder,
         typeOrder: newTypeOrder,
       );
