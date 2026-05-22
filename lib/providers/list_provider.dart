@@ -389,22 +389,43 @@ class ListProvider extends ChangeNotifier {
 
 
   // --- BATCH ACTIONS ---
-  void checkSelectedItems() {
-    for (String id in _selectedItemIds) {
+  List<String> checkSelectedItems() {
+    final checkedIds = List<String>.from(_selectedItemIds);
+    for (String id in checkedIds) {
       final index = _items.indexWhere((item) => item.id == id);
       if (index != -1) _items[index] = _items[index].copyWith(isCompleted: true);
     }
     clearSelection();
     _buildDisplayList();
+    return checkedIds; // Return IDs for the Undo Toast
   }
 
-  void deleteSelectedItems() {
-    for (String id in _selectedItemIds) {
+  List<String> deleteSelectedItems() {
+    final deletedIds = List<String>.from(_selectedItemIds);
+    for (String id in deletedIds) {
       final index = _items.indexWhere((item) => item.id == id);
       if (index != -1) _items[index] = _items[index].copyWith(isDeleted: true);
     }
     clearSelection();
     _buildDisplayList();
+    return deletedIds; // Return IDs for the Undo Toast
+  }
+
+  // --- UNDO ENGINE ---
+  void restoreItems(List<String> ids) {
+    bool changed = false;
+    for (String id in ids) {
+      final index = _items.indexWhere((item) => item.id == id);
+      if (index != -1) {
+        // Flipping flags back to false natively restores their exact position in the math engine
+        _items[index] = _items[index].copyWith(isDeleted: false, isCompleted: false);
+        changed = true;
+      }
+    }
+    if (changed) {
+      _buildDisplayList();
+      notifyListeners();
+    }
   }
 
   void copySelectedItems() {
@@ -646,21 +667,24 @@ class ListProvider extends ChangeNotifier {
     }
   }
 
-  void toggleCompletion(String id) {
+  // --- SINGLE ACTIONS ---
+  String toggleCompletion(String id) {
     final index = _items.indexWhere((item) => item.id == id);
     if (index != -1) {
       _items[index] = _items[index].copyWith(isCompleted: !_items[index].isCompleted);
       _buildDisplayList();
       notifyListeners();
     }
+    return id; // Return ID for the Undo Toast
   }
 
-  void deleteItem(String id) {
+  String deleteItem(String id) {
     final index = _items.indexWhere((item) => item.id == id);
     if (index != -1) {
       _items[index] = _items[index].copyWith(isDeleted: true);
       _buildDisplayList();
       notifyListeners();
     }
+    return id; // Return ID for the Undo Toast
   }
 }

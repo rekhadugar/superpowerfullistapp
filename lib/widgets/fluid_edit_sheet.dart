@@ -202,7 +202,14 @@ class _FluidEditSheetState extends State<FluidEditSheet> {
         const SizedBox(height: 32),
         Row(
           children: [
-            _buildPillButton(Icons.checklist_rounded, 'Check All', () => provider.checkSelectedItems(), color: AppColors.successAction),
+            _buildPillButton(Icons.checklist_rounded, 'Check All', () {
+              final ids = provider.checkSelectedItems();
+              ScaffoldMessenger.of(context).clearSnackBars();
+              ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                content: Text('${ids.length} items checked off'), behavior: SnackBarBehavior.floating,
+                action: SnackBarAction(label: 'Undo', textColor: AppColors.primaryAction, onPressed: () => provider.restoreItems(ids)),
+              ));
+            }, color: AppColors.successAction),
             const SizedBox(width: 12),
             _buildPillButton(Icons.copy_rounded, 'Copy', () => provider.copySelectedItems()),
           ],
@@ -210,7 +217,14 @@ class _FluidEditSheetState extends State<FluidEditSheet> {
         const SizedBox(height: 12),
         Row(
           children: [
-            _buildPillButton(Icons.delete_outline_rounded, 'Delete Selected', () => provider.deleteSelectedItems(), color: AppColors.destructiveAction),
+            _buildPillButton(Icons.delete_outline_rounded, 'Delete Selected', () {
+              final ids = provider.deleteSelectedItems();
+              ScaffoldMessenger.of(context).clearSnackBars();
+              ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                content: Text('${ids.length} items deleted'), behavior: SnackBarBehavior.floating,
+                action: SnackBarAction(label: 'Undo', textColor: AppColors.primaryAction, onPressed: () => provider.restoreItems(ids)),
+              ));
+            }, color: AppColors.destructiveAction),
           ],
         ),
       ],
@@ -242,22 +256,9 @@ class _FluidEditSheetState extends State<FluidEditSheet> {
               decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12.0)),
               child: Row(
                 children: [
-                  IconButton(
-                    icon: const Icon(Icons.remove),
-                    onPressed: () => provider.updateDraftQuantity(_draftItem!.id, -1),
-                  ),
-                  SizedBox(
-                    width: 24,
-                    child: Text(
-                      '${provider.getDraftQuantity(_draftItem!.id)}',
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                    ),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.add),
-                    onPressed: () => provider.updateDraftQuantity(_draftItem!.id, 1),
-                  ),
+                  IconButton(icon: const Icon(Icons.remove), onPressed: () => provider.updateDraftQuantity(_draftItem!.id, -1)),
+                  SizedBox(width: 24, child: Text('${provider.getDraftQuantity(_draftItem!.id)}', textAlign: TextAlign.center, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold))),
+                  IconButton(icon: const Icon(Icons.add), onPressed: () => provider.updateDraftQuantity(_draftItem!.id, 1)),
                 ],
               ),
             ),
@@ -288,12 +289,15 @@ class _FluidEditSheetState extends State<FluidEditSheet> {
                 _titleFocus.requestFocus();
               }, color: AppColors.primaryAction),
               const SizedBox(width: 8),
-              _buildPillButton(Icons.copy_rounded, 'Copy', () {
-                provider.copySelectedItems();
-              }),
+              _buildPillButton(Icons.copy_rounded, 'Copy', () => provider.copySelectedItems()),
               const SizedBox(width: 8),
               _buildPillButton(Icons.delete_outline_rounded, 'Delete', () {
-                provider.deleteSelectedItems();
+                final ids = provider.deleteSelectedItems();
+                ScaffoldMessenger.of(context).clearSnackBars();
+                ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                  content: const Text('Item deleted'), behavior: SnackBarBehavior.floating,
+                  action: SnackBarAction(label: 'Undo', textColor: AppColors.primaryAction, onPressed: () => provider.restoreItems(ids)),
+                ));
               }, color: AppColors.destructiveAction),
             ],
           ),

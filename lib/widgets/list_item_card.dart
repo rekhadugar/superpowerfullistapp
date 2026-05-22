@@ -15,9 +15,10 @@ class ListItemCard extends StatefulWidget {
   final bool isHighlighted;
   final bool isDragging;
   final bool isFeedback;
-  final bool isEditMode; // RESTORED
-  final bool isSelected; // RESTORED
+  final bool isEditMode;
+  final bool isSelected;
   final VoidCallback onTap;
+  final VoidCallback onCheck; // THE FIX: Added onCheck to the signature
 
   const ListItemCard({
     Key? key,
@@ -35,6 +36,7 @@ class ListItemCard extends StatefulWidget {
     this.isEditMode = false,
     this.isSelected = false,
     required this.onTap,
+    required this.onCheck, // THE FIX: Required parameter
   }) : super(key: key);
 
   @override
@@ -130,11 +132,6 @@ class _ListItemCardState extends State<ListItemCard> with SingleTickerProviderSt
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
-    final double computedHeight = AppConstants.baseCardHeight +
-        (widget.nWrap * AppConstants.nameWrapHeightStep) +
-        AppConstants.attributeRowHeight +
-        (widget.nTagRows * AppConstants.attributeRowHeight);
-
     final String contextBadgeText = widget.sortMode == SortMode.categories ? widget.type : widget.category;
     final IconData contextIcon = widget.sortMode == SortMode.categories ? Icons.storefront : Icons.category_outlined;
 
@@ -144,7 +141,6 @@ class _ListItemCardState extends State<ListItemCard> with SingleTickerProviderSt
       child: AnimatedBuilder(
         animation: _colorAnimation,
         builder: (context, child) {
-          // RESTORED: Background color highlight when selected
           Color? backgroundColor = widget.isSelected
               ? AppColors.primaryAction.withOpacity(0.08)
               : theme.cardColor;
@@ -173,22 +169,32 @@ class _ListItemCardState extends State<ListItemCard> with SingleTickerProviderSt
           mainAxisAlignment: MainAxisAlignment.start,
           mainAxisSize: widget.isFeedback ? MainAxisSize.min : MainAxisSize.max,
           children: [
-            Container(
+            SizedBox(
               height: AppConstants.baseCardHeight + (widget.nWrap * AppConstants.nameWrapHeightStep) - AppConstants.borderWidth,
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  Container(
-                    width: AppConstants.leadingBlockWidth,
-                    height: AppConstants.attributeRowHeight,
-                    alignment: Alignment.center,
-                    // RESTORED: Checkbox state mapping
-                    child: widget.isEditMode
-                        ? Icon(
-                      widget.isSelected ? Icons.check_box_rounded : Icons.check_box_outline_blank,
-                      color: widget.isSelected ? AppColors.primaryAction : theme.dividerColor,
-                    )
-                        : Icon(Icons.check_box_outline_blank, color: theme.dividerColor),
+                  // THE FIX: Intercept the tap before it reaches the card background
+                  GestureDetector(
+                    onTap: () {
+                      if (widget.isEditMode) {
+                        widget.onTap(); // Batch selection mode logic
+                      } else {
+                        widget.onCheck(); // Standard checkout logic
+                      }
+                    },
+                    behavior: HitTestBehavior.opaque, // Ensures the entire square is tappable
+                    child: Container(
+                      width: AppConstants.leadingBlockWidth,
+                      height: AppConstants.baseCardHeight, // Enlarged hit target
+                      alignment: Alignment.center,
+                      child: widget.isEditMode
+                          ? Icon(
+                        widget.isSelected ? Icons.check_box_rounded : Icons.check_box_outline_blank,
+                        color: widget.isSelected ? AppColors.primaryAction : theme.dividerColor,
+                      )
+                          : Icon(Icons.check_box_outline_blank, color: theme.dividerColor),
+                    ),
                   ),
                   const SizedBox(width: AppConstants.interElementGap),
                   Expanded(

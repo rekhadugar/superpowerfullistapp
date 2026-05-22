@@ -234,11 +234,22 @@ class _MainScreenState extends State<MainScreen> {
                       isDragging: false,
                       isEditMode: listProvider.isEditMode,
                       isSelected: isSelected,
+                      // THE FIX: Pass the check action and the Undo Toast down to the card
+                      onCheck: () {
+                        final id = context.read<ListProvider>().toggleCompletion(item.id);
+                        ScaffoldMessenger.of(context).clearSnackBars();
+                        ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text('${item.title} checked off'),
+                              behavior: SnackBarBehavior.floating,
+                              action: SnackBarAction(label: 'Undo', textColor: AppColors.primaryAction, onPressed: () => context.read<ListProvider>().restoreItems([id])),
+                            )
+                        );
+                      },
                       onTap: () {
                         if (listProvider.openSwipeItemId.value != null) {
                           listProvider.openSwipeItemId.value = null;
                         } else {
-                          // THE FIX: Route taps based on the active mode
                           if (listProvider.isMultiSelectMode) {
                             context.read<ListProvider>().toggleSelection(item.id);
                           } else {
@@ -255,15 +266,34 @@ class _MainScreenState extends State<MainScreen> {
                         key: ValueKey('swipe_${item.id}'),
                         itemId: item.id,
                         requireConfirm: true,
-                        onCheckout: () => context.read<ListProvider>().toggleCompletion(item.id),
+                        onCheckout: () {
+                          final id = context.read<ListProvider>().toggleCompletion(item.id);
+                          ScaffoldMessenger.of(context).clearSnackBars();
+                          ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text('${item.title} checked off'),
+                                behavior: SnackBarBehavior.floating,
+                                action: SnackBarAction(label: 'Undo', textColor: AppColors.primaryAction, onPressed: () => context.read<ListProvider>().restoreItems([id])),
+                              )
+                          );
+                        },
                         onEdit: () {
-                          // FIX: Clear existing selection, select this item, and force Full View
                           listProvider.clearSelection();
                           listProvider.toggleSelection(item.id);
                           listProvider.setFullEditRequest(true);
                           listProvider.openSwipeItemId.value = null;
                         },
-                        onDelete: () => context.read<ListProvider>().deleteItem(item.id),
+                        onDelete: () {
+                          final id = context.read<ListProvider>().deleteItem(item.id);
+                          ScaffoldMessenger.of(context).clearSnackBars();
+                          ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text('${item.title} deleted'),
+                                behavior: SnackBarBehavior.floating,
+                                action: SnackBarAction(label: 'Undo', textColor: AppColors.primaryAction, onPressed: () => context.read<ListProvider>().restoreItems([id])),
+                              )
+                          );
+                        },
                         child: coreCard,
                       ),
                     );
