@@ -4,7 +4,7 @@ import '../models/list_item.dart';
 import '../providers/list_provider.dart';
 
 import '../theme/app_theme.dart';
-import 'agile_chip_selector.dart';
+import 'horizontal_pill_selector.dart';
 
 class EditItemBottomSheet extends StatefulWidget {
   final ListItem? item;
@@ -128,30 +128,30 @@ class _EditItemBottomSheetState extends State<EditItemBottomSheet> {
             ),
             const SizedBox(height: 16.0),
 
-            AgileChipSelector(
+            HorizontalPillSelector(
               title: 'Category',
               dictionary: categoriesDict,
-              initialSelections: _selectedCategory.isNotEmpty ? [_selectedCategory] : [],
+              selectedItems: _selectedCategory.isNotEmpty ? [_selectedCategory] : [],
               isMultiSelect: false,
-              onSelectionChanged: (vals) => _selectedCategory = vals.isNotEmpty ? vals.first : '',
+              onSelectionChanged: (vals) => setState(() => _selectedCategory = vals.isNotEmpty ? vals.first : ''),
             ),
             const SizedBox(height: 16.0),
 
-            AgileChipSelector(
+            HorizontalPillSelector(
               title: 'Store',
               dictionary: storesDict,
-              initialSelections: _selectedStore.isNotEmpty ? [_selectedStore] : [],
+              selectedItems: _selectedStore.isNotEmpty ? [_selectedStore] : [],
               isMultiSelect: false,
-              onSelectionChanged: (vals) => _selectedStore = vals.isNotEmpty ? vals.first : '',
+              onSelectionChanged: (vals) => setState(() => _selectedStore = vals.isNotEmpty ? vals.first : ''),
             ),
             const SizedBox(height: 16.0),
 
-            AgileChipSelector(
+            HorizontalPillSelector(
               title: 'Tags',
               dictionary: tagsDict,
-              initialSelections: _selectedTags,
+              selectedItems: _selectedTags,
               isMultiSelect: true,
-              onSelectionChanged: (vals) => _selectedTags = vals,
+              onSelectionChanged: (vals) => setState(() => _selectedTags = vals),
             ),
             const SizedBox(height: 24.0),
 

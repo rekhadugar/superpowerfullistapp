@@ -3,7 +3,7 @@ import 'package:provider/provider.dart';
 import '../providers/list_provider.dart';
 import '../models/list_item.dart';
 import '../theme/app_theme.dart';
-import 'agile_chip_selector.dart';
+import 'horizontal_pill_selector.dart';
 
 class FluidEditSheet extends StatefulWidget {
   const FluidEditSheet({Key? key}) : super(key: key);
@@ -303,26 +303,26 @@ class _FluidEditSheetState extends State<FluidEditSheet> {
           ),
 
         if (isFull) ...[
-          AgileChipSelector(
+          HorizontalPillSelector(
             title: 'Category',
             dictionary: provider.activeCategoryDictionary,
-            initialSelections: _draftItem!.category != 'Everything Else' ? [_draftItem!.category] : [],
+            selectedItems: _draftItem!.category != 'Everything Else' ? [_draftItem!.category] : [],
             isMultiSelect: false,
             onSelectionChanged: (vals) => setState(() => _draftItem = _draftItem!.copyWith(category: vals.isNotEmpty ? vals.first : '')),
           ),
           const SizedBox(height: 16),
-          AgileChipSelector(
+          HorizontalPillSelector(
             title: 'Store',
             dictionary: provider.activeStoreDictionary,
-            initialSelections: _draftItem!.type != 'Any' ? [_draftItem!.type] : [],
+            selectedItems: _draftItem!.type != 'Any' ? [_draftItem!.type] : [],
             isMultiSelect: false,
             onSelectionChanged: (vals) => setState(() => _draftItem = _draftItem!.copyWith(type: vals.isNotEmpty ? vals.first : '')),
           ),
           const SizedBox(height: 16),
-          AgileChipSelector(
+          HorizontalPillSelector(
             title: 'Tags',
             dictionary: provider.activeTagDictionary,
-            initialSelections: _draftItem!.attributeRows,
+            selectedItems: _draftItem!.attributeRows,
             isMultiSelect: true,
             onSelectionChanged: (vals) => setState(() => _draftItem = _draftItem!.copyWith(attributeRows: vals)),
           ),
