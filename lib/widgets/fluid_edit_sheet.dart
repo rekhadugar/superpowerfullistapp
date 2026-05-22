@@ -60,7 +60,7 @@ class _FluidEditSheetState extends State<FluidEditSheet> {
         _draftItem!.attributeRows,
         _draftItem!.type,
         _draftItem!.category,
-        provider.getDraftQuantity(_draftItem!.id), // THE FIX: Read directly from provider engine!
+        provider.getDraftQuantity(_draftItem!.id), // Tied directly to provider
         _draftItem!.unit,
       );
     }
@@ -91,6 +91,7 @@ class _FluidEditSheetState extends State<FluidEditSheet> {
     final provider = context.watch<ListProvider>();
     _syncDraftWithProvider(provider);
 
+    // THESE ARE THE VARIABLES THAT WERE MISSING
     final bool isVisible = provider.selectedItemIds.isNotEmpty;
     final bool isMulti = provider.isMultiSelectMode || provider.selectedItemIds.length > 1;
     final bool isFull = provider.isFullEditRequested;
@@ -99,13 +100,12 @@ class _FluidEditSheetState extends State<FluidEditSheet> {
     final double keyboardHeight = MediaQuery.of(context).viewInsets.bottom;
     final double safeBottom = MediaQuery.of(context).padding.bottom;
 
-    // THE FIX: Fixed proportions. The sheet size is now independent of the keyboard!
     double sheetHeight = 280.0 + safeBottom;
 
     if (isMulti) {
       sheetHeight = 200.0 + safeBottom;
     } else if (isFull) {
-      sheetHeight = screenHeight * 0.85; // Fixed at 85% of physical screen
+      sheetHeight = screenHeight * 0.85;
     }
 
     return AnimatedPositioned(
@@ -170,14 +170,18 @@ class _FluidEditSheetState extends State<FluidEditSheet> {
             ),
 
             Expanded(
-              child: SingleChildScrollView(
-                physics: isFull ? const BouncingScrollPhysics() : const NeverScrollableScrollPhysics(),
-                keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-                // THE FIX: Push the inner contents up by the keyboard height
-                padding: EdgeInsets.only(left: 20.0, right: 20.0, bottom: keyboardHeight + 20.0),
-                child: isMulti
-                    ? _buildBatchView(provider)
-                    : _buildSingleEditView(provider, isFull),
+              // SHIELD: Stops inner scrolls from bubbling to the background list
+              child: NotificationListener<ScrollNotification>(
+                onNotification: (_) => true,
+                child: SingleChildScrollView(
+                  physics: isFull ? const BouncingScrollPhysics() : const NeverScrollableScrollPhysics(),
+                  keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+                  // DYNAMIC PADDING: Pushes contents up above the keyboard natively
+                  padding: EdgeInsets.only(left: 20.0, right: 20.0, bottom: keyboardHeight + 20.0),
+                  child: isMulti
+                      ? _buildBatchView(provider)
+                      : _buildSingleEditView(provider, isFull),
+                ),
               ),
             ),
           ],
@@ -238,7 +242,6 @@ class _FluidEditSheetState extends State<FluidEditSheet> {
               decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12.0)),
               child: Row(
                 children: [
-                  // THE FIX: Push adjustments straight to the Provider and read live
                   IconButton(
                     icon: const Icon(Icons.remove),
                     onPressed: () => provider.updateDraftQuantity(_draftItem!.id, -1),

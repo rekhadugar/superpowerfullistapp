@@ -182,10 +182,17 @@ class _MainScreenState extends State<MainScreen> {
 
             // THE FIX: Scroll-to-Dismiss Logic
             // If the user physically drags the main list, instantly drop the edit sheet
+            // THE FIX: Smart Keyboard-Aware Scroll-to-Dismiss
             if (notification is ScrollUpdateNotification && notification.dragDetails != null) {
               if (!listProvider.isMultiSelectMode && listProvider.selectedItemIds.isNotEmpty) {
-                listProvider.clearSelection();
-                FocusManager.instance.primaryFocus?.unfocus(); // Drops the keyboard
+                // Check if the keyboard is physically taking up space
+                final isKeyboardOpen = MediaQuery.of(context).viewInsets.bottom > 0;
+
+                if (isKeyboardOpen) {
+                  FocusManager.instance.primaryFocus?.unfocus(); // Only dismiss the keyboard
+                } else {
+                  listProvider.clearSelection(); // Keyboard is closed, dismiss the sheet
+                }
               }
             }
             return false;
