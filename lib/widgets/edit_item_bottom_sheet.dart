@@ -54,7 +54,7 @@ class _EditItemBottomSheetState extends State<EditItemBottomSheet> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!_isConfirmationState && mounted) {
         setState(() {
-          _suggestions = context.read<ListProvider>().searchGlobalDictionary('');
+          _suggestions = context.read<ListProvider>().searchSmartDictionary(''); // FIX: Updated method name
         });
       }
     });
@@ -70,7 +70,7 @@ class _EditItemBottomSheetState extends State<EditItemBottomSheet> {
   void _onSearchChanged(String val) {
     if (mounted) {
       setState(() {
-        _suggestions = context.read<ListProvider>().searchGlobalDictionary(val);
+        _suggestions = context.read<ListProvider>().searchSmartDictionary(val); // FIX: Updated method name
       });
     }
   }

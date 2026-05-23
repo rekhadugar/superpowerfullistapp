@@ -1,5 +1,3 @@
-// Location: lib/providers/list_provider.dart
-
 import 'dart:async';
 import 'package:flutter/material.dart';
 import '../models/list_item.dart';
@@ -13,7 +11,7 @@ import '../data/mock_global_dictionary.dart';
 class ListProvider extends ChangeNotifier {
   String? _currentListId; // Tracks the active query scope
   double _viewportWidth = 0.0;
-  double _textScaleFactor = 1.0; // NEW: Tracks current text scale
+  double _textScaleFactor = 1.0;
 
   // --- SORTING STATE & PREFERENCES ---
   SortMode _currentSortMode = SortMode.categories;
@@ -21,7 +19,6 @@ class ListProvider extends ChangeNotifier {
   List<String> preferredTypeOrder = [];
   List<String> preferredCategoryOrder = [];
 
-  // True Blank Slate - Mock data removed
   List<ListItem> _items = [];
 
   // --- GESTURE & SPATIAL CACHE STATE ---
@@ -34,51 +31,42 @@ class ListProvider extends ChangeNotifier {
   final Set<String> _selectedItemIds = {};
   final Map<String, int> _draftQuantities = {};
 
-  // --- AGILE DICTIONARY STATE ---
-  // In the future, this will be fetched from the Parent List object.
   final String currentListType = 'Shopping';
 
-  final Map<String, List<String>> _globalCategories = {
-    'Shopping': ['Produce', 'Dairy', 'Bakery', 'Pantry', 'Meat', 'Household', 'Frozen', 'Snacks'],
-  };
-  final Map<String, List<String>> _globalStores = {
-    'Shopping': ['Costco', 'Target', 'Walmart', 'Aldi', 'Trader Joes', 'Jewel-Osco'],
-  };
-  final Map<String, List<String>> _globalTags = {
-    'Shopping': ['vegan', 'urgent', 'bulk', 'sale', 'low sodium', 'organic'],
-  };
+  // --- AGILE DICTIONARY STATE ---
 
-  // Helper to merge user history with global defaults
-  List<String> _getMergedDictionary(String propertyType, List<String> globalDefaults) {
-    final Set<String> userHistory = {};
-    for (var item in _items) {
-      if (!item.isDeleted) {
-        if (propertyType == 'category' && item.category.isNotEmpty && item.category != 'Everything Else') userHistory.add(item.category);
-        if (propertyType == 'type' && item.type.isNotEmpty && item.type != 'Any') userHistory.add(item.type);
-        if (propertyType == 'tags') userHistory.addAll(item.attributeRows);
-      }
-    }
-
-    // Combine history first, then pad with global defaults, keeping unique values
-    final List<String> mergedList = userHistory.toList();
-    for (var defaultVal in globalDefaults) {
-      if (!mergedList.contains(defaultVal)) mergedList.add(defaultVal);
-    }
-    return mergedList.take(10).toList(); // Limit to top 10 badges for quick tapping
+  List<String> get activeCategoryDictionary {
+    return _getMergedDictionary()
+        .map((item) => item.category)
+        .where((c) => c.isNotEmpty && c != 'Everything Else')
+        .toSet()
+        .toList()..sort();
   }
 
-  List<String> get activeCategoryDictionary => _getMergedDictionary('category', _globalCategories[currentListType] ?? []);
-  List<String> get activeStoreDictionary => _getMergedDictionary('type', _globalStores[currentListType] ?? []);
-  List<String> get activeTagDictionary => _getMergedDictionary('tags', _globalTags[currentListType] ?? []);
+  List<String> get activeStoreDictionary {
+    return _getMergedDictionary()
+        .map((item) => item.store)
+        .where((s) => s.isNotEmpty && s != 'Any')
+        .toSet()
+        .toList()..sort();
+  }
+
+  List<String> get activeTagDictionary {
+    return _getMergedDictionary()
+        .expand((item) => item.tags)
+        .where((t) => t.isNotEmpty)
+        .toSet()
+        .toList()..sort();
+  }
 
   ListProvider() {
     _buildDisplayList();
-    runDataMigration(); // Fixes legacy 0.0 ties immediately on startup
+    runDataMigration();
   }
 
   // --- LOCAL ISOLATED STORAGE ENGINE ---
   Future<void> loadItemsForList(String listId) async {
-    if (_currentListId == listId) return; // Prevent duplicate loads
+    if (_currentListId == listId) return;
 
     _currentListId = listId;
     final prefs = await SharedPreferences.getInstance();
@@ -88,10 +76,10 @@ class ListProvider extends ChangeNotifier {
       final List<dynamic> decoded = jsonDecode(itemsJson);
       _items = decoded.map((map) => ListItem.fromMap(map)).toList();
     } else {
-      _items = []; // True blank slate for new lists
+      _items = [];
     }
 
-    _recalculateWraps(); // FIX: Recalculate geometry so loaded items get their badges back
+    _recalculateWraps();
     _buildDisplayList();
     notifyListeners();
   }
@@ -112,19 +100,16 @@ class ListProvider extends ChangeNotifier {
 
     if (!needsMigration) return;
 
-    // Migrate Category Dimension
     _items.sort((a, b) => a.categoryOrder.compareTo(b.categoryOrder));
     for(int i=0; i<_items.length; i++) {
       _items[i] = _items[i].copyWith(categoryOrder: (i+1) * 100.0);
     }
 
-    // Migrate Type (Store) Dimension
     _items.sort((a, b) => a.typeOrder.compareTo(b.typeOrder));
     for(int i=0; i<_items.length; i++) {
       _items[i] = _items[i].copyWith(typeOrder: (i+1) * 100.0);
     }
 
-    // Migrate Flat/Custom Dimension
     _items.sort((a, b) => a.globalCustomOrder.compareTo(b.globalCustomOrder));
     for(int i=0; i<_items.length; i++) {
       _items[i] = _items[i].copyWith(globalCustomOrder: (i+1) * 100.0);
@@ -156,7 +141,7 @@ class ListProvider extends ChangeNotifier {
   void updateDraftQuantity(String id, int delta) {
     if (!_draftQuantities.containsKey(id)) return;
     final newQty = _draftQuantities[id]! + delta;
-    if (newQty >= 0) { // FIX: Changed > 0 to >= 0
+    if (newQty >= 0) {
       _draftQuantities[id] = newQty;
       notifyListeners();
     }
@@ -365,7 +350,6 @@ class ListProvider extends ChangeNotifier {
   // SMART PREFILL ENGINE
   // ==========================================
 
-  /// Checks if an exact string match is currently active (not completed/deleted) in the list
   bool isActiveItem(String title) {
     return _items.any((item) =>
     !item.isDeleted &&
@@ -374,7 +358,6 @@ class ListProvider extends ChangeNotifier {
     );
   }
 
-  /// Returns the ID of an active item by exact title match (useful for routing the flash)
   String? getActiveItemIdByTitle(String title) {
     try {
       final item = _items.firstWhere((item) =>
@@ -384,41 +367,85 @@ class ListProvider extends ChangeNotifier {
       );
       return item.id;
     } catch (e) {
-      return null; // Not found
+      return null;
     }
   }
 
-  /// Searches the global dictionary for predictive text
-  List<SmartItem> searchGlobalDictionary(String query) {
-    if (query.trim().isEmpty) return MockDictionary.globalItems.take(5).toList(); // Show top popular if empty
+  /// Dynamic engine that merges global defaults with user history, sorted by usage frequency
+  List<SmartItem> _getMergedDictionary() {
+    final Map<String, SmartItem> merged = {};
+    final Map<String, int> frequency = {};
+
+    // 1. Load Global Baseline
+    for (var item in MockDictionary.globalItems) {
+      final key = item.title.toLowerCase();
+      merged[key] = item;
+      frequency[key] = 0; // Baseline frequency
+    }
+
+    // 2. Overlay User's Historical Data
+    // Loops chronologically so the most recent edits overwrite older data.
+    for (var item in _items) {
+      final key = item.title.toLowerCase();
+      merged[key] = SmartItem(
+        title: item.title, // Preserve user's preferred casing
+        category: item.category,
+        store: item.type,
+        unit: item.unit,
+        tags: item.attributeRows,
+      );
+      // Increment frequency counter for every historical occurrence
+      frequency[key] = (frequency[key] ?? 0) + 1;
+    }
+
+    // 3. Sort by Frequency (Most popular first)
+    final sortedItems = merged.values.toList();
+    sortedItems.sort((a, b) {
+      final freqA = frequency[a.title.toLowerCase()] ?? 0;
+      final freqB = frequency[b.title.toLowerCase()] ?? 0;
+      return freqB.compareTo(freqA);
+    });
+
+    return sortedItems;
+  }
+
+  /// Searches the frequency-sorted dictionary
+  List<SmartItem> searchSmartDictionary(String query) {
+    final allItems = _getMergedDictionary();
+
+    if (query.trim().isEmpty) {
+      // Return top 5 most popular items, explicitly hiding anything currently active
+      return allItems
+          .where((item) => !isActiveItem(item.title))
+          .take(5)
+          .toList();
+    }
 
     final q = query.toLowerCase().trim();
-    return MockDictionary.globalItems
+    return allItems
         .where((item) => item.title.toLowerCase().contains(q))
         .toList();
   }
 
-  /// Finds an exact match in the dictionary for quick-save background application
+  /// Finds an exact match in the merged dictionary for quick-save application
   SmartItem? getExactDictionaryMatch(String title) {
+    final allItems = _getMergedDictionary();
     final q = title.toLowerCase().trim();
     try {
-      return MockDictionary.globalItems.firstWhere((item) => item.title.toLowerCase() == q);
+      return allItems.firstWhere((item) => item.title.toLowerCase() == q);
     } catch (e) {
-      return null; // No exact match found
+      return null;
     }
   }
 
-  /// Triggers the flash animation AFTER the bottom sheet dismiss animation completes
   void triggerSequentialFlash(String itemId) {
-    // Standard bottom sheet close animation is ~300ms. We wait 350ms to be safe.
     Future.delayed(const Duration(milliseconds: 350), () {
-      _flashItemId = itemId; // FIX: Use the existing private variable
+      _flashItemId = itemId;
       notifyListeners();
 
-      // Clear the flash after the UI animation completes so it can be flashed again later if needed
       Future.delayed(const Duration(milliseconds: 1500), () {
-        if (_flashItemId == itemId) { // FIX: Use the existing private variable
-          _flashItemId = null; // FIX: Use the existing private variable
+        if (_flashItemId == itemId) {
+          _flashItemId = null;
           notifyListeners();
         }
       });
@@ -588,7 +615,7 @@ class ListProvider extends ChangeNotifier {
 
     if (changed) {
       _recalculateWraps();
-      _recalculateYOffsets(); // Force spatial cache update if scale changed
+      _recalculateYOffsets();
       notifyListeners();
     }
   }
@@ -619,7 +646,7 @@ class ListProvider extends ChangeNotifier {
         ),
         textDirection: TextDirection.ltr,
         maxLines: AppConstants.maxTitleLines,
-        textScaler: TextScaler.linear(_textScaleFactor), // Scaler aware
+        textScaler: TextScaler.linear(_textScaleFactor),
       )..layout(maxWidth: titleAvailableWidth);
 
       final int lineCount = tp.didExceedMaxLines
@@ -646,7 +673,7 @@ class ListProvider extends ChangeNotifier {
                     letterSpacing: 0.2,
                     height: 1.1)),
             textDirection: TextDirection.ltr,
-            textScaler: TextScaler.linear(_textScaleFactor), // Scaler aware
+            textScaler: TextScaler.linear(_textScaleFactor),
           )..layout();
 
           final double actualBadgeWidth = tagTp.width +
