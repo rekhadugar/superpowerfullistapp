@@ -550,6 +550,35 @@ class ListProvider extends ChangeNotifier {
     final index = _items.indexWhere((item) => item.id == id);
     if (index != -1) {
       final oldItem = _items[index];
+
+      // --- NEW: MERGE CONFLICT RESOLUTION ---
+      // Check if correcting a typo causes a collision with an existing active item
+      final existingId = getActiveItemIdByTitle(newTitle);
+      if (existingId != null && existingId != id) {
+        final existingIndex = _items.indexWhere((item) => item.id == existingId);
+        final existingItem = _items[existingIndex];
+
+        // 1. Merge into the existing item (add quantities, adopt newest settings)
+        _items[existingIndex] = existingItem.copyWith(
+          quantity: (existingItem.quantity + newQty).clamp(0, 99),
+          attributeRows: newAttributes,
+          type: type.trim().isEmpty ? "Any" : type.trim(),
+          category: category.trim().isEmpty ? "Everything Else" : category.trim(),
+          unit: newUnit,
+        );
+
+        // 2. Permanently delete the typo item to complete the merge
+        _items.removeAt(index);
+
+        _recalculateWraps();
+        _buildDisplayList();
+        _saveItemsToStorage();
+        triggerSequentialFlash(existingId); // Flash the newly merged item
+        notifyListeners();
+        return;
+      }
+
+      // --- NORMAL EDIT ROUTINE ---
       final safeType = type.trim().isEmpty ? "Any" : type.trim();
       final safeCategory = category.trim().isEmpty ? "Everything Else" : category.trim();
 
