@@ -8,6 +8,7 @@ import '../engine/sticky_header_engine.dart';
 import '../engine/sort_mode_engine.dart';
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../data/mock_global_dictionary.dart';
 
 class ListProvider extends ChangeNotifier {
   String? _currentListId; // Tracks the active query scope
@@ -358,6 +359,70 @@ class ListProvider extends ChangeNotifier {
     _isFullEditRequested = false;
     _isMultiSelectMode = false;
     notifyListeners();
+  }
+
+  // ==========================================
+  // SMART PREFILL ENGINE
+  // ==========================================
+
+  /// Checks if an exact string match is currently active (not completed/deleted) in the list
+  bool isActiveItem(String title) {
+    return _items.any((item) =>
+    !item.isDeleted &&
+        !item.isCompleted &&
+        item.title.trim().toLowerCase() == title.trim().toLowerCase()
+    );
+  }
+
+  /// Returns the ID of an active item by exact title match (useful for routing the flash)
+  String? getActiveItemIdByTitle(String title) {
+    try {
+      final item = _items.firstWhere((item) =>
+      !item.isDeleted &&
+          !item.isCompleted &&
+          item.title.trim().toLowerCase() == title.trim().toLowerCase()
+      );
+      return item.id;
+    } catch (e) {
+      return null; // Not found
+    }
+  }
+
+  /// Searches the global dictionary for predictive text
+  List<SmartItem> searchGlobalDictionary(String query) {
+    if (query.trim().isEmpty) return MockDictionary.globalItems.take(5).toList(); // Show top popular if empty
+
+    final q = query.toLowerCase().trim();
+    return MockDictionary.globalItems
+        .where((item) => item.title.toLowerCase().contains(q))
+        .toList();
+  }
+
+  /// Finds an exact match in the dictionary for quick-save background application
+  SmartItem? getExactDictionaryMatch(String title) {
+    final q = title.toLowerCase().trim();
+    try {
+      return MockDictionary.globalItems.firstWhere((item) => item.title.toLowerCase() == q);
+    } catch (e) {
+      return null; // No exact match found
+    }
+  }
+
+  /// Triggers the flash animation AFTER the bottom sheet dismiss animation completes
+  void triggerSequentialFlash(String itemId) {
+    // Standard bottom sheet close animation is ~300ms. We wait 350ms to be safe.
+    Future.delayed(const Duration(milliseconds: 350), () {
+      _flashItemId = itemId; // FIX: Use the existing private variable
+      notifyListeners();
+
+      // Clear the flash after the UI animation completes so it can be flashed again later if needed
+      Future.delayed(const Duration(milliseconds: 1500), () {
+        if (_flashItemId == itemId) { // FIX: Use the existing private variable
+          _flashItemId = null; // FIX: Use the existing private variable
+          notifyListeners();
+        }
+      });
+    });
   }
 
   // --- BATCH ACTIONS ---
