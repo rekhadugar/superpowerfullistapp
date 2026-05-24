@@ -79,6 +79,9 @@ class ListProvider extends ChangeNotifier {
       _items = [];
     }
 
+    // NEW: Check and run the daily trash purge
+    await _runDailyPurge(prefs);
+
     _recalculateWraps();
     _buildDisplayList();
     notifyListeners();
@@ -90,6 +93,38 @@ class ListProvider extends ChangeNotifier {
     final String encoded = jsonEncode(_items.map((i) => i.toMap()).toList());
     await prefs.setString('items_$_currentListId', encoded);
   }
+
+  // --- NEW: STORAGE OPTIMIZATION (EMPTY TRASH) ---
+  Future<void> _runDailyPurge(SharedPreferences prefs) async {
+    final lastPurgeStr = prefs.getString('last_purge_date_$_currentListId');
+    final now = DateTime.now();
+    bool shouldPurge = false;
+
+    if (lastPurgeStr == null) {
+      shouldPurge = true;
+    } else {
+      final lastPurge = DateTime.parse(lastPurgeStr);
+      if (now.difference(lastPurge).inHours >= 24) {
+        shouldPurge = true;
+      }
+    }
+
+    if (shouldPurge) {
+      final initialCount = _items.length;
+      _items.removeWhere((item) => item.isDeleted);
+
+      // If items were actually removed, shrink the local storage file immediately
+      if (_items.length < initialCount) {
+        final String encoded = jsonEncode(_items.map((i) => i.toMap()).toList());
+        await prefs.setString('items_$_currentListId', encoded);
+      }
+
+      // Log the time of this purge
+      await prefs.setString('last_purge_date_$_currentListId', now.toIso8601String());
+    }
+  }
+
+  // --- 1. ISOLATED DATA MIGRATION ---
 
   // --- 1. ISOLATED DATA MIGRATION ---
   void runDataMigration() {
@@ -269,6 +304,34 @@ class ListProvider extends ChangeNotifier {
     final safeType = type.trim().isEmpty ? "Any" : type.trim();
     final safeCategory = category.trim().isEmpty ? "Everything Else" : category.trim();
 
+    // EXACT-MATCH MERGE CHECK
+    final sortedNewTags = List<String>.from(attributes)..sort();
+    final newTagString = sortedNewTags.join(",");
+
+    final exactMatchIndex = _items.indexWhere((item) {
+      if (item.isDeleted || item.isCompleted) return false;
+      if (item.title.trim().toLowerCase() != title.trim().toLowerCase()) return false;
+      if (item.category != safeCategory) return false;
+      if (item.type != safeType) return false;
+      final itemTags = List<String>.from(item.attributeRows)..sort();
+      return itemTags.join(",") == newTagString;
+    });
+
+    if (exactMatchIndex != -1) {
+      // Merge into the perfectly identical active item
+      final existingItem = _items[exactMatchIndex];
+      _items[exactMatchIndex] = existingItem.copyWith(
+        quantity: (existingItem.quantity + newQty).clamp(0, 99),
+        unit: newUnit,
+      );
+      _recalculateWraps();
+      _buildDisplayList();
+      _saveItemsToStorage();
+      triggerSequentialFlash(existingItem.id);
+      notifyListeners();
+      return;
+    }
+
     double maxCat = 0.0, maxType = 0.0, maxGlobal = 0.0;
 
     for (var item in _items) {
@@ -347,76 +410,80 @@ class ListProvider extends ChangeNotifier {
   }
 
   // ==========================================
-  // SMART PREFILL ENGINE
+  // SMART PREFILL ENGINE (MULTI-VARIANT)
   // ==========================================
 
-  bool isActiveItem(String title) {
+  /// Generates a unique fingerprint for a specific item variant
+  String _generateVariantKey(String title, String category, String store, List<String> tags) {
+    final sortedTags = List<String>.from(tags)..sort();
+    return '${title.toLowerCase().trim()}|${category.trim()}|${store.trim()}|${sortedTags.join(",")}';
+  }
+
+  /// Checks if a perfectly identical variant is already active
+  bool isActiveVariant(String title, String category, String store, List<String> tags) {
+    final targetKey = _generateVariantKey(title, category, store, tags);
     return _items.any((item) =>
     !item.isDeleted &&
         !item.isCompleted &&
-        item.title.trim().toLowerCase() == title.trim().toLowerCase()
+        _generateVariantKey(item.title, item.category, item.type, item.attributeRows) == targetKey
     );
   }
 
-  String? getActiveItemIdByTitle(String title) {
-    try {
-      final item = _items.firstWhere((item) =>
-      !item.isDeleted &&
-          !item.isCompleted &&
-          item.title.trim().toLowerCase() == title.trim().toLowerCase()
-      );
-      return item.id;
-    } catch (e) {
-      return null;
-    }
-  }
-
-  /// Dynamic engine that merges global defaults with user history, sorted by usage frequency
   List<SmartItem> _getMergedDictionary() {
     final Map<String, SmartItem> merged = {};
     final Map<String, int> frequency = {};
+    final Map<String, int> recency = {}; // Tie-breaker
 
     // 1. Load Global Baseline
     for (var item in MockDictionary.globalItems) {
-      final key = item.title.toLowerCase();
+      final key = _generateVariantKey(item.title, item.category, item.store, item.tags);
       merged[key] = item;
-      frequency[key] = 0; // Baseline frequency
+      frequency[key] = 0;
+      recency[key] = 0;
     }
 
     // 2. Overlay User's Historical Data
-    // Loops chronologically so the most recent edits overwrite older data.
+    int timeIndex = 0;
     for (var item in _items) {
-      final key = item.title.toLowerCase();
+      if (item.isDeleted) continue; // NEW: Ignore items currently in the trash
+
+      final key = _generateVariantKey(item.title, item.category, item.type, item.attributeRows);
       merged[key] = SmartItem(
-        title: item.title, // Preserve user's preferred casing
+        title: item.title,
         category: item.category,
         store: item.type,
         unit: item.unit,
         tags: item.attributeRows,
       );
-      // Increment frequency counter for every historical occurrence
       frequency[key] = (frequency[key] ?? 0) + 1;
+      recency[key] = timeIndex++; // Higher index = more recently added/edited
     }
 
-    // 3. Sort by Frequency (Most popular first)
+    // 3. Sort by Frequency, then Recency
     final sortedItems = merged.values.toList();
     sortedItems.sort((a, b) {
-      final freqA = frequency[a.title.toLowerCase()] ?? 0;
-      final freqB = frequency[b.title.toLowerCase()] ?? 0;
-      return freqB.compareTo(freqA);
+      final keyA = _generateVariantKey(a.title, a.category, a.store, a.tags);
+      final keyB = _generateVariantKey(b.title, b.category, b.store, b.tags);
+      final freqA = frequency[keyA] ?? 0;
+      final freqB = frequency[keyB] ?? 0;
+
+      if (freqA != freqB) return freqB.compareTo(freqA);
+
+      final recA = recency[keyA] ?? 0;
+      final recB = recency[keyB] ?? 0;
+      return recB.compareTo(recA);
     });
 
     return sortedItems;
   }
 
-  /// Searches the frequency-sorted dictionary
   List<SmartItem> searchSmartDictionary(String query) {
     final allItems = _getMergedDictionary();
 
     if (query.trim().isEmpty) {
-      // Return top 5 most popular items, explicitly hiding anything currently active
+      // Return top popular variants, strictly hiding variants that are already active
       return allItems
-          .where((item) => !isActiveItem(item.title))
+          .where((item) => !isActiveVariant(item.title, item.category, item.store, item.tags))
           .take(5)
           .toList();
     }
@@ -427,11 +494,12 @@ class ListProvider extends ChangeNotifier {
         .toList();
   }
 
-  /// Finds an exact match in the merged dictionary for quick-save application
-  SmartItem? getExactDictionaryMatch(String title) {
+  /// Finds the most popular (or recent) variant of an item for Quick Saves
+  SmartItem? getMostPopularVariant(String title) {
     final allItems = _getMergedDictionary();
     final q = title.toLowerCase().trim();
     try {
+      // Since allItems is already sorted by frequency/recency, .firstWhere grabs the top winner
       return allItems.firstWhere((item) => item.title.toLowerCase() == q);
     } catch (e) {
       return null;
@@ -507,6 +575,69 @@ class ListProvider extends ChangeNotifier {
     return deletedIds;
   }
 
+  // --- CROSS-LIST BATCH ACTIONS ---
+
+  Future<void> moveSelectedToTargetList(String targetListId) async {
+    if (targetListId == _currentListId || _selectedItemIds.isEmpty) return;
+
+    // 1. Grab items from current list and remove them
+    final itemsToMove = _items.where((item) => _selectedItemIds.contains(item.id)).toList();
+    if (itemsToMove.isEmpty) return;
+
+    _items.removeWhere((item) => _selectedItemIds.contains(item.id));
+    _buildDisplayList();
+    await _saveItemsToStorage();
+
+    // 2. Open the target list's storage file and append the items
+    final prefs = await SharedPreferences.getInstance();
+    final String? destJson = prefs.getString('items_$targetListId');
+    List<ListItem> destItems = [];
+
+    if (destJson != null) {
+      final List<dynamic> decoded = jsonDecode(destJson);
+      destItems = decoded.map((map) => ListItem.fromMap(map)).toList();
+    }
+
+    destItems.addAll(itemsToMove);
+    await prefs.setString('items_$targetListId', jsonEncode(destItems.map((i) => i.toMap()).toList()));
+
+    clearSelection();
+    notifyListeners();
+  }
+
+  Future<void> copySelectedToTargetList(String targetListId) async {
+    if (targetListId == _currentListId || _selectedItemIds.isEmpty) return;
+
+    final itemsToCopy = _items.where((item) => _selectedItemIds.contains(item.id)).toList();
+    if (itemsToCopy.isEmpty) return;
+
+    // 1. Open the target list's storage file
+    final prefs = await SharedPreferences.getInstance();
+    final String? destJson = prefs.getString('items_$targetListId');
+    List<ListItem> destItems = [];
+
+    if (destJson != null) {
+      final List<dynamic> decoded = jsonDecode(destJson);
+      destItems = decoded.map((map) => ListItem.fromMap(map)).toList();
+    }
+
+    // 2. Generate new unique IDs so copies don't conflict with originals
+    int timeOffset = 0;
+    for (var original in itemsToCopy) {
+      destItems.add(original.copyWith(
+        id: DateTime.now().microsecondsSinceEpoch.toString() + original.id + timeOffset.toString(),
+        globalCustomOrder: original.globalCustomOrder + 10.0,
+      ));
+      timeOffset++;
+    }
+
+    // 3. Save to target list
+    await prefs.setString('items_$targetListId', jsonEncode(destItems.map((i) => i.toMap()).toList()));
+
+    clearSelection();
+    notifyListeners();
+  }
+
   // --- UNDO ENGINE ---
   void restoreItems(List<String> ids) {
     bool changed = false;
@@ -550,37 +681,40 @@ class ListProvider extends ChangeNotifier {
     final index = _items.indexWhere((item) => item.id == id);
     if (index != -1) {
       final oldItem = _items[index];
+      final safeType = type.trim().isEmpty ? "Any" : type.trim();
+      final safeCategory = category.trim().isEmpty ? "Everything Else" : category.trim();
 
-      // --- NEW: MERGE CONFLICT RESOLUTION ---
-      // Check if correcting a typo causes a collision with an existing active item
-      final existingId = getActiveItemIdByTitle(newTitle);
-      if (existingId != null && existingId != id) {
-        final existingIndex = _items.indexWhere((item) => item.id == existingId);
-        final existingItem = _items[existingIndex];
+      // EXACT-MATCH MERGE CHECK
+      final sortedNewTags = List<String>.from(newAttributes)..sort();
+      final newTagString = sortedNewTags.join(",");
 
-        // 1. Merge into the existing item (add quantities, adopt newest settings)
-        _items[existingIndex] = existingItem.copyWith(
+      final exactMatchIndex = _items.indexWhere((item) {
+        if (item.id == id) return false; // Don't match against itself
+        if (item.isDeleted || item.isCompleted) return false;
+        if (item.title.trim().toLowerCase() != newTitle.trim().toLowerCase()) return false;
+        if (item.category != safeCategory) return false;
+        if (item.type != safeType) return false;
+        final itemTags = List<String>.from(item.attributeRows)..sort();
+        return itemTags.join(",") == newTagString;
+      });
+
+      if (exactMatchIndex != -1) {
+        // Merge into the identical active item
+        final existingItem = _items[exactMatchIndex];
+        _items[exactMatchIndex] = existingItem.copyWith(
           quantity: (existingItem.quantity + newQty).clamp(0, 99),
-          attributeRows: newAttributes,
-          type: type.trim().isEmpty ? "Any" : type.trim(),
-          category: category.trim().isEmpty ? "Everything Else" : category.trim(),
           unit: newUnit,
         );
-
-        // 2. Permanently delete the typo item to complete the merge
+        // Permanently delete the item that was being edited since it's now merged
         _items.removeAt(index);
 
         _recalculateWraps();
         _buildDisplayList();
         _saveItemsToStorage();
-        triggerSequentialFlash(existingId); // Flash the newly merged item
+        triggerSequentialFlash(existingItem.id);
         notifyListeners();
         return;
       }
-
-      // --- NORMAL EDIT ROUTINE ---
-      final safeType = type.trim().isEmpty ? "Any" : type.trim();
-      final safeCategory = category.trim().isEmpty ? "Everything Else" : category.trim();
 
       double newCatOrder = oldItem.categoryOrder;
       double newTypeOrder = oldItem.typeOrder;

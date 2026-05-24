@@ -416,8 +416,19 @@ class _SwipeActionWrapperState extends State<SwipeActionWrapper> with TickerProv
             onHorizontalDragStart: _onDragStart,
             onHorizontalDragUpdate: _onDragUpdate,
             onHorizontalDragEnd: _onDragEnd,
+            // NEW: Intercept taps if the menu is partially or fully open
+            onTap: _currentVisualOffset != 0.0 ? () {
+              _offsetController.reverse();
+              if (widget.itemId == _provider?.openSwipeItemId.value) {
+                _provider?.openSwipeItemId.value = null;
+              }
+            } : null,
             behavior: HitTestBehavior.opaque,
-            child: widget.child,
+            // NEW: Absorb pointer prevents child buttons/taps from firing when swiped
+            child: AbsorbPointer(
+              absorbing: _currentVisualOffset != 0.0,
+              child: widget.child,
+            ),
           ),
         ),
       ],

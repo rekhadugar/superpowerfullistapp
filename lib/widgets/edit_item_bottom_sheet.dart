@@ -48,13 +48,12 @@ class _EditItemBottomSheetState extends State<EditItemBottomSheet> {
     _selectedStore = widget.item?.type ?? '';
     _selectedTags = List.from(widget.item?.attributeRows ?? []);
 
-    // If editing an existing item, skip discovery and go straight to full confirmation layout
     _isConfirmationState = widget.item != null;
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!_isConfirmationState && mounted) {
         setState(() {
-          _suggestions = context.read<ListProvider>().searchSmartDictionary(''); // FIX: Updated method name
+          _suggestions = context.read<ListProvider>().searchSmartDictionary('');
         });
       }
     });
@@ -67,59 +66,60 @@ class _EditItemBottomSheetState extends State<EditItemBottomSheet> {
     super.dispose();
   }
 
+  // 1. ONLY UPDATE SUGGESTIONS WHILE TYPING
   void _onSearchChanged(String val) {
     if (mounted) {
       setState(() {
-        _suggestions = context.read<ListProvider>().searchSmartDictionary(val); // FIX: Updated method name
+        _suggestions = context.read<ListProvider>().searchSmartDictionary(val);
       });
     }
   }
 
+  // 2. EXPLICIT INTENT: TAPPING A SUGGESTION
   void _selectSuggestion(SmartItem item) {
-    final provider = context.read<ListProvider>();
+    _titleController.text = item.title;
+    _titleFocus.unfocus();
 
-    // 1. Already Active Shortcut
-    if (provider.isActiveItem(item.title)) {
-      final id = provider.getActiveItemIdByTitle(item.title);
-      if (id != null) provider.triggerSequentialFlash(id);
-      Navigator.pop(context);
-      return;
-    }
-
-    // 2. Transition to Confirmation State with prefilled data
     setState(() {
-      _titleController.text = item.title;
       _selectedCategory = item.category;
       _selectedStore = item.store;
       _unit = item.unit;
+      _selectedTags = List.from(item.tags);
       _isConfirmationState = true;
     });
-
-    _titleFocus.unfocus(); // Dismiss keyboard to bring Save button into full view
   }
 
-  void _instantSave(String val) {
+  // 3. EXPLICIT INTENT: HITTING 'DONE' ON KEYBOARD
+  void _onKeyboardDone(String val) {
     final title = val.trim();
     if (title.isEmpty) return;
 
     final provider = context.read<ListProvider>();
 
-    // 1. Already Active Shortcut
-    if (provider.isActiveItem(title)) {
-      final id = provider.getActiveItemIdByTitle(title);
-      if (id != null) provider.triggerSequentialFlash(id);
-      Navigator.pop(context);
-      return;
+    // Quick Save from Discovery State (Grabs the user's most popular variant of this item)
+    if (!_isConfirmationState) {
+      final match = provider.getMostPopularVariant(title);
+      if (match != null) {
+        widget.onSave(title, match.tags, match.store, match.category, _quantity, match.unit);
+        Navigator.pop(context);
+        return;
+      }
     }
 
-    // 2. Background Dictionary Match for quick saving
-    final match = provider.getExactDictionaryMatch(title);
-    if (match != null) {
-      widget.onSave(title, [], match.store, match.category, _quantity, match.unit);
-    } else {
-      widget.onSave(title, _selectedTags, _selectedStore, _selectedCategory, _quantity, _unit);
-    }
+    // Standard Save (Using currently selected pills)
+    widget.onSave(title, _selectedTags, _selectedStore, _selectedCategory, _quantity, _unit);
+    Navigator.pop(context);
+  }
 
+  // 4. MANUAL EXECUTIONS: TAPPING THE SAVE BUTTON
+  void _onSaveButtonTapped() {
+    final title = _titleController.text.trim();
+    if (title.isEmpty) return;
+
+    // Standard Save
+    // Note: The ListProvider's addItem/editItem functions now handle the exact-match
+    // merging automatically behind the scenes!
+    widget.onSave(title, _selectedTags, _selectedStore, _selectedCategory, _quantity, _unit);
     Navigator.pop(context);
   }
 
@@ -127,7 +127,6 @@ class _EditItemBottomSheetState extends State<EditItemBottomSheet> {
     List<Widget> children = [];
     final query = _titleController.text.trim();
 
-    // 1. "Create New" Prompt (if no exact match)
     final hasExactMatch = _suggestions.any((item) => item.title.toLowerCase() == query.toLowerCase());
     if (query.isNotEmpty && !hasExactMatch) {
       children.add(
@@ -147,15 +146,16 @@ class _EditItemBottomSheetState extends State<EditItemBottomSheet> {
       );
     }
 
-    // 2. Global / Popular Suggestions
     children.addAll(_suggestions.map((item) {
-      final isActive = provider.isActiveItem(item.title);
+      // NEW: Check if this specific variant is active
+      final isActiveVariant = provider.isActiveVariant(item.title, item.category, item.store, item.tags);
+
       return ListTile(
         contentPadding: const EdgeInsets.symmetric(horizontal: 4.0),
         leading: Icon(Icons.history, color: theme.dividerColor),
         title: Text(item.title, style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600)),
         subtitle: Text('${item.category} • ${item.store}', style: theme.textTheme.labelSmall),
-        trailing: isActive
+        trailing: isActiveVariant
             ? Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
             decoration: BoxDecoration(color: AppColors.successAction.withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
@@ -195,7 +195,6 @@ class _EditItemBottomSheetState extends State<EditItemBottomSheet> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           mainAxisSize: MainAxisSize.min,
           children: [
-            // Drag Handle & Cancel Button Row
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -217,7 +216,6 @@ class _EditItemBottomSheetState extends State<EditItemBottomSheet> {
             ),
             const SizedBox(height: 16.0),
 
-            // Smart Text Input
             TextField(
               controller: _titleController,
               focusNode: _titleFocus,
@@ -225,7 +223,7 @@ class _EditItemBottomSheetState extends State<EditItemBottomSheet> {
               textCapitalization: TextCapitalization.words,
               textInputAction: TextInputAction.done,
               onChanged: _onSearchChanged,
-              onSubmitted: _instantSave,
+              onSubmitted: _onKeyboardDone,
               decoration: InputDecoration(
                 hintText: 'Item Name',
                 filled: true, fillColor: Colors.white,
@@ -237,11 +235,9 @@ class _EditItemBottomSheetState extends State<EditItemBottomSheet> {
             ),
             const SizedBox(height: 16.0),
 
-            // STATE RENDERING
             if (!_isConfirmationState)
               _buildSuggestions(provider, theme)
             else ...[
-              // CONFIRMATION STATE (Full Layout)
               Row(
                 children: [
                   Container(
@@ -306,18 +302,7 @@ class _EditItemBottomSheetState extends State<EditItemBottomSheet> {
               const SizedBox(height: 24.0),
 
               ElevatedButton(
-                onPressed: () {
-                  if (_titleController.text.trim().isEmpty) return;
-                  widget.onSave(
-                    _titleController.text.trim(),
-                    _selectedTags,
-                    _selectedStore,
-                    _selectedCategory,
-                    _quantity,
-                    _unit,
-                  );
-                  Navigator.of(context).pop();
-                },
+                onPressed: _onSaveButtonTapped,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.primaryAction,
                   foregroundColor: Colors.white,
