@@ -191,14 +191,13 @@ class _MainScreenState extends State<MainScreen> {
                   listProvider.openSwipeItemId.value = null;
                 }
 
-                // FIXED: Smart Keyboard-Aware Scroll-to-Dismiss uses Strict Separation
                 if (notification is ScrollUpdateNotification && notification.dragDetails != null) {
                   if (listProvider.editItemId != null) {
                     final isKeyboardOpen = MediaQuery.of(context).viewInsets.bottom > 0;
                     if (isKeyboardOpen) {
                       FocusManager.instance.primaryFocus?.unfocus();
                     } else {
-                      listProvider.setEditItem(null); // Safely closes the Fluid Edit sheet
+                      listProvider.setEditItem(null);
                     }
                   }
                 }
@@ -246,7 +245,6 @@ class _MainScreenState extends State<MainScreen> {
                           isHighlighted: listProvider.flashItemId == item.id,
                           isDragging: false,
 
-                          // PRODUCTION SEPARATION WIRING
                           isBatchModeActive: listProvider.isBatchModeActive,
                           isBatchSelected: listProvider.selectedItemIds.contains(item.id),
                           isFluidEditing: listProvider.editItemId == item.id,
@@ -269,7 +267,12 @@ class _MainScreenState extends State<MainScreen> {
                               if (listProvider.isBatchModeActive) {
                                 context.read<ListProvider>().toggleSelection(item.id);
                               } else {
-                                context.read<ListProvider>().setEditItem(item.id);
+                                // NEW UX: Toggle Fluid Edit open/closed on tap
+                                if (listProvider.editItemId == item.id) {
+                                  context.read<ListProvider>().setEditItem(null); // Close it
+                                } else {
+                                  context.read<ListProvider>().setEditItem(item.id); // Open it
+                                }
                               }
                             }
                           },
@@ -283,6 +286,8 @@ class _MainScreenState extends State<MainScreen> {
                             key: ValueKey('swipe_${item.id}'),
                             itemId: item.id,
                             requireConfirm: true,
+                            isBatchModeActive: listProvider.isBatchModeActive,
+
                             onCheckout: () {
                               final id = context.read<ListProvider>().toggleCompletion(item.id);
                               ScaffoldMessenger.of(context).clearSnackBars();

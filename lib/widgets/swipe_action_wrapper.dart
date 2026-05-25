@@ -12,6 +12,7 @@ class SwipeActionWrapper extends StatefulWidget {
   final VoidCallback onDelete;
   final VoidCallback onCheckout;
   final bool requireConfirm;
+  final bool isBatchModeActive; // Receives strict batch state
 
   const SwipeActionWrapper({
     Key? key,
@@ -21,6 +22,7 @@ class SwipeActionWrapper extends StatefulWidget {
     required this.onDelete,
     required this.onCheckout,
     this.requireConfirm = true,
+    this.isBatchModeActive = false,
   }) : super(key: key);
 
   @override
@@ -28,7 +30,6 @@ class SwipeActionWrapper extends StatefulWidget {
 }
 
 class _SwipeActionWrapperState extends State<SwipeActionWrapper> with TickerProviderStateMixin {
-
   late AnimationController _offsetController;
   late AnimationController _confirmController;
   late Animation<double> _confirmAnimation;
@@ -48,7 +49,11 @@ class _SwipeActionWrapperState extends State<SwipeActionWrapper> with TickerProv
   void initState() {
     super.initState();
 
-    _offsetController = AnimationController.unbounded(vsync: this);
+    // FIXED: Added fallback duration to prevent .reverse() crashes
+    _offsetController = AnimationController.unbounded(
+      vsync: this,
+      duration: const Duration(milliseconds: 250),
+    );
     _offsetController.addListener(() {
       setState(() {
         _currentVisualOffset = _offsetController.value;
@@ -77,6 +82,16 @@ class _SwipeActionWrapperState extends State<SwipeActionWrapper> with TickerProv
   }
 
   @override
+  void didUpdateWidget(SwipeActionWrapper oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.isBatchModeActive && !oldWidget.isBatchModeActive) {
+      if (_currentVisualOffset != 0.0) {
+        _forceCloseMenu();
+      }
+    }
+  }
+
+  @override
   void dispose() {
     _provider?.openSwipeItemId.removeListener(_onGlobalStateChanged);
     _offsetController.dispose();
@@ -90,7 +105,26 @@ class _SwipeActionWrapperState extends State<SwipeActionWrapper> with TickerProv
     }
   }
 
+  // FIXED: Hard reset helper to prevent Zombie state leaks
+  void _forceCloseMenu() {
+    if (_offsetController.isAnimating) _offsetController.stop();
+    _offsetController.value = 0.0;
+    _currentVisualOffset = 0.0;
+    _isConfirmingDelete = false;
+    _isExecutingAction = false;
+    if (_provider?.openSwipeItemId.value == widget.itemId) {
+      _provider?.openSwipeItemId.value = null;
+    }
+  }
+
   void _onDragStart(DragStartDetails details) {
+    if (widget.isBatchModeActive) return; // Immobilize during batch selection
+
+    // Instantly close the Fluid Edit popup if a swipe begins
+    if (_provider?.editItemId != null) {
+      _provider?.setEditItem(null);
+    }
+
     if (_offsetController.isAnimating) {
       _offsetController.stop();
     }
@@ -108,7 +142,7 @@ class _SwipeActionWrapperState extends State<SwipeActionWrapper> with TickerProv
   }
 
   void _onDragUpdate(DragUpdateDetails details) {
-    if (_isExecutingAction) return;
+    if (widget.isBatchModeActive || _isExecutingAction) return;
 
     setState(() {
       _rawDragDistance += details.delta.dx;
@@ -116,7 +150,6 @@ class _SwipeActionWrapperState extends State<SwipeActionWrapper> with TickerProv
       double calculatedOffset = 0.0;
 
       if (_rawDragDistance > 0) {
-        // RIGHT SWIPE MATH
         if (_rawDragDistance <= _checkoutThreshold) {
           calculatedOffset = _rawDragDistance;
         } else {
@@ -124,7 +157,6 @@ class _SwipeActionWrapperState extends State<SwipeActionWrapper> with TickerProv
           calculatedOffset = _checkoutThreshold + (overDrag * AppPhysics.frictionYield);
         }
       } else {
-        // LEFT SWIPE MATH
         if (_rawDragDistance.abs() <= _menuSnapWidth) {
           calculatedOffset = _rawDragDistance;
         } else {
@@ -138,12 +170,10 @@ class _SwipeActionWrapperState extends State<SwipeActionWrapper> with TickerProv
   }
 
   void _onDragEnd(DragEndDetails details) {
-    if (_isExecutingAction) return;
+    if (widget.isBatchModeActive || _isExecutingAction) return;
 
     final double velocity = details.primaryVelocity ?? 0.0;
     final double screenWidth = MediaQuery.of(context).size.width;
-
-    // PROJECT THE MOMENTUM
     final double projectedOffset = _currentVisualOffset + (velocity * AppPhysics.momentumMultiplier);
 
     // === RIGHT SWIPE (Checkout) ===
@@ -151,7 +181,10 @@ class _SwipeActionWrapperState extends State<SwipeActionWrapper> with TickerProv
       final double checkoutTriggerPoint = screenWidth * AppPhysics.checkoutThreshold;
 
       if (projectedOffset >= checkoutTriggerPoint) {
-        _glideOffScreen(screenWidth, velocity, () => widget.onCheckout());
+        _glideOffScreen(screenWidth, velocity, () {
+          _forceCloseMenu(); // Prevent UI lock
+          widget.onCheckout();
+        });
       } else {
         _snapTo(0.0, velocity);
       }
@@ -168,7 +201,10 @@ class _SwipeActionWrapperState extends State<SwipeActionWrapper> with TickerProv
         _confirmController.forward();
         _snapTo(-_menuSnapWidth, velocity);
       } else {
-        _glideOffScreen(-screenWidth, velocity, () => widget.onDelete());
+        _glideOffScreen(-screenWidth, velocity, () {
+          _forceCloseMenu(); // Prevent UI lock
+          widget.onDelete();
+        });
       }
     } else if (projectedOffset <= menuTriggerPoint) {
       _snapTo(-_menuSnapWidth, velocity);
@@ -177,7 +213,6 @@ class _SwipeActionWrapperState extends State<SwipeActionWrapper> with TickerProv
     }
   }
 
-  // STANDARD SPRING (Tight & Elastic)
   void _snapTo(double targetOffset, double velocity) {
     if (targetOffset == 0.0 && _isConfirmingDelete) {
       setState(() => _isConfirmingDelete = false);
@@ -195,7 +230,15 @@ class _SwipeActionWrapperState extends State<SwipeActionWrapper> with TickerProv
       velocity,
     );
 
-    _offsetController.animateWith(simulation);
+    // FIXED: Clean out physics math to defeat microscopic floating point errors locking the UI
+    _offsetController.animateWith(simulation).then((_) {
+      if (!mounted) return;
+      _offsetController.value = targetOffset;
+      _currentVisualOffset = targetOffset;
+      if (targetOffset == 0.0 && _provider?.openSwipeItemId.value == widget.itemId) {
+        _provider?.openSwipeItemId.value = null;
+      }
+    });
   }
 
   void _glideOffScreen(double targetOffset, double velocity, VoidCallback onComplete) {
@@ -234,11 +277,9 @@ class _SwipeActionWrapperState extends State<SwipeActionWrapper> with TickerProv
     } else if (exposedWidth <= _menuSnapWidth) {
       baseDeleteWidth = exposedWidth * AppPhysics.deleteSlotRatio;
     } else {
-      // THE FIX: Smart Auto-Calculating Swallow Speed
       final double executeThresholdPixels = screenWidth * AppPhysics.swipeExecuteThreshold;
       final double distanceToThreshold = executeThresholdPixels - _menuSnapWidth;
 
-      // Calculate the geometric growth multiplier so the box perfectly fills the screen exactly at the threshold
       final double dynamicSwallowSpeed = distanceToThreshold > 0
           ? ((executeThresholdPixels - deleteSlotWidth) / distanceToThreshold)
           : 1.0;
@@ -247,12 +288,15 @@ class _SwipeActionWrapperState extends State<SwipeActionWrapper> with TickerProv
       baseDeleteWidth = deleteSlotWidth + (extraVisualDrag * dynamicSwallowSpeed);
     }
 
-    // Safety clamp to ensure it never exceeds the container
     baseDeleteWidth = baseDeleteWidth.clamp(0.0, exposedWidth);
     final double deleteWidth = baseDeleteWidth + ((exposedWidth - baseDeleteWidth) * _confirmAnimation.value);
 
     final bool isCheckoutReady = _rawDragDistance >= _checkoutThreshold;
 
+    // FIXED: Safe floating point threshold check for the UI blocker
+    final bool isMenuOpen = exposedWidth > 0.1;
+
+    // RESTORED YOUR ORIGINAL UI LAYOUT
     return Stack(
       children: [
         Positioned.fill(
@@ -306,8 +350,8 @@ class _SwipeActionWrapperState extends State<SwipeActionWrapper> with TickerProv
                       GestureDetector(
                         onTap: () {
                           if (!_isExecutingAction && !_isConfirmingDelete) {
+                            _forceCloseMenu(); // Prevent UI Lock
                             widget.onEdit();
-                            _snapTo(0.0, 0.0);
                           }
                         },
                         onHorizontalDragStart: _onDragStart,
@@ -331,7 +375,6 @@ class _SwipeActionWrapperState extends State<SwipeActionWrapper> with TickerProv
                           ),
                         ),
                       ),
-
                       Positioned(
                         right: 0,
                         top: 0,
@@ -349,8 +392,8 @@ class _SwipeActionWrapperState extends State<SwipeActionWrapper> with TickerProv
                                 setState(() {
                                   _isExecutingAction = true;
                                 });
+                                _forceCloseMenu(); // Prevent UI Lock
                                 widget.onDelete();
-                                _snapTo(0.0, 0.0);
                               }
                             }
                           },
@@ -416,17 +459,19 @@ class _SwipeActionWrapperState extends State<SwipeActionWrapper> with TickerProv
             onHorizontalDragStart: _onDragStart,
             onHorizontalDragUpdate: _onDragUpdate,
             onHorizontalDragEnd: _onDragEnd,
-            // NEW: Intercept taps if the menu is partially or fully open
-            onTap: _currentVisualOffset != 0.0 ? () {
-              _offsetController.reverse();
+
+            // FIXED: Safe threshold check & _snapTo to prevent crashes
+            onTap: isMenuOpen ? () {
+              _snapTo(0.0, 0.0);
               if (widget.itemId == _provider?.openSwipeItemId.value) {
                 _provider?.openSwipeItemId.value = null;
               }
             } : null,
             behavior: HitTestBehavior.opaque,
-            // NEW: Absorb pointer prevents child buttons/taps from firing when swiped
+
+            // FIXED: Safe threshold check
             child: AbsorbPointer(
-              absorbing: _currentVisualOffset != 0.0,
+              absorbing: isMenuOpen,
               child: widget.child,
             ),
           ),
