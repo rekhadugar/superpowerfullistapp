@@ -107,6 +107,32 @@ class _MainScreenState extends State<MainScreen> {
     }
   }
 
+  // HELPER: To keep the SnackBar code clean and uniform
+  // HELPER: To keep the SnackBar code clean and uniform
+  // HELPER: To keep the SnackBar code clean and uniform
+  void _showActionToast(BuildContext context, String message, List<String> undoIds) {
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.clearSnackBars();
+
+    final controller = messenger.showSnackBar(
+      SnackBar(
+        content: Text(message),
+        // NEW: Anchors to the bottom and forces the native FAB to slide up
+        behavior: SnackBarBehavior.fixed,
+        duration: const Duration(seconds: 3),
+        action: SnackBarAction(
+          label: 'Undo',
+          textColor: AppColors.primaryAction,
+          onPressed: () => context.read<ListProvider>().restoreItems(undoIds),
+        ),
+      ),
+    );
+
+    Future.delayed(const Duration(seconds: 3), () {
+      controller.close();
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final macroProvider = context.watch<MacroListProvider>();
@@ -175,6 +201,34 @@ class _MainScreenState extends State<MainScreen> {
             ),
           ],
         ),
+
+        // FIXED 1: Native Scaffold FAB handles SnackBar dodging automatically!
+        floatingActionButton: AnimatedSlide(
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeOutCubic,
+          // Slides it off-screen when Batch Mode is active
+          offset: listProvider.isBatchModeActive ? const Offset(0, 2) : Offset.zero,
+          child: FloatingActionButton(
+            onPressed: () {
+              showModalBottomSheet(
+                context: context,
+                isScrollControlled: true,
+                backgroundColor: Colors.transparent,
+                builder: (ctx) => EditItemBottomSheet(
+                  onSave: (title, attributes, type, category, quantity, unit) {
+                    context.read<ListProvider>().addItem(
+                      title, attributes, type, category, quantity, unit,
+                    );
+                  },
+                ),
+              );
+            },
+            backgroundColor: AppColors.primaryAction,
+            elevation: 4,
+            child: const Icon(Icons.add, color: Colors.white, size: 28),
+          ),
+        ),
+
         body: Stack(
           children: [
             displayList.isEmpty
@@ -251,14 +305,7 @@ class _MainScreenState extends State<MainScreen> {
 
                           onCheck: () {
                             final id = context.read<ListProvider>().toggleCompletion(item.id);
-                            ScaffoldMessenger.of(context).clearSnackBars();
-                            ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: Text('${item.title} checked off'),
-                                  behavior: SnackBarBehavior.floating,
-                                  action: SnackBarAction(label: 'Undo', textColor: AppColors.primaryAction, onPressed: () => context.read<ListProvider>().restoreItems([id])),
-                                )
-                            );
+                            _showActionToast(context, '${item.title} checked off', [id]);
                           },
                           onTap: () {
                             if (listProvider.openSwipeItemId.value != null) {
@@ -267,11 +314,10 @@ class _MainScreenState extends State<MainScreen> {
                               if (listProvider.isBatchModeActive) {
                                 context.read<ListProvider>().toggleSelection(item.id);
                               } else {
-                                // NEW UX: Toggle Fluid Edit open/closed on tap
                                 if (listProvider.editItemId == item.id) {
-                                  context.read<ListProvider>().setEditItem(null); // Close it
+                                  context.read<ListProvider>().setEditItem(null);
                                 } else {
-                                  context.read<ListProvider>().setEditItem(item.id); // Open it
+                                  context.read<ListProvider>().setEditItem(item.id);
                                 }
                               }
                             }
@@ -290,14 +336,7 @@ class _MainScreenState extends State<MainScreen> {
 
                             onCheckout: () {
                               final id = context.read<ListProvider>().toggleCompletion(item.id);
-                              ScaffoldMessenger.of(context).clearSnackBars();
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
-                                    content: Text('${item.title} checked off'),
-                                    behavior: SnackBarBehavior.floating,
-                                    action: SnackBarAction(label: 'Undo', textColor: AppColors.primaryAction, onPressed: () => context.read<ListProvider>().restoreItems([id])),
-                                  )
-                              );
+                              _showActionToast(context, '${item.title} checked off', [id]);
                             },
                             onEdit: () {
                               listProvider.clearAllInteractions();
@@ -306,14 +345,7 @@ class _MainScreenState extends State<MainScreen> {
                             },
                             onDelete: () {
                               final id = context.read<ListProvider>().deleteItem(item.id);
-                              ScaffoldMessenger.of(context).clearSnackBars();
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
-                                    content: Text('${item.title} deleted'),
-                                    behavior: SnackBarBehavior.floating,
-                                    action: SnackBarAction(label: 'Undo', textColor: AppColors.primaryAction, onPressed: () => context.read<ListProvider>().restoreItems([id])),
-                                  )
-                              );
+                              _showActionToast(context, '${item.title} deleted', [id]);
                             },
                             child: coreCard,
                           ),
@@ -335,32 +367,6 @@ class _MainScreenState extends State<MainScreen> {
                     },
                   ),
                 ],
-              ),
-            ),
-
-            AnimatedPositioned(
-              duration: const Duration(milliseconds: 300),
-              curve: Curves.easeOutCubic,
-              right: AppConstants.horizontalPadding,
-              bottom: listProvider.isBatchModeActive ? -100 : (safeBottomPadding + 16.0),
-              child: FloatingActionButton(
-                onPressed: () {
-                  showModalBottomSheet(
-                    context: context,
-                    isScrollControlled: true,
-                    backgroundColor: Colors.transparent,
-                    builder: (ctx) => EditItemBottomSheet(
-                      onSave: (title, attributes, type, category, quantity, unit) {
-                        context.read<ListProvider>().addItem(
-                          title, attributes, type, category, quantity, unit,
-                        );
-                      },
-                    ),
-                  );
-                },
-                backgroundColor: AppColors.primaryAction,
-                elevation: 4,
-                child: const Icon(Icons.add, color: Colors.white, size: 28),
               ),
             ),
 
