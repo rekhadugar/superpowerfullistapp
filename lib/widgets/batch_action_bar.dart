@@ -4,7 +4,12 @@ import '../providers/list_provider.dart';
 import '../theme/app_theme.dart';
 
 class BatchActionBar extends StatelessWidget {
-  const BatchActionBar({Key? key}) : super(key: key);
+  final bool isCompletedScreen; // NEW: Context awareness flag
+
+  const BatchActionBar({
+    Key? key,
+    this.isCompletedScreen = false, // Default to false for the main screen
+  }) : super(key: key);
 
   void _showTargetListSelector(BuildContext context, bool isCopy) {
     final provider = context.read<ListProvider>();
@@ -34,12 +39,10 @@ class BatchActionBar extends StatelessWidget {
                 ),
                 const SizedBox(height: 16),
 
-                // TODO: Replace this ListView with your actual list of available lists
-                // Filtered by: list.type == currentType && list.id != currentListId
                 Expanded(
                   child: ListView.builder(
                     shrinkWrap: true,
-                    itemCount: 3, // Mock count
+                    itemCount: 3,
                     itemBuilder: (context, index) {
                       final mockTargetListId = 'mock_list_id_$index';
                       return ListTile(
@@ -70,7 +73,6 @@ class BatchActionBar extends StatelessWidget {
     final provider = context.watch<ListProvider>();
     final selectedCount = provider.selectedItemIds.length;
 
-    // PRODUCTION: Batch bar only cares about the Set.
     final isVisible = selectedCount > 0;
     final safeBottom = MediaQuery.of(context).padding.bottom;
 
@@ -83,7 +85,7 @@ class BatchActionBar extends StatelessWidget {
       child: Material(
         elevation: 8.0,
         borderRadius: BorderRadius.circular(16.0),
-        color: Colors.grey.shade900, // Dark elegant background
+        color: Colors.grey.shade900,
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 12.0),
           child: Row(
@@ -110,21 +112,35 @@ class BatchActionBar extends StatelessWidget {
 
               const Spacer(),
 
-              // Move Button
-              IconButton(
-                icon: const Icon(Icons.drive_file_move_outline, color: Colors.white),
-                tooltip: 'Move',
-                onPressed: () => _showTargetListSelector(context, false),
-              ),
+              // DYNAMIC ACTIONS BASED ON CONTEXT
+              if (isCompletedScreen) ...[
+                // Restore Button (Only on Completed Screen)
+                TextButton.icon(
+                  icon: const Icon(Icons.restore, color: Colors.white),
+                  label: const Text('Restore', style: TextStyle(color: Colors.white)),
+                  onPressed: () {
+                    // Reusing checkSelectedItems because toggle logic pulls it back to active
+                    provider.restoreItems(provider.selectedItemIds.toList());
+                    provider.clearSelection();
+                  },
+                ),
+              ] else ...[
+                // Move Button (Only on Active Screen)
+                IconButton(
+                  icon: const Icon(Icons.drive_file_move_outline, color: Colors.white),
+                  tooltip: 'Move',
+                  onPressed: () => _showTargetListSelector(context, false),
+                ),
 
-              // Copy Button
-              IconButton(
-                icon: const Icon(Icons.copy_rounded, color: Colors.white),
-                tooltip: 'Copy',
-                onPressed: () => _showTargetListSelector(context, true),
-              ),
+                // Copy Button (Only on Active Screen)
+                IconButton(
+                  icon: const Icon(Icons.copy_rounded, color: Colors.white),
+                  tooltip: 'Copy',
+                  onPressed: () => _showTargetListSelector(context, true),
+                ),
+              ],
 
-              // Delete Button
+              // Delete Button (Available on both, but label changes conceptually)
               IconButton(
                 icon: const Icon(Icons.delete_outline_rounded, color: Colors.redAccent),
                 tooltip: 'Delete',

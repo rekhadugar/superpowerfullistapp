@@ -12,7 +12,10 @@ class ListItem {
   final bool isCompleted;
   final bool isDeleted;
 
-  // NEW: Item Quantity
+  // NEW: Chronological Tracking
+  final DateTime? completedAt;
+
+  // --- Item Quantity ---
   final int quantity;
   final String unit;
 
@@ -34,6 +37,7 @@ class ListItem {
     this.locations = const [],
     this.isCompleted = false,
     this.isDeleted = false,
+    this.completedAt, // NEW
     this.quantity = 0,
     this.unit = 'pcs',
     this.nWrap = 0,
@@ -52,6 +56,7 @@ class ListItem {
     List<String>? locations,
     bool? isCompleted,
     bool? isDeleted,
+    DateTime? completedAt, // NEW
     int? quantity,
     String? unit,
     int? nWrap,
@@ -69,6 +74,7 @@ class ListItem {
       locations: locations ?? this.locations,
       isCompleted: isCompleted ?? this.isCompleted,
       isDeleted: isDeleted ?? this.isDeleted,
+      completedAt: completedAt ?? this.completedAt, // NEW
       quantity: quantity ?? this.quantity,
       unit: unit ?? this.unit,
       nWrap: nWrap ?? this.nWrap,
@@ -79,7 +85,7 @@ class ListItem {
     );
   }
 
-  // --- NEW: Serialization for Local Storage / Firestore ---
+  // --- Serialization for Local Storage / Firestore ---
   Map<String, dynamic> toMap() {
     return {
       'id': id,
@@ -90,6 +96,7 @@ class ListItem {
       'locations': locations,
       'isCompleted': isCompleted,
       'isDeleted': isDeleted,
+      'completedAt': completedAt?.toIso8601String(), // NEW
       'quantity': quantity,
       'unit': unit,
       'nWrap': nWrap,
@@ -110,6 +117,7 @@ class ListItem {
       locations: List<String>.from(map['locations'] ?? []),
       isCompleted: map['isCompleted'] ?? false,
       isDeleted: map['isDeleted'] ?? false,
+      completedAt: map['completedAt'] != null ? DateTime.tryParse(map['completedAt']) : null, // NEW
       quantity: map['quantity']?.toInt() ?? 0,
       unit: map['unit'] ?? 'pcs',
       nWrap: map['nWrap']?.toInt() ?? 0,

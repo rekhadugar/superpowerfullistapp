@@ -12,7 +12,8 @@ class SwipeActionWrapper extends StatefulWidget {
   final VoidCallback onDelete;
   final VoidCallback onCheckout;
   final bool requireConfirm;
-  final bool isBatchModeActive; // Receives strict batch state
+  final bool isBatchModeActive;
+  final bool isCompletedScreen; // NEW: Context awareness flag
 
   const SwipeActionWrapper({
     Key? key,
@@ -23,6 +24,7 @@ class SwipeActionWrapper extends StatefulWidget {
     required this.onCheckout,
     this.requireConfirm = true,
     this.isBatchModeActive = false,
+    this.isCompletedScreen = false, // NEW
   }) : super(key: key);
 
   @override
@@ -49,7 +51,6 @@ class _SwipeActionWrapperState extends State<SwipeActionWrapper> with TickerProv
   void initState() {
     super.initState();
 
-    // FIXED: Added fallback duration to prevent .reverse() crashes
     _offsetController = AnimationController.unbounded(
       vsync: this,
       duration: const Duration(milliseconds: 250),
@@ -105,7 +106,6 @@ class _SwipeActionWrapperState extends State<SwipeActionWrapper> with TickerProv
     }
   }
 
-  // FIXED: Hard reset helper to prevent Zombie state leaks
   void _forceCloseMenu() {
     if (_offsetController.isAnimating) _offsetController.stop();
     _offsetController.value = 0.0;
@@ -118,9 +118,8 @@ class _SwipeActionWrapperState extends State<SwipeActionWrapper> with TickerProv
   }
 
   void _onDragStart(DragStartDetails details) {
-    if (widget.isBatchModeActive) return; // Immobilize during batch selection
+    if (widget.isBatchModeActive) return;
 
-    // Instantly close the Fluid Edit popup if a swipe begins
     if (_provider?.editItemId != null) {
       _provider?.setEditItem(null);
     }
@@ -176,13 +175,13 @@ class _SwipeActionWrapperState extends State<SwipeActionWrapper> with TickerProv
     final double screenWidth = MediaQuery.of(context).size.width;
     final double projectedOffset = _currentVisualOffset + (velocity * AppPhysics.momentumMultiplier);
 
-    // === RIGHT SWIPE (Checkout) ===
+    // === RIGHT SWIPE (Checkout / Restore) ===
     if (_currentVisualOffset > 0) {
       final double checkoutTriggerPoint = screenWidth * AppPhysics.checkoutThreshold;
 
       if (projectedOffset >= checkoutTriggerPoint) {
         _glideOffScreen(screenWidth, velocity, () {
-          _forceCloseMenu(); // Prevent UI lock
+          _forceCloseMenu();
           widget.onCheckout();
         });
       } else {
@@ -202,7 +201,7 @@ class _SwipeActionWrapperState extends State<SwipeActionWrapper> with TickerProv
         _snapTo(-_menuSnapWidth, velocity);
       } else {
         _glideOffScreen(-screenWidth, velocity, () {
-          _forceCloseMenu(); // Prevent UI lock
+          _forceCloseMenu();
           widget.onDelete();
         });
       }
@@ -230,7 +229,6 @@ class _SwipeActionWrapperState extends State<SwipeActionWrapper> with TickerProv
       velocity,
     );
 
-    // FIXED: Clean out physics math to defeat microscopic floating point errors locking the UI
     _offsetController.animateWith(simulation).then((_) {
       if (!mounted) return;
       _offsetController.value = targetOffset;
@@ -292,11 +290,8 @@ class _SwipeActionWrapperState extends State<SwipeActionWrapper> with TickerProv
     final double deleteWidth = baseDeleteWidth + ((exposedWidth - baseDeleteWidth) * _confirmAnimation.value);
 
     final bool isCheckoutReady = _rawDragDistance >= _checkoutThreshold;
-
-    // FIXED: Safe floating point threshold check for the UI blocker
     final bool isMenuOpen = exposedWidth > 0.1;
 
-    // RESTORED YOUR ORIGINAL UI LAYOUT
     return Stack(
       children: [
         Positioned.fill(
@@ -309,7 +304,8 @@ class _SwipeActionWrapperState extends State<SwipeActionWrapper> with TickerProv
                 child: SizedBox(
                   width: exposedWidth,
                   child: Container(
-                    color: const Color(0xFF34C759),
+                    // DYNAMIC: Blue for Restore, Green for Checkout
+                    color: widget.isCompletedScreen ? AppColors.primaryAction : const Color(0xFF34C759),
                     child: Stack(
                       children: [
                         Positioned(
@@ -322,15 +318,21 @@ class _SwipeActionWrapperState extends State<SwipeActionWrapper> with TickerProv
                               AnimatedScale(
                                 scale: isCheckoutReady ? 1.2 : 1.0,
                                 duration: const Duration(milliseconds: 150),
-                                child: const Icon(Icons.check_circle, color: Colors.white, size: 28.0),
+                                child: Icon(
+                                  // DYNAMIC ICON
+                                    widget.isCompletedScreen ? Icons.restore : Icons.check_circle,
+                                    color: Colors.white,
+                                    size: 28.0
+                                ),
                               ),
                               const SizedBox(width: 12.0),
                               AnimatedOpacity(
                                 opacity: isCheckoutReady ? 1.0 : 0.6,
                                 duration: const Duration(milliseconds: 150),
-                                child: const Text(
-                                    'Check Out',
-                                    style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 16.0)
+                                child: Text(
+                                  // DYNAMIC LABEL
+                                    widget.isCompletedScreen ? 'Restore' : 'Check Out',
+                                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 16.0)
                                 ),
                               ),
                             ],
@@ -350,7 +352,7 @@ class _SwipeActionWrapperState extends State<SwipeActionWrapper> with TickerProv
                       GestureDetector(
                         onTap: () {
                           if (!_isExecutingAction && !_isConfirmingDelete) {
-                            _forceCloseMenu(); // Prevent UI Lock
+                            _forceCloseMenu();
                             widget.onEdit();
                           }
                         },
@@ -392,7 +394,7 @@ class _SwipeActionWrapperState extends State<SwipeActionWrapper> with TickerProv
                                 setState(() {
                                   _isExecutingAction = true;
                                 });
-                                _forceCloseMenu(); // Prevent UI Lock
+                                _forceCloseMenu();
                                 widget.onDelete();
                               }
                             }
@@ -459,8 +461,6 @@ class _SwipeActionWrapperState extends State<SwipeActionWrapper> with TickerProv
             onHorizontalDragStart: _onDragStart,
             onHorizontalDragUpdate: _onDragUpdate,
             onHorizontalDragEnd: _onDragEnd,
-
-            // FIXED: Safe threshold check & _snapTo to prevent crashes
             onTap: isMenuOpen ? () {
               _snapTo(0.0, 0.0);
               if (widget.itemId == _provider?.openSwipeItemId.value) {
@@ -468,8 +468,6 @@ class _SwipeActionWrapperState extends State<SwipeActionWrapper> with TickerProv
               }
             } : null,
             behavior: HitTestBehavior.opaque,
-
-            // FIXED: Safe threshold check
             child: AbsorbPointer(
               absorbing: isMenuOpen,
               child: widget.child,

@@ -9,7 +9,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../data/mock_global_dictionary.dart';
 
 class ListProvider extends ChangeNotifier {
-  String? _currentListId; // Tracks the active query scope
+  String? _currentListId;
   double _viewportWidth = 0.0;
   double _textScaleFactor = 1.0;
 
@@ -23,11 +23,16 @@ class ListProvider extends ChangeNotifier {
 
   // --- GESTURE & SPATIAL CACHE STATE ---
   final ValueNotifier<String?> openSwipeItemId = ValueNotifier(null);
+
+  // ACTIVE LIST CACHE
+  final List<dynamic> displayList = [];
   final List<double> cumulativeYOffsets = [];
   double totalListHeight = 0.0;
-  final List<dynamic> displayList = [];
 
-  // --- Edit Mode & Selection State ---
+  // NEW: COMPLETED LIST CACHE
+  final List<dynamic> checkedDisplayList = [];
+  final List<double> checkedCumulativeYOffsets = [];
+
   // --- SEPARATED INTERACTION STATE (PRODUCTION ARCHITECTURE) ---
   final Set<String> _selectedItemIds = {};
   String? _editItemId;
@@ -37,18 +42,16 @@ class ListProvider extends ChangeNotifier {
 
   bool get isBatchModeActive => _selectedItemIds.isNotEmpty;
 
-  // 1. Fluid Edit Intent
   void setEditItem(String? id) {
     _editItemId = id;
     if (id != null) {
-      _selectedItemIds.clear(); // Safety: exit batch mode if opening edit
+      _selectedItemIds.clear();
     }
     notifyListeners();
   }
 
-  // 2. Batch Select Intent
   void toggleSelection(String id) {
-    _editItemId = null; // Safety: forcefully close edit sheet if batch selecting
+    _editItemId = null;
     if (_selectedItemIds.contains(id)) {
       _selectedItemIds.remove(id);
     } else {
@@ -57,19 +60,17 @@ class ListProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  // 3. Global Interaction Reset
   void clearAllInteractions() {
     _selectedItemIds.clear();
     _editItemId = null;
     openSwipeItemId.value = null;
     notifyListeners();
   }
-  final Map<String, int> _draftQuantities = {};
 
+  final Map<String, int> _draftQuantities = {};
   final String currentListType = 'Shopping';
 
   // --- AGILE DICTIONARY STATE ---
-
   List<String> get activeCategoryDictionary {
     return _getMergedDictionary()
         .map((item) => item.category)
@@ -96,6 +97,7 @@ class ListProvider extends ChangeNotifier {
 
   ListProvider() {
     _buildDisplayList();
+    _buildCheckedDisplayList(); // NEW
     runDataMigration();
   }
 
@@ -114,11 +116,11 @@ class ListProvider extends ChangeNotifier {
       _items = [];
     }
 
-    // NEW: Check and run the daily trash purge
     await _runDailyPurge(prefs);
 
     _recalculateWraps();
     _buildDisplayList();
+    _buildCheckedDisplayList(); // NEW
     notifyListeners();
   }
 
@@ -129,7 +131,6 @@ class ListProvider extends ChangeNotifier {
     await prefs.setString('items_$_currentListId', encoded);
   }
 
-  // --- NEW: STORAGE OPTIMIZATION (EMPTY TRASH) ---
   Future<void> _runDailyPurge(SharedPreferences prefs) async {
     final lastPurgeStr = prefs.getString('last_purge_date_$_currentListId');
     final now = DateTime.now();
@@ -148,18 +149,14 @@ class ListProvider extends ChangeNotifier {
       final initialCount = _items.length;
       _items.removeWhere((item) => item.isDeleted);
 
-      // If items were actually removed, shrink the local storage file immediately
       if (_items.length < initialCount) {
         final String encoded = jsonEncode(_items.map((i) => i.toMap()).toList());
         await prefs.setString('items_$_currentListId', encoded);
       }
 
-      // Log the time of this purge
       await prefs.setString('last_purge_date_$_currentListId', now.toIso8601String());
     }
   }
-
-  // --- 1. ISOLATED DATA MIGRATION ---
 
   // --- 1. ISOLATED DATA MIGRATION ---
   void runDataMigration() {
@@ -186,14 +183,12 @@ class ListProvider extends ChangeNotifier {
     }
 
     _buildDisplayList();
+    _buildCheckedDisplayList(); // NEW
     _saveItemsToStorage();
     notifyListeners();
   }
 
-
   bool get isEditMode => _selectedItemIds.isNotEmpty;
-
-
 
   int getDraftQuantity(String id) => _draftQuantities[id] ?? 0;
 
@@ -323,12 +318,10 @@ class ListProvider extends ChangeNotifier {
     return null;
   }
 
-  // --- 2. MULTI-DIMENSIONAL ADD ITEM ---
   void addItem(String title, List<String> attributes, String type, String category, int newQty, String newUnit) {
     final safeType = type.trim().isEmpty ? "Any" : type.trim();
     final safeCategory = category.trim().isEmpty ? "Everything Else" : category.trim();
 
-    // EXACT-MATCH MERGE CHECK
     final sortedNewTags = List<String>.from(attributes)..sort();
     final newTagString = sortedNewTags.join(",");
 
@@ -342,7 +335,6 @@ class ListProvider extends ChangeNotifier {
     });
 
     if (exactMatchIndex != -1) {
-      // Merge into the perfectly identical active item
       final existingItem = _items[exactMatchIndex];
       _items[exactMatchIndex] = existingItem.copyWith(
         quantity: (existingItem.quantity + newQty).clamp(0, 99),
@@ -378,6 +370,7 @@ class ListProvider extends ChangeNotifier {
     _items.add(newItem);
     _recalculateWraps();
     _buildDisplayList();
+    _buildCheckedDisplayList(); // NEW
     _saveItemsToStorage();
 
     _flashItemId = newItem.id;
@@ -433,17 +426,11 @@ class ListProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  // ==========================================
-  // SMART PREFILL ENGINE (MULTI-VARIANT)
-  // ==========================================
-
-  /// Generates a unique fingerprint for a specific item variant
   String _generateVariantKey(String title, String category, String store, List<String> tags) {
     final sortedTags = List<String>.from(tags)..sort();
     return '${title.toLowerCase().trim()}|${category.trim()}|${store.trim()}|${sortedTags.join(",")}';
   }
 
-  /// Checks if a perfectly identical variant is already active
   bool isActiveVariant(String title, String category, String store, List<String> tags) {
     final targetKey = _generateVariantKey(title, category, store, tags);
     return _items.any((item) =>
@@ -456,9 +443,8 @@ class ListProvider extends ChangeNotifier {
   List<SmartItem> _getMergedDictionary() {
     final Map<String, SmartItem> merged = {};
     final Map<String, int> frequency = {};
-    final Map<String, int> recency = {}; // Tie-breaker
+    final Map<String, int> recency = {};
 
-    // 1. Load Global Baseline
     for (var item in MockDictionary.globalItems) {
       final key = _generateVariantKey(item.title, item.category, item.store, item.tags);
       merged[key] = item;
@@ -466,10 +452,9 @@ class ListProvider extends ChangeNotifier {
       recency[key] = 0;
     }
 
-    // 2. Overlay User's Historical Data
     int timeIndex = 0;
     for (var item in _items) {
-      if (item.isDeleted) continue; // NEW: Ignore items currently in the trash
+      if (item.isDeleted) continue;
 
       final key = _generateVariantKey(item.title, item.category, item.type, item.attributeRows);
       merged[key] = SmartItem(
@@ -480,10 +465,9 @@ class ListProvider extends ChangeNotifier {
         tags: item.attributeRows,
       );
       frequency[key] = (frequency[key] ?? 0) + 1;
-      recency[key] = timeIndex++; // Higher index = more recently added/edited
+      recency[key] = timeIndex++;
     }
 
-    // 3. Sort by Frequency, then Recency
     final sortedItems = merged.values.toList();
     sortedItems.sort((a, b) {
       final keyA = _generateVariantKey(a.title, a.category, a.store, a.tags);
@@ -505,7 +489,6 @@ class ListProvider extends ChangeNotifier {
     final allItems = _getMergedDictionary();
 
     if (query.trim().isEmpty) {
-      // Return top popular variants, strictly hiding variants that are already active
       return allItems
           .where((item) => !isActiveVariant(item.title, item.category, item.store, item.tags))
           .take(5)
@@ -518,12 +501,10 @@ class ListProvider extends ChangeNotifier {
         .toList();
   }
 
-  /// Finds the most popular (or recent) variant of an item for Quick Saves
   SmartItem? getMostPopularVariant(String title) {
     final allItems = _getMergedDictionary();
     final q = title.toLowerCase().trim();
     try {
-      // Since allItems is already sorted by frequency/recency, .firstWhere grabs the top winner
       return allItems.firstWhere((item) => item.title.toLowerCase() == q);
     } catch (e) {
       return null;
@@ -549,12 +530,13 @@ class ListProvider extends ChangeNotifier {
     bool changed = false;
     for (int i = 0; i < _items.length; i++) {
       if (!_items[i].isDeleted && !_items[i].isCompleted) {
-        _items[i] = _items[i].copyWith(isCompleted: true);
+        _items[i] = _items[i].copyWith(isCompleted: true, completedAt: DateTime.now()); // NEW
         changed = true;
       }
     }
     if (changed) {
       _buildDisplayList();
+      _buildCheckedDisplayList(); // NEW
       _saveItemsToStorage();
       notifyListeners();
     }
@@ -570,6 +552,7 @@ class ListProvider extends ChangeNotifier {
     }
     if (changed) {
       _buildDisplayList();
+      _buildCheckedDisplayList(); // NEW
       _saveItemsToStorage();
       notifyListeners();
     }
@@ -579,10 +562,11 @@ class ListProvider extends ChangeNotifier {
     final checkedIds = List<String>.from(_selectedItemIds);
     for (String id in checkedIds) {
       final index = _items.indexWhere((item) => item.id == id);
-      if (index != -1) _items[index] = _items[index].copyWith(isCompleted: true);
+      if (index != -1) _items[index] = _items[index].copyWith(isCompleted: true, completedAt: DateTime.now()); // NEW
     }
     clearSelection();
     _buildDisplayList();
+    _buildCheckedDisplayList(); // NEW
     _saveItemsToStorage();
     return checkedIds;
   }
@@ -595,24 +579,23 @@ class ListProvider extends ChangeNotifier {
     }
     clearSelection();
     _buildDisplayList();
+    _buildCheckedDisplayList(); // NEW
     _saveItemsToStorage();
     return deletedIds;
   }
 
   // --- CROSS-LIST BATCH ACTIONS ---
-
   Future<void> moveSelectedToTargetList(String targetListId) async {
     if (targetListId == _currentListId || _selectedItemIds.isEmpty) return;
 
-    // 1. Grab items from current list and remove them
     final itemsToMove = _items.where((item) => _selectedItemIds.contains(item.id)).toList();
     if (itemsToMove.isEmpty) return;
 
     _items.removeWhere((item) => _selectedItemIds.contains(item.id));
     _buildDisplayList();
+    _buildCheckedDisplayList(); // NEW
     await _saveItemsToStorage();
 
-    // 2. Open the target list's storage file and append the items
     final prefs = await SharedPreferences.getInstance();
     final String? destJson = prefs.getString('items_$targetListId');
     List<ListItem> destItems = [];
@@ -635,7 +618,6 @@ class ListProvider extends ChangeNotifier {
     final itemsToCopy = _items.where((item) => _selectedItemIds.contains(item.id)).toList();
     if (itemsToCopy.isEmpty) return;
 
-    // 1. Open the target list's storage file
     final prefs = await SharedPreferences.getInstance();
     final String? destJson = prefs.getString('items_$targetListId');
     List<ListItem> destItems = [];
@@ -645,7 +627,6 @@ class ListProvider extends ChangeNotifier {
       destItems = decoded.map((map) => ListItem.fromMap(map)).toList();
     }
 
-    // 2. Generate new unique IDs so copies don't conflict with originals
     int timeOffset = 0;
     for (var original in itemsToCopy) {
       destItems.add(original.copyWith(
@@ -655,7 +636,6 @@ class ListProvider extends ChangeNotifier {
       timeOffset++;
     }
 
-    // 3. Save to target list
     await prefs.setString('items_$targetListId', jsonEncode(destItems.map((i) => i.toMap()).toList()));
 
     clearSelection();
@@ -668,12 +648,17 @@ class ListProvider extends ChangeNotifier {
     for (String id in ids) {
       final index = _items.indexWhere((item) => item.id == id);
       if (index != -1) {
-        _items[index] = _items[index].copyWith(isDeleted: false, isCompleted: false);
+        _items[index] = _items[index].copyWith(
+          isDeleted: false,
+          isCompleted: false,
+          completedAt: null, // NEW
+        );
         changed = true;
       }
     }
     if (changed) {
       _buildDisplayList();
+      _buildCheckedDisplayList(); // NEW
       _saveItemsToStorage();
       notifyListeners();
     }
@@ -696,6 +681,7 @@ class ListProvider extends ChangeNotifier {
       _items.addAll(newItems);
       clearSelection();
       _buildDisplayList();
+      _buildCheckedDisplayList(); // NEW
       _saveItemsToStorage();
     }
   }
@@ -708,12 +694,11 @@ class ListProvider extends ChangeNotifier {
       final safeType = type.trim().isEmpty ? "Any" : type.trim();
       final safeCategory = category.trim().isEmpty ? "Everything Else" : category.trim();
 
-      // EXACT-MATCH MERGE CHECK
       final sortedNewTags = List<String>.from(newAttributes)..sort();
       final newTagString = sortedNewTags.join(",");
 
       final exactMatchIndex = _items.indexWhere((item) {
-        if (item.id == id) return false; // Don't match against itself
+        if (item.id == id) return false;
         if (item.isDeleted || item.isCompleted) return false;
         if (item.title.trim().toLowerCase() != newTitle.trim().toLowerCase()) return false;
         if (item.category != safeCategory) return false;
@@ -723,17 +708,16 @@ class ListProvider extends ChangeNotifier {
       });
 
       if (exactMatchIndex != -1) {
-        // Merge into the identical active item
         final existingItem = _items[exactMatchIndex];
         _items[exactMatchIndex] = existingItem.copyWith(
           quantity: (existingItem.quantity + newQty).clamp(0, 99),
           unit: newUnit,
         );
-        // Permanently delete the item that was being edited since it's now merged
         _items.removeAt(index);
 
         _recalculateWraps();
         _buildDisplayList();
+        _buildCheckedDisplayList(); // NEW
         _saveItemsToStorage();
         triggerSequentialFlash(existingItem.id);
         notifyListeners();
@@ -768,10 +752,15 @@ class ListProvider extends ChangeNotifier {
         unit: newUnit,
         categoryOrder: newCatOrder,
         typeOrder: newTypeOrder,
+
+        // NEW: "Edit = Restore" UX Flow. Saving edits instantly pulls the item out of the completed list!
+        isCompleted: false,
+        completedAt: null,
       );
 
       _recalculateWraps();
       _buildDisplayList();
+      _buildCheckedDisplayList(); // NEW
       _saveItemsToStorage();
       notifyListeners();
     }
@@ -803,6 +792,7 @@ class ListProvider extends ChangeNotifier {
     if (changed) {
       _recalculateWraps();
       _recalculateYOffsets();
+      _recalculateCheckedYOffsets(); // NEW
       notifyListeners();
     }
   }
@@ -890,10 +880,65 @@ class ListProvider extends ChangeNotifier {
 
     if (stateChanged || displayList.isEmpty) {
       _buildDisplayList();
+      _buildCheckedDisplayList(); // NEW
       notifyListeners();
     }
   }
 
+  // --- NEW: COMPLETED LIST CHRONOLOGICAL ENGINE ---
+  void _buildCheckedDisplayList() {
+    final checkedItems = _items.where((item) => item.isCompleted && !item.isDeleted).toList();
+
+    // Sort descending (most recently checked off items at the top)
+    checkedItems.sort((a, b) => (b.completedAt ?? DateTime.fromMillisecondsSinceEpoch(0))
+        .compareTo(a.completedAt ?? DateTime.fromMillisecondsSinceEpoch(0)));
+
+    checkedDisplayList.clear();
+    String? currentHeader;
+
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final yesterday = today.subtract(const Duration(days: 1));
+    final thisWeekStart = today.subtract(const Duration(days: 7));
+    final thisMonthStart = DateTime(now.year, now.month, 1);
+    final thisYearStart = DateTime(now.year, 1, 1);
+
+    for (var item in checkedItems) {
+      final date = item.completedAt ?? DateTime.fromMillisecondsSinceEpoch(0);
+      final itemDate = DateTime(date.year, date.month, date.day);
+
+      String header = "A Long Time Ago";
+      if (itemDate == today) {
+        header = "Today";
+      } else if (itemDate == yesterday) {
+        header = "Yesterday";
+      } else if (itemDate.isAfter(thisWeekStart) || itemDate == thisWeekStart) {
+        header = "This Week";
+      } else if (itemDate.isAfter(thisMonthStart) || itemDate == thisMonthStart) {
+        header = "This Month";
+      } else if (itemDate.isAfter(thisYearStart) || itemDate == thisYearStart) {
+        header = "This Year";
+      }
+
+      if (header != currentHeader) {
+        checkedDisplayList.add(header);
+        currentHeader = header;
+      }
+      checkedDisplayList.add(item);
+    }
+    _recalculateCheckedYOffsets();
+  }
+
+  void _recalculateCheckedYOffsets() {
+    checkedCumulativeYOffsets.clear();
+    final calculatedOffsets = StickyHeaderEngine.calculateSpatialCache(
+        checkedDisplayList,
+        textScaleFactor: _textScaleFactor
+    );
+    checkedCumulativeYOffsets.addAll(calculatedOffsets);
+  }
+
+  // --- ACTIVE LIST GROUPING ENGINE ---
   void _buildDisplayList() {
     List<String>? activeGroupOrder;
     if (_currentSortMode == SortMode.types) activeGroupOrder = preferredTypeOrder;
@@ -968,8 +1013,13 @@ class ListProvider extends ChangeNotifier {
   String toggleCompletion(String id) {
     final index = _items.indexWhere((item) => item.id == id);
     if (index != -1) {
-      _items[index] = _items[index].copyWith(isCompleted: !_items[index].isCompleted);
+      final isNowCompleted = !_items[index].isCompleted;
+      _items[index] = _items[index].copyWith(
+        isCompleted: isNowCompleted,
+        completedAt: isNowCompleted ? DateTime.now() : null, // NEW
+      );
       _buildDisplayList();
+      _buildCheckedDisplayList(); // NEW
       _saveItemsToStorage();
       notifyListeners();
     }
@@ -981,6 +1031,7 @@ class ListProvider extends ChangeNotifier {
     if (index != -1) {
       _items[index] = _items[index].copyWith(isDeleted: true);
       _buildDisplayList();
+      _buildCheckedDisplayList(); // NEW
       _saveItemsToStorage();
       notifyListeners();
     }

@@ -48,9 +48,22 @@ class _FluidEditSheetState extends State<FluidEditSheet> {
 
   void _syncDraftWithProvider(ListProvider provider) {
     if (provider.editItemId != null) {
-      final itemIndex = provider.displayList.indexWhere((item) => item is ListItem && item.id == provider.editItemId);
+      // 1. Search Active List First
+      int itemIndex = provider.displayList.indexWhere((item) => item is ListItem && item.id == provider.editItemId);
+      dynamic foundItem;
+
       if (itemIndex != -1) {
-        final item = provider.displayList[itemIndex] as ListItem;
+        foundItem = provider.displayList[itemIndex];
+      } else {
+        // 2. Search Completed List if not found in Active
+        itemIndex = provider.checkedDisplayList.indexWhere((item) => item is ListItem && item.id == provider.editItemId);
+        if (itemIndex != -1) {
+          foundItem = provider.checkedDisplayList[itemIndex];
+        }
+      }
+
+      if (foundItem != null) {
+        final item = foundItem as ListItem;
         // Only override the draft if it's a completely new item selection
         if (_draftItem == null || _draftItem!.id != item.id) {
           _draftItem = item.copyWith();

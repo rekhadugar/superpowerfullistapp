@@ -47,7 +47,7 @@ class AppPhysics {
 
   // 2. Friction & Resistance (TWEAK THESE)
   static const double frictionYield = 0.50;          // Rubber-banding when dragged past thresholds (1.0 = slippery, 0.1 = stiff)
-  static const double momentumMultiplier = 0.03;     // Translates flick velocity into projected distance
+  static const double momentumMultiplier = 0.06;     // Translates flick velocity into projected distance
 
   // 3. Elastic Spring Physics (For snapping back or opening menu)
   static const double springMass = 1.0;

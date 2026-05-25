@@ -1,5 +1,7 @@
 // Location: lib/screens/main_screen.dart
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/list_provider.dart';
@@ -18,6 +20,7 @@ import '../providers/macro_list_provider.dart';
 import '../widgets/app_drawer.dart';
 import 'create_list_screen.dart';
 import '../widgets/batch_action_bar.dart';
+import 'completed_items_screen.dart'; // NEW IMPORT
 
 class MainScreen extends StatefulWidget {
   const MainScreen({Key? key}) : super(key: key);
@@ -31,6 +34,7 @@ class _MainScreenState extends State<MainScreen> {
   final ValueNotifier<PhantomHeaderData> _phantomHeaderState = ValueNotifier(const PhantomHeaderData());
 
   String? _lastScrolledFlashId;
+  Timer? _toastTimer;
 
   @override
   void initState() {
@@ -84,6 +88,7 @@ class _MainScreenState extends State<MainScreen> {
 
   @override
   void dispose() {
+    _toastTimer?.cancel(); // NEW: Prevent memory leaks
     _scrollController.removeListener(_onScroll);
     _scrollController.dispose();
     _phantomHeaderState.dispose();
@@ -107,17 +112,18 @@ class _MainScreenState extends State<MainScreen> {
     }
   }
 
-  // HELPER: To keep the SnackBar code clean and uniform
-  // HELPER: To keep the SnackBar code clean and uniform
-  // HELPER: To keep the SnackBar code clean and uniform
+  // FIXED: Auto-dodging SnackBar Helper
+  // FIXED: Crash-proof SnackBar Helper
   void _showActionToast(BuildContext context, String message, List<String> undoIds) {
     final messenger = ScaffoldMessenger.of(context);
+
+    // 1. Cancel any pending timers from previous rapid swipes
+    _toastTimer?.cancel();
     messenger.clearSnackBars();
 
-    final controller = messenger.showSnackBar(
+    messenger.showSnackBar(
       SnackBar(
         content: Text(message),
-        // NEW: Anchors to the bottom and forces the native FAB to slide up
         behavior: SnackBarBehavior.fixed,
         duration: const Duration(seconds: 3),
         action: SnackBarAction(
@@ -128,8 +134,11 @@ class _MainScreenState extends State<MainScreen> {
       ),
     );
 
-    Future.delayed(const Duration(seconds: 3), () {
-      controller.close();
+    // 2. Use a stateful timer that safely hides the current snackbar
+    _toastTimer = Timer(const Duration(seconds: 3), () {
+      if (mounted) {
+        messenger.hideCurrentSnackBar();
+      }
     });
   }
 
@@ -202,12 +211,15 @@ class _MainScreenState extends State<MainScreen> {
           ],
         ),
 
-        // FIXED 1: Native Scaffold FAB handles SnackBar dodging automatically!
+        // FIXED: Native FAB so SnackBars push it up automatically
+        // FIXED: Hides FAB during Batch Mode AND Fluid Editing
         floatingActionButton: AnimatedSlide(
           duration: const Duration(milliseconds: 300),
           curve: Curves.easeOutCubic,
-          // Slides it off-screen when Batch Mode is active
-          offset: listProvider.isBatchModeActive ? const Offset(0, 2) : Offset.zero,
+          // NEW: Check both batch mode and edit mode!
+          offset: (listProvider.isBatchModeActive || listProvider.editItemId != null)
+              ? const Offset(0, 2)
+              : Offset.zero,
           child: FloatingActionButton(
             onPressed: () {
               showModalBottomSheet(
@@ -233,10 +245,25 @@ class _MainScreenState extends State<MainScreen> {
           children: [
             displayList.isEmpty
                 ? Center(
-              child: Text(
-                'All caught up!\nTap + to add your first item.',
-                textAlign: TextAlign.center,
-                style: theme.textTheme.bodyMedium,
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    'All caught up!\nTap + to add your first item.',
+                    textAlign: TextAlign.center,
+                    style: theme.textTheme.bodyMedium,
+                  ),
+                  // FIXED: Conditionally show the navigation link if there are checked items!
+                  if (listProvider.checkedDisplayList.isNotEmpty) ...[
+                    const SizedBox(height: 24),
+                    TextButton.icon(
+                      onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const CompletedItemsScreen())),
+                      icon: Icon(Icons.history_rounded, color: theme.textTheme.bodyMedium?.color),
+                      label: Text('View Completed Items', style: theme.textTheme.bodyMedium),
+                    ),
+                  ]
+                ],
               ),
             )
                 : NotificationListener<ScrollNotification>(
@@ -267,6 +294,18 @@ class _MainScreenState extends State<MainScreen> {
                     ),
                     itemCount: displayList.length,
                     buildDefaultDragHandles: false,
+
+                    // NEW: Seamless footer button mapping to the completed list screen
+                    footer: Padding(
+                      key: const ValueKey('completed_footer'),
+                      padding: const EdgeInsets.symmetric(vertical: 24.0),
+                      child: TextButton.icon(
+                        onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const CompletedItemsScreen())),
+                        icon: Icon(Icons.history_rounded, color: theme.textTheme.bodyMedium?.color),
+                        label: Text('View Completed Items', style: theme.textTheme.bodyMedium),
+                      ),
+                    ),
+
                     onReorder: (oldIndex, newIndex) {
                       if (oldIndex == newIndex) {
                         final item = displayList[oldIndex];
@@ -298,7 +337,6 @@ class _MainScreenState extends State<MainScreen> {
                           unit: item.unit,
                           isHighlighted: listProvider.flashItemId == item.id,
                           isDragging: false,
-
                           isBatchModeActive: listProvider.isBatchModeActive,
                           isBatchSelected: listProvider.selectedItemIds.contains(item.id),
                           isFluidEditing: listProvider.editItemId == item.id,
@@ -333,7 +371,6 @@ class _MainScreenState extends State<MainScreen> {
                             itemId: item.id,
                             requireConfirm: true,
                             isBatchModeActive: listProvider.isBatchModeActive,
-
                             onCheckout: () {
                               final id = context.read<ListProvider>().toggleCompletion(item.id);
                               _showActionToast(context, '${item.title} checked off', [id]);
@@ -371,6 +408,8 @@ class _MainScreenState extends State<MainScreen> {
             ),
 
             const FluidEditSheet(),
+
+            // Revert BatchActionBar to normal usage
             const BatchActionBar(),
           ],
         ),
