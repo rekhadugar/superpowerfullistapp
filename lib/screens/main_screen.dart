@@ -12,11 +12,12 @@ import '../widgets/main_options_sheet.dart';
 import '../widgets/section_header.dart';
 import '../widgets/swipe_action_wrapper.dart';
 import '../models/list_item.dart';
-import '../engine/sticky_header_engine.dart'; // IMPORT THE ENGINE
-import '../engine/sort_mode_engine.dart'; // IMPORT THE SORT ENGINE
-import '../providers/macro_list_provider.dart'; // <--- NEW
+import '../engine/sticky_header_engine.dart';
+import '../engine/sort_mode_engine.dart';
+import '../providers/macro_list_provider.dart';
 import '../widgets/app_drawer.dart';
-import 'create_list_screen.dart'; // <--- NEW
+import 'create_list_screen.dart';
+import '../widgets/batch_action_bar.dart';
 
 class MainScreen extends StatefulWidget {
   const MainScreen({Key? key}) : super(key: key);
@@ -37,7 +38,6 @@ class _MainScreenState extends State<MainScreen> {
     _scrollController = ScrollController();
     _scrollController.addListener(_onScroll);
 
-    // Safely attach a listener to execute scroll side-effects outside the build phase
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         context.read<ListProvider>().addListener(_onProviderStateChanged);
@@ -49,7 +49,7 @@ class _MainScreenState extends State<MainScreen> {
   void didChangeDependencies() {
     super.didChangeDependencies();
     final screenWidth = MediaQuery.of(context).size.width;
-    final textScale = MediaQuery.textScalerOf(context).scale(1.0); // Fetch Scale
+    final textScale = MediaQuery.textScalerOf(context).scale(1.0);
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
@@ -62,15 +62,12 @@ class _MainScreenState extends State<MainScreen> {
     if (!mounted) return;
     final provider = context.read<ListProvider>();
 
-    // Only scroll if there is a new item we haven't scrolled to yet
     if (provider.flashItemId != null && provider.flashItemId != _lastScrolledFlashId) {
       _lastScrolledFlashId = provider.flashItemId;
       final targetOffset = provider.getOffsetForItem(provider.flashItemId!);
 
       if (targetOffset != null && _scrollController.hasClients) {
         double maxScroll = _scrollController.position.maxScrollExtent;
-
-        // Include ONLY the 44px sticky header height for a perfect mathematical snap
         double safeBuffer = AppConstants.headerHeight;
         double scrollTarget = (targetOffset - safeBuffer).clamp(0.0, maxScroll);
 
@@ -95,7 +92,7 @@ class _MainScreenState extends State<MainScreen> {
 
   void _onScroll() {
     final provider = context.read<ListProvider>();
-    final textScale = MediaQuery.textScalerOf(context).scale(1.0); // Fetch Scale
+    final textScale = MediaQuery.textScalerOf(context).scale(1.0);
 
     final newHeaderData = StickyHeaderEngine.calculatePhantomHeader(
       _scrollController.offset,
@@ -114,19 +111,15 @@ class _MainScreenState extends State<MainScreen> {
   Widget build(BuildContext context) {
     final macroProvider = context.watch<MacroListProvider>();
 
-    // 1. Loading State
     if (!macroProvider.isInitialized) {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
-    // 2. The True Blank Slate Override (Forces Create List)
     if (macroProvider.lists.isEmpty) {
       return const CreateListScreen(isFirstLaunch: true);
     }
 
-    // 3. Trigger Data Query for the Active List
     final activeId = macroProvider.activeListId!;
-    // Safe to call in build() because loadItemsForList returns early if already loaded
     context.read<ListProvider>().loadItemsForList(activeId);
 
     final listProvider = context.watch<ListProvider>();
@@ -135,7 +128,6 @@ class _MainScreenState extends State<MainScreen> {
     final theme = Theme.of(context);
     final double safeBottomPadding = MediaQuery.of(context).padding.bottom;
 
-    // Remove focus if tapping the background list
     return GestureDetector(
       onTap: () {
         if (listProvider.openSwipeItemId.value != null) {
@@ -151,17 +143,17 @@ class _MainScreenState extends State<MainScreen> {
           leadingWidth: AppConstants.horizontalPadding + AppConstants.leadingBlockWidth + AppConstants.interElementGap,
           leading: Padding(
             padding: const EdgeInsets.only(left: AppConstants.horizontalPadding),
-            child: Builder( // Wrapped in Builder to access the Scaffold context
+            child: Builder(
               builder: (context) => IconButton(
                 icon: Icon(Icons.menu_rounded, color: theme.textTheme.titleMedium?.color),
                 padding: EdgeInsets.zero,
                 alignment: Alignment.centerLeft,
-                onPressed: () => Scaffold.of(context).openDrawer(), // Opens Drawer
+                onPressed: () => Scaffold.of(context).openDrawer(),
               ),
             ),
           ),
           titleSpacing: 0,
-          title: Text(activeList?.name ?? 'Listicle'), // Dynamically updates title
+          title: Text(activeList?.name ?? 'Listicle'),
           backgroundColor: theme.cardColor,
           elevation: 0,
           centerTitle: false,
@@ -185,7 +177,6 @@ class _MainScreenState extends State<MainScreen> {
         ),
         body: Stack(
           children: [
-            // 1. The Background: Empty State OR The Scrollable List
             displayList.isEmpty
                 ? Center(
               child: Text(
@@ -196,19 +187,18 @@ class _MainScreenState extends State<MainScreen> {
             )
                 : NotificationListener<ScrollNotification>(
               onNotification: (ScrollNotification notification) {
-                // Dismiss swipe menus
                 if (listProvider.openSwipeItemId.value != null) {
                   listProvider.openSwipeItemId.value = null;
                 }
 
-                // Smart Keyboard-Aware Scroll-to-Dismiss
+                // FIXED: Smart Keyboard-Aware Scroll-to-Dismiss uses Strict Separation
                 if (notification is ScrollUpdateNotification && notification.dragDetails != null) {
-                  if (!listProvider.isMultiSelectMode && listProvider.selectedItemIds.isNotEmpty) {
+                  if (listProvider.editItemId != null) {
                     final isKeyboardOpen = MediaQuery.of(context).viewInsets.bottom > 0;
                     if (isKeyboardOpen) {
                       FocusManager.instance.primaryFocus?.unfocus();
                     } else {
-                      listProvider.clearSelection();
+                      listProvider.setEditItem(null); // Safely closes the Fluid Edit sheet
                     }
                   }
                 }
@@ -220,11 +210,18 @@ class _MainScreenState extends State<MainScreen> {
                     scrollController: _scrollController,
                     padding: EdgeInsets.only(
                         top: 0.0,
-                        bottom: listProvider.isEditMode ? 300 : safeBottomPadding + 100.0
+                        bottom: listProvider.isBatchModeActive ? 300 : safeBottomPadding + 100.0
                     ),
                     itemCount: displayList.length,
                     buildDefaultDragHandles: false,
-                    onReorder: (oldIndex, newIndex) => context.read<ListProvider>().executeNativeReorder(oldIndex, newIndex),
+                    onReorder: (oldIndex, newIndex) {
+                      if (oldIndex == newIndex) {
+                        final item = displayList[oldIndex];
+                        if (item is ListItem) context.read<ListProvider>().toggleSelection(item.id);
+                        return;
+                      }
+                      context.read<ListProvider>().executeNativeReorder(oldIndex, newIndex);
+                    },
                     proxyDecorator: (child, index, animation) {
                       return Material(color: Colors.transparent, elevation: 8.0, shadowColor: Colors.black45, child: child);
                     },
@@ -236,8 +233,6 @@ class _MainScreenState extends State<MainScreen> {
                       }
 
                       if (item is ListItem) {
-                        final bool isSelected = listProvider.selectedItemIds.contains(item.id);
-
                         Widget coreCard = ListItemCard(
                           title: item.title,
                           nWrap: item.nWrap,
@@ -250,8 +245,12 @@ class _MainScreenState extends State<MainScreen> {
                           unit: item.unit,
                           isHighlighted: listProvider.flashItemId == item.id,
                           isDragging: false,
-                          isEditMode: listProvider.isEditMode,
-                          isSelected: isSelected,
+
+                          // PRODUCTION SEPARATION WIRING
+                          isBatchModeActive: listProvider.isBatchModeActive,
+                          isBatchSelected: listProvider.selectedItemIds.contains(item.id),
+                          isFluidEditing: listProvider.editItemId == item.id,
+
                           onCheck: () {
                             final id = context.read<ListProvider>().toggleCompletion(item.id);
                             ScaffoldMessenger.of(context).clearSnackBars();
@@ -267,13 +266,14 @@ class _MainScreenState extends State<MainScreen> {
                             if (listProvider.openSwipeItemId.value != null) {
                               listProvider.openSwipeItemId.value = null;
                             } else {
-                              if (listProvider.isMultiSelectMode) {
+                              if (listProvider.isBatchModeActive) {
                                 context.read<ListProvider>().toggleSelection(item.id);
                               } else {
-                                context.read<ListProvider>().selectSingleItem(item.id);
+                                context.read<ListProvider>().setEditItem(item.id);
                               }
                             }
                           },
+                          onToggleSelection: () => context.read<ListProvider>().toggleSelection(item.id),
                         );
 
                         return ReorderableDelayedDragStartListener(
@@ -295,10 +295,9 @@ class _MainScreenState extends State<MainScreen> {
                               );
                             },
                             onEdit: () {
-                              listProvider.clearSelection();
-                              listProvider.toggleSelection(item.id);
+                              listProvider.clearAllInteractions();
+                              listProvider.setEditItem(item.id);
                               listProvider.setFullEditRequest(true);
-                              listProvider.openSwipeItemId.value = null;
                             },
                             onDelete: () {
                               final id = context.read<ListProvider>().deleteItem(item.id);
@@ -334,12 +333,11 @@ class _MainScreenState extends State<MainScreen> {
               ),
             ),
 
-            // 2. The Floating Action Button (Always in the tree now!)
             AnimatedPositioned(
               duration: const Duration(milliseconds: 300),
               curve: Curves.easeOutCubic,
               right: AppConstants.horizontalPadding,
-              bottom: listProvider.isEditMode ? -100 : (safeBottomPadding + 16.0),
+              bottom: listProvider.isBatchModeActive ? -100 : (safeBottomPadding + 16.0),
               child: FloatingActionButton(
                 onPressed: () {
                   showModalBottomSheet(
@@ -349,12 +347,7 @@ class _MainScreenState extends State<MainScreen> {
                     builder: (ctx) => EditItemBottomSheet(
                       onSave: (title, attributes, type, category, quantity, unit) {
                         context.read<ListProvider>().addItem(
-                          title,
-                          attributes,
-                          type,
-                          category,
-                          quantity,
-                          unit,
+                          title, attributes, type, category, quantity, unit,
                         );
                       },
                     ),
@@ -366,8 +359,8 @@ class _MainScreenState extends State<MainScreen> {
               ),
             ),
 
-            // 3. THE NEW FLUID CONTEXT SHEET (Always available now!)
             const FluidEditSheet(),
+            const BatchActionBar(),
           ],
         ),
       ),

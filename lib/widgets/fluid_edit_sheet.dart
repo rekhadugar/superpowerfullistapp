@@ -25,7 +25,7 @@ class _FluidEditSheetState extends State<FluidEditSheet> {
     _titleController = TextEditingController();
 
     _titleFocus.addListener(() {
-      if (_titleFocus.hasFocus) {
+      if (_titleFocus.hasFocus && mounted) {
         context.read<ListProvider>().setFullEditRequest(true);
       }
     });
@@ -38,50 +38,71 @@ class _FluidEditSheetState extends State<FluidEditSheet> {
     super.dispose();
   }
 
+  // FIXED: Safely sync data before the build phase to prevent UI freezing!
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final provider = context.watch<ListProvider>();
+    _syncDraftWithProvider(provider);
+  }
+
   void _syncDraftWithProvider(ListProvider provider) {
-    if (provider.selectedItemIds.length == 1) {
-      final selectedId = provider.selectedItemIds.first;
-      if (_draftItem?.id != selectedId) {
-        final realItem = provider.activeItems.firstWhere((i) => i.id == selectedId);
-        _draftItem = realItem.copyWith(quantity: provider.getDraftQuantity(selectedId));
-        _titleController.text = _draftItem!.title;
+    if (provider.editItemId != null) {
+      final itemIndex = provider.displayList.indexWhere((item) => item is ListItem && item.id == provider.editItemId);
+      if (itemIndex != -1) {
+        final item = provider.displayList[itemIndex] as ListItem;
+        // Only override the draft if it's a completely new item selection
+        if (_draftItem == null || _draftItem!.id != item.id) {
+          _draftItem = item.copyWith();
+          _titleController.text = item.title;
+        }
       }
-    } else {
+    } else if (_draftItem != null) {
       _draftItem = null;
-      _titleFocus.unfocus();
+      _titleController.clear();
     }
   }
 
+  // NEW: Dedicated save function for the separated architecture
   void _saveDraft(ListProvider provider) {
-    if (_draftItem != null && _titleController.text.trim().isNotEmpty) {
+    if (_draftItem != null) {
       provider.editItem(
         _draftItem!.id,
         _titleController.text.trim(),
         _draftItem!.attributeRows,
         _draftItem!.type,
         _draftItem!.category,
-        provider.getDraftQuantity(_draftItem!.id), // Tied directly to provider
+        _draftItem!.quantity, // Use the local draft quantity
         _draftItem!.unit,
       );
     }
-    provider.clearSelection();
+    // Close the sheet gracefully
+    provider.setEditItem(null);
+    provider.setFullEditRequest(false);
+    _titleFocus.unfocus();
   }
 
-  Widget _buildPillButton(IconData icon, String label, VoidCallback onTap, {Color? color}) {
-    final fgColor = color ?? Theme.of(context).textTheme.titleMedium?.color;
-    final bgColor = (color ?? Theme.of(context).dividerColor).withOpacity(0.1);
-
+  // HELPER: To render the action buttons efficiently
+  Widget _buildPillButton(IconData icon, String label, VoidCallback onTap, {Color color = AppColors.primaryAction}) {
     return Expanded(
-      child: TextButton.icon(
-        onPressed: onTap,
-        style: TextButton.styleFrom(
-          backgroundColor: bgColor,
-          foregroundColor: fgColor,
-          padding: const EdgeInsets.symmetric(vertical: 12.0),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12.0)),
+      child: GestureDetector(
+        onTap: onTap,
+        behavior: HitTestBehavior.opaque,
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          decoration: BoxDecoration(
+            color: color.withOpacity(0.1),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(icon, color: color, size: 20),
+              const SizedBox(width: 8),
+              Text(label, style: TextStyle(color: color, fontWeight: FontWeight.bold)),
+            ],
+          ),
         ),
-        icon: Icon(icon, size: 18),
-        label: Text(label, style: const TextStyle(fontWeight: FontWeight.w600)),
       ),
     );
   }
@@ -89,11 +110,7 @@ class _FluidEditSheetState extends State<FluidEditSheet> {
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<ListProvider>();
-    _syncDraftWithProvider(provider);
-
-    // THESE ARE THE VARIABLES THAT WERE MISSING
-    final bool isVisible = provider.selectedItemIds.isNotEmpty;
-    final bool isMulti = provider.isMultiSelectMode || provider.selectedItemIds.length > 1;
+    final isVisible = provider.editItemId != null;
     final bool isFull = provider.isFullEditRequested;
 
     final double screenHeight = MediaQuery.of(context).size.height;
@@ -101,10 +118,7 @@ class _FluidEditSheetState extends State<FluidEditSheet> {
     final double safeBottom = MediaQuery.of(context).padding.bottom;
 
     double sheetHeight = 280.0 + safeBottom;
-
-    if (isMulti) {
-      sheetHeight = 200.0 + safeBottom;
-    } else if (isFull) {
+    if (isFull) {
       sheetHeight = screenHeight * 0.85;
     }
 
@@ -134,9 +148,9 @@ class _FluidEditSheetState extends State<FluidEditSheet> {
                     _titleFocus.unfocus();
                   } else {
                     _titleFocus.unfocus();
-                    provider.clearSelection();
+                    provider.setEditItem(null); // Safely close sheet
                   }
-                } else if (velocity < -200 && !isMulti) {
+                } else if (velocity < -200) {
                   provider.setFullEditRequest(true);
                 }
               },
@@ -148,7 +162,8 @@ class _FluidEditSheetState extends State<FluidEditSheet> {
                     TextButton(
                       onPressed: () {
                         _titleFocus.unfocus();
-                        provider.clearSelection();
+                        provider.setEditItem(null); // Cancel closes sheet natively
+                        provider.setFullEditRequest(false);
                       },
                       child: Text('Cancel', style: TextStyle(color: Theme.of(context).textTheme.bodyMedium?.color, fontSize: 16)),
                     ),
@@ -161,7 +176,7 @@ class _FluidEditSheetState extends State<FluidEditSheet> {
                       ),
                     ),
                     TextButton(
-                      onPressed: () => _saveDraft(provider),
+                      onPressed: () => _saveDraft(provider), // Triggers specific save execution
                       child: const Text('Save', style: TextStyle(color: AppColors.primaryAction, fontSize: 16, fontWeight: FontWeight.bold)),
                     ),
                   ],
@@ -178,56 +193,13 @@ class _FluidEditSheetState extends State<FluidEditSheet> {
                   keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
                   // DYNAMIC PADDING: Pushes contents up above the keyboard natively
                   padding: EdgeInsets.only(left: 20.0, right: 20.0, bottom: keyboardHeight + 20.0),
-                  child: isMulti
-                      ? _buildBatchView(provider)
-                      : _buildSingleEditView(provider, isFull),
+                  child: _buildSingleEditView(provider, isFull),
                 ),
               ),
             ),
           ],
         ),
       ),
-    );
-  }
-
-  Widget _buildBatchView(ListProvider provider) {
-    return Column(
-      children: [
-        const SizedBox(height: 16),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 12.0),
-          decoration: BoxDecoration(color: AppColors.primaryAction.withOpacity(0.15), borderRadius: BorderRadius.circular(50.0)),
-          child: Text('${provider.selectedItemIds.length} Items Selected', style: const TextStyle(color: AppColors.primaryAction, fontSize: 18, fontWeight: FontWeight.w800)),
-        ),
-        const SizedBox(height: 32),
-        Row(
-          children: [
-            _buildPillButton(Icons.checklist_rounded, 'Check All', () {
-              final ids = provider.checkSelectedItems();
-              ScaffoldMessenger.of(context).clearSnackBars();
-              ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                content: Text('${ids.length} items checked off'), behavior: SnackBarBehavior.floating,
-                action: SnackBarAction(label: 'Undo', textColor: AppColors.primaryAction, onPressed: () => provider.restoreItems(ids)),
-              ));
-            }, color: AppColors.successAction),
-            const SizedBox(width: 12),
-            _buildPillButton(Icons.copy_rounded, 'Copy', () => provider.copySelectedItems()),
-          ],
-        ),
-        const SizedBox(height: 12),
-        Row(
-          children: [
-            _buildPillButton(Icons.delete_outline_rounded, 'Delete Selected', () {
-              final ids = provider.deleteSelectedItems();
-              ScaffoldMessenger.of(context).clearSnackBars();
-              ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                content: Text('${ids.length} items deleted'), behavior: SnackBarBehavior.floating,
-                action: SnackBarAction(label: 'Undo', textColor: AppColors.primaryAction, onPressed: () => provider.restoreItems(ids)),
-              ));
-            }, color: AppColors.destructiveAction),
-          ],
-        ),
-      ],
     );
   }
 
@@ -256,9 +228,10 @@ class _FluidEditSheetState extends State<FluidEditSheet> {
               decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12.0)),
               child: Row(
                 children: [
-                  IconButton(icon: const Icon(Icons.remove), onPressed: () => provider.updateDraftQuantity(_draftItem!.id, -1)),
-                  SizedBox(width: 24, child: Text('${provider.getDraftQuantity(_draftItem!.id)}', textAlign: TextAlign.center, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold))),
-                  IconButton(icon: const Icon(Icons.add), onPressed: () => provider.updateDraftQuantity(_draftItem!.id, 1)),
+                  // FIXED: Updates quantity locally on the draft before hitting save
+                  IconButton(icon: const Icon(Icons.remove), onPressed: () => setState(() => _draftItem = _draftItem!.copyWith(quantity: (_draftItem!.quantity - 1).clamp(0, 99)))),
+                  SizedBox(width: 24, child: Text('${_draftItem!.quantity}', textAlign: TextAlign.center, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold))),
+                  IconButton(icon: const Icon(Icons.add), onPressed: () => setState(() => _draftItem = _draftItem!.copyWith(quantity: (_draftItem!.quantity + 1).clamp(0, 99)))),
                 ],
               ),
             ),
@@ -289,21 +262,30 @@ class _FluidEditSheetState extends State<FluidEditSheet> {
                 _titleFocus.requestFocus();
               }, color: AppColors.primaryAction),
               const SizedBox(width: 8),
-              _buildPillButton(Icons.copy_rounded, 'Copy', () => provider.copySelectedItems()),
+
+              // FIXED: Local copy override for separated state
+              _buildPillButton(Icons.copy_rounded, 'Copy', () {
+                provider.addItem(
+                  '${_draftItem!.title} (Copy)', _draftItem!.attributeRows, _draftItem!.type, _draftItem!.category, _draftItem!.quantity, _draftItem!.unit,
+                );
+                provider.setEditItem(null);
+              }),
               const SizedBox(width: 8),
+
+              // FIXED: Local delete override for separated state
               _buildPillButton(Icons.delete_outline_rounded, 'Delete', () {
-                final ids = provider.deleteSelectedItems();
+                final id = provider.deleteItem(_draftItem!.id);
+                provider.setEditItem(null);
                 ScaffoldMessenger.of(context).clearSnackBars();
                 ScaffoldMessenger.of(context).showSnackBar(SnackBar(
                   content: const Text('Item deleted'), behavior: SnackBarBehavior.floating,
-                  action: SnackBarAction(label: 'Undo', textColor: AppColors.primaryAction, onPressed: () => provider.restoreItems(ids)),
+                  action: SnackBarAction(label: 'Undo', textColor: AppColors.primaryAction, onPressed: () => provider.restoreItems([id])),
                 ));
               }, color: AppColors.destructiveAction),
             ],
           ),
 
         if (isFull) ...[
-          // NEW: Added Dividers and updated to HorizontalPillSelector
           const Divider(height: 32.0, thickness: 1.0),
 
           HorizontalPillSelector(
@@ -331,7 +313,7 @@ class _FluidEditSheetState extends State<FluidEditSheet> {
             dictionary: provider.activeTagDictionary,
             selectedItems: _draftItem!.attributeRows,
             isMultiSelect: true,
-            isTag: true, // NEW: Triggers the compact, boundary-highlighted style
+            isTag: true,
             onSelectionChanged: (vals) => setState(() => _draftItem = _draftItem!.copyWith(attributeRows: vals)),
           ),
         ]

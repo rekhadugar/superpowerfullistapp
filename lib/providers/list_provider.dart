@@ -28,7 +28,42 @@ class ListProvider extends ChangeNotifier {
   final List<dynamic> displayList = [];
 
   // --- Edit Mode & Selection State ---
+  // --- SEPARATED INTERACTION STATE (PRODUCTION ARCHITECTURE) ---
   final Set<String> _selectedItemIds = {};
+  String? _editItemId;
+
+  Set<String> get selectedItemIds => _selectedItemIds;
+  String? get editItemId => _editItemId;
+
+  bool get isBatchModeActive => _selectedItemIds.isNotEmpty;
+
+  // 1. Fluid Edit Intent
+  void setEditItem(String? id) {
+    _editItemId = id;
+    if (id != null) {
+      _selectedItemIds.clear(); // Safety: exit batch mode if opening edit
+    }
+    notifyListeners();
+  }
+
+  // 2. Batch Select Intent
+  void toggleSelection(String id) {
+    _editItemId = null; // Safety: forcefully close edit sheet if batch selecting
+    if (_selectedItemIds.contains(id)) {
+      _selectedItemIds.remove(id);
+    } else {
+      _selectedItemIds.add(id);
+    }
+    notifyListeners();
+  }
+
+  // 3. Global Interaction Reset
+  void clearAllInteractions() {
+    _selectedItemIds.clear();
+    _editItemId = null;
+    openSwipeItemId.value = null;
+    notifyListeners();
+  }
   final Map<String, int> _draftQuantities = {};
 
   final String currentListType = 'Shopping';
@@ -155,21 +190,10 @@ class ListProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  Set<String> get selectedItemIds => _selectedItemIds;
+
   bool get isEditMode => _selectedItemIds.isNotEmpty;
 
-  void toggleSelection(String id) {
-    if (_selectedItemIds.contains(id)) {
-      _selectedItemIds.remove(id);
-      _draftQuantities.remove(id);
-    } else {
-      _selectedItemIds.add(id);
-      final item = _items.firstWhere((element) => element.id == id);
-      _draftQuantities[id] = item.quantity;
-    }
-    _isFullEditRequested = false;
-    notifyListeners();
-  }
+
 
   int getDraftQuantity(String id) => _draftQuantities[id] ?? 0;
 
