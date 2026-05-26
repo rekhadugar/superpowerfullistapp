@@ -116,4 +116,34 @@ class MacroListProvider extends ChangeNotifier {
     _saveLists();
     notifyListeners();
   }
+
+  // --- CASCADING DELETE PROTOCOL ---
+  Future<void> deleteAllListsOfType(String typeId) async {
+    final listsToDelete = _lists.where((l) => l.typeId == typeId).toList();
+    if (listsToDelete.isEmpty) return;
+
+    final prefs = await SharedPreferences.getInstance();
+
+    // 1. Dig into local storage and wipe all orphaned item data to save space
+    for (var list in listsToDelete) {
+      await prefs.remove('items_${list.id}');
+      await prefs.remove('last_purge_date_${list.id}');
+    }
+
+    // 2. Remove the lists from memory
+    _lists.removeWhere((l) => l.typeId == typeId);
+
+    // 3. Fallback routing if the user was currently looking at one of the deleted lists
+    if (listsToDelete.any((l) => l.id == _activeListId)) {
+      _activeListId = _lists.isNotEmpty ? _lists.first.id : null;
+      if (_activeListId != null) {
+        await prefs.setString('active_list_id', _activeListId!);
+      } else {
+        await prefs.remove('active_list_id');
+      }
+    }
+
+    _saveLists();
+    notifyListeners();
+  }
 }

@@ -229,4 +229,22 @@ class SettingsProvider extends ChangeNotifier {
     _saveSettings();
     notifyListeners();
   }
+
+  // --- CASCADING DELETE PROTOCOL ---
+  void deleteCustomType(String typeId) {
+    // 1. Failsafe: Prevent deletion of core system types
+    if (AppListType.systemDefaults.any((sys) => sys.id == typeId)) return;
+
+    // 2. Remove the Type
+    _customTypes.removeWhere((t) => t.id == typeId);
+
+    // 3. Wipe the associated group dictionaries and anchors
+    _axis1Groups.remove(typeId);
+    _axis2Groups.remove(typeId);
+    _anchorAxis1ToTop.remove(typeId);
+    _anchorAxis2ToTop.remove(typeId);
+
+    _saveSettings();
+    notifyListeners();
+  }
 }

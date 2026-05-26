@@ -81,7 +81,39 @@ class SettingsScreen extends StatelessWidget {
             leading: Icon(IconData(type.iconCodePoint, fontFamily: 'MaterialIcons'), color: AppColors.primaryAction),
             title: Text(type.name, style: const TextStyle(fontWeight: FontWeight.w600)),
             subtitle: Text('Manage ${type.axis1Label} & ${type.axis2Label}'),
-            trailing: const Icon(Icons.chevron_right_rounded, color: Colors.grey),
+
+            // FIXED: Show delete icon ONLY for custom types
+            trailing: type.isSystem
+                ? const Icon(Icons.chevron_right_rounded, color: Colors.grey)
+                : IconButton(
+              icon: const Icon(Icons.delete_outline, color: AppColors.destructiveAction),
+              onPressed: () {
+                // 1. Show severe warning dialog
+                showDialog(
+                  context: context,
+                  builder: (ctx) => AlertDialog(
+                    title: const Text('Delete Custom Type?'),
+                    content: Text('This will permanently delete the "${type.name}" taxonomy. ALL lists and items using this type will be wiped from your device. This cannot be undone.'),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(ctx),
+                        child: const Text('Cancel'),
+                      ),
+                      ElevatedButton(
+                        style: ElevatedButton.styleFrom(backgroundColor: AppColors.destructiveAction),
+                        onPressed: () async {
+                          // 2. Fire the Cascading Delete!
+                          Navigator.pop(ctx);
+                          await context.read<MacroListProvider>().deleteAllListsOfType(type.id);
+                          context.read<SettingsProvider>().deleteCustomType(type.id);
+                        },
+                        child: const Text('Delete Everything', style: TextStyle(color: Colors.white)),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
             onTap: () {
               Navigator.push(context, MaterialPageRoute(builder: (_) => TypeDetailScreen(listType: type)));
             },
