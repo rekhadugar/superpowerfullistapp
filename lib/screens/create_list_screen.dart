@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../models/list_type.dart';
+import '../models/app_list_type.dart';
 import '../providers/macro_list_provider.dart';
+import '../providers/settings_provider.dart';
 
 class CreateListScreen extends StatefulWidget {
-  final bool isFirstLaunch; // Supports the True Blank Slate UI
+  final bool isFirstLaunch;
 
   const CreateListScreen({Key? key, this.isFirstLaunch = false}) : super(key: key);
 
@@ -15,15 +16,24 @@ class CreateListScreen extends StatefulWidget {
 class _CreateListScreenState extends State<CreateListScreen> {
   final _formKey = GlobalKey<FormState>();
   String _listName = '';
-  ListType _selectedType = ListType.shopping;
+  String? _selectedTypeId;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final settings = context.read<SettingsProvider>();
+      if (settings.allTypes.isNotEmpty) {
+        setState(() => _selectedTypeId = settings.allTypes.first.id);
+      }
+    });
+  }
 
   void _saveList() async {
-    if (_formKey.currentState!.validate()) {
+    if (_formKey.currentState!.validate() && _selectedTypeId != null) {
       _formKey.currentState!.save();
-      await context.read<MacroListProvider>().createNewList(_listName, _selectedType);
+      context.read<MacroListProvider>().addList(_listName, _selectedTypeId!);
 
-      // If it's the first launch, the MainScreen automatically dismisses this UI
-      // when the provider finishes. We only manually pop if it's NOT the first launch.
       if (!widget.isFirstLaunch) {
         if (mounted) Navigator.pop(context);
       }
@@ -32,9 +42,11 @@ class _CreateListScreenState extends State<CreateListScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final settings = context.watch<SettingsProvider>();
+
     return Scaffold(
       appBar: AppBar(
-        automaticallyImplyLeading: !widget.isFirstLaunch, // Hides back button if forced
+        automaticallyImplyLeading: !widget.isFirstLaunch,
         title: const Text('New List'),
         actions: [
           TextButton(
@@ -52,23 +64,23 @@ class _CreateListScreenState extends State<CreateListScreen> {
             children: [
               const Text('List Type', style: TextStyle(fontWeight: FontWeight.bold)),
               const SizedBox(height: 8),
-              DropdownButtonFormField<ListType>(
-                value: _selectedType,
+              DropdownButtonFormField<String>(
+                value: _selectedTypeId,
                 decoration: const InputDecoration(border: OutlineInputBorder()),
-                items: ListType.values.map((type) {
+                items: settings.allTypes.map((type) {
                   return DropdownMenuItem(
-                    value: type,
+                    value: type.id,
                     child: Row(
                       children: [
-                        Icon(type.icon, size: 20),
+                        Icon(IconData(type.iconCodePoint, fontFamily: 'MaterialIcons'), size: 20),
                         const SizedBox(width: 12),
-                        Text(type.displayName),
+                        Text(type.name),
                       ],
                     ),
                   );
                 }).toList(),
                 onChanged: (val) {
-                  if (val != null) setState(() => _selectedType = val);
+                  if (val != null) setState(() => _selectedTypeId = val);
                 },
               ),
               const SizedBox(height: 24),

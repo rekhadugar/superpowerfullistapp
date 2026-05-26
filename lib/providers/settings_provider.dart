@@ -2,22 +2,23 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/settings_models.dart';
+import '../models/app_list_type.dart';
 
 class SettingsProvider extends ChangeNotifier {
-  List<StoreConfig> _stores = [];
-  List<CategoryConfig> _categories = [];
-
-  // FIXED 1: Separate anchors for Stores and Categories
-  bool _anchorStoreToTop = false;
-  bool _anchorCategoryToTop = false;
-
-  bool get anchorStoreToTop => _anchorStoreToTop;
-  bool get anchorCategoryToTop => _anchorCategoryToTop;
-  List<StoreConfig> get stores => _stores;
-  List<CategoryConfig> get categories => _categories;
-
   bool _isInitialized = false;
   bool get isInitialized => _isInitialized;
+
+  // --- DYNAMIC TAXONOMY STATE ---
+  List<AppListType> _customTypes = [];
+
+  // Data Maps keyed by AppListType.id
+  Map<String, List<GroupConfig>> _axis1Groups = {};
+  Map<String, List<GroupConfig>> _axis2Groups = {};
+
+  Map<String, bool> _anchorAxis1ToTop = {};
+  Map<String, bool> _anchorAxis2ToTop = {};
+
+  List<AppListType> get allTypes => [...AppListType.systemDefaults, ..._customTypes];
 
   SettingsProvider() {
     _loadSettings();
@@ -26,170 +27,205 @@ class SettingsProvider extends ChangeNotifier {
   Future<void> _loadSettings() async {
     final prefs = await SharedPreferences.getInstance();
 
-    _anchorStoreToTop = prefs.getBool('anchorStoreToTop') ?? false;
-    _anchorCategoryToTop = prefs.getBool('anchorCategoryToTop') ?? false;
-
-    final storesJson = prefs.getString('global_stores');
-    if (storesJson != null) {
-      final List<dynamic> decoded = jsonDecode(storesJson);
-      _stores = decoded.map((map) => StoreConfig.fromMap(map)).toList();
-    } else {
-      _stores = [
-        StoreConfig(id: 'default_store', name: 'Any', isLocked: true),
-        StoreConfig(id: 's1', name: 'Costco'),
-        StoreConfig(id: 's2', name: 'Target'),
-        StoreConfig(id: 's3', name: 'Walmart'),
-        StoreConfig(id: 's4', name: 'Trader Joe\'s'),
-      ];
+    // 1. Load Custom Types
+    final customTypesJson = prefs.getString('custom_list_types');
+    if (customTypesJson != null) {
+      final List<dynamic> decoded = jsonDecode(customTypesJson);
+      _customTypes = decoded.map((m) => AppListType.fromMap(m)).toList();
     }
 
-    final categoriesJson = prefs.getString('global_categories');
-    if (categoriesJson != null) {
-      final List<dynamic> decoded = jsonDecode(categoriesJson);
-      _categories = decoded.map((map) => CategoryConfig.fromMap(map)).toList();
-    } else {
-      _categories = [
-        CategoryConfig(id: 'c1', name: 'Produce'),
-        CategoryConfig(id: 'c2', name: 'Dairy'),
-        CategoryConfig(id: 'c3', name: 'Bakery'),
-        CategoryConfig(id: 'default_category', name: 'Everything Else', isLocked: true),
-      ];
+    // 2. Load Maps (Now passes through the Auto-Sanitizer)
+    _axis1Groups = _loadGroupMap(prefs, 'map_axis1_groups');
+    _axis2Groups = _loadGroupMap(prefs, 'map_axis2_groups');
+
+    // 3. Load Anchors
+    _anchorAxis1ToTop = _loadAnchorMap(prefs, 'map_anchor_axis1');
+    _anchorAxis2ToTop = _loadAnchorMap(prefs, 'map_anchor_axis2');
+
+    // 4. Factory Initialization
+    _ensureSystemDefaultsExist();
+
+    for (var type in allTypes) {
+      _enforceAnchorLogic(type.id, isAxis1: true);
+      _enforceAnchorLogic(type.id, isAxis1: false);
     }
 
-    _enforceStoreAnchor();
-    _enforceCategoryAnchor();
     _isInitialized = true;
     notifyListeners();
   }
 
+  // FIXED: Added an Auto-Sanitizer to repair corrupted duplicate IDs from previous crashes
+  Map<String, List<GroupConfig>> _loadGroupMap(SharedPreferences prefs, String key) {
+    final jsonStr = prefs.getString(key);
+    if (jsonStr == null) return {};
+    final Map<String, dynamic> decoded = jsonDecode(jsonStr);
+
+    return decoded.map((k, v) {
+      final list = (v as List).map((item) => GroupConfig.fromMap(item)).toList();
+
+      // SANITIZER: Detects and fixes duplicate IDs on load
+      final Set<String> seenIds = {};
+      for (int i = 0; i < list.length; i++) {
+        if (seenIds.contains(list[i].id)) {
+          // If duplicate found, append a safe unique string
+          list[i] = list[i].copyWith(id: '${list[i].id}_repaired_$i');
+        }
+        seenIds.add(list[i].id);
+      }
+
+      return MapEntry(k, list);
+    });
+  }
+
+  Map<String, bool> _loadAnchorMap(SharedPreferences prefs, String key) {
+    final jsonStr = prefs.getString(key);
+    if (jsonStr == null) return {};
+    final Map<String, dynamic> decoded = jsonDecode(jsonStr);
+    return decoded.map((k, v) => MapEntry(k, v as bool));
+  }
+
   Future<void> _saveSettings() async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool('anchorStoreToTop', _anchorStoreToTop);
-    await prefs.setBool('anchorCategoryToTop', _anchorCategoryToTop);
-    await prefs.setString('global_stores', jsonEncode(_stores.map((s) => s.toMap()).toList()));
-    await prefs.setString('global_categories', jsonEncode(_categories.map((c) => c.toMap()).toList()));
+    await prefs.setString('custom_list_types', jsonEncode(_customTypes.map((t) => t.toMap()).toList()));
+
+    final axis1Enc = _axis1Groups.map((k, v) => MapEntry(k, v.map((g) => g.toMap()).toList()));
+    final axis2Enc = _axis2Groups.map((k, v) => MapEntry(k, v.map((g) => g.toMap()).toList()));
+
+    await prefs.setString('map_axis1_groups', jsonEncode(axis1Enc));
+    await prefs.setString('map_axis2_groups', jsonEncode(axis2Enc));
+    await prefs.setString('map_anchor_axis1', jsonEncode(_anchorAxis1ToTop));
+    await prefs.setString('map_anchor_axis2', jsonEncode(_anchorAxis2ToTop));
   }
 
-  // --- NEW: SEEDING ENGINE (Fixes Bugs 3, 4, & 5) ---
-  void seedFromExisting(List<String> existingStores, List<String> existingCategories) {
-    bool changed = false;
+  void _ensureSystemDefaultsExist() {
+    if (!_axis1Groups.containsKey(AppListType.shopping.id)) {
+      _axis1Groups[AppListType.shopping.id] = [
+        GroupConfig(id: 'default_s1', name: 'Any', isLocked: true),
+        GroupConfig(id: 's1', name: 'Costco'),
+        GroupConfig(id: 's2', name: 'Target'),
+        GroupConfig(id: 's3', name: 'Walmart'),
+      ];
+    }
+    if (!_axis2Groups.containsKey(AppListType.shopping.id)) {
+      _axis2Groups[AppListType.shopping.id] = [
+        GroupConfig(id: 'c1', name: 'Produce'),
+        GroupConfig(id: 'c2', name: 'Dairy'),
+        GroupConfig(id: 'default_c1', name: 'Everything Else', isLocked: true),
+      ];
+    }
 
-    for (String s in existingStores) {
-      if (s.toLowerCase() == 'any') continue; // Locked default handles this
-      if (!_stores.any((config) => config.name.toLowerCase() == s.toLowerCase())) {
-        _stores.add(StoreConfig(id: DateTime.now().microsecondsSinceEpoch.toString() + s.hashCode.toString(), name: s));
-        changed = true;
+    for (var type in AppListType.systemDefaults) {
+      if (!_axis1Groups.containsKey(type.id)) {
+        _axis1Groups[type.id] = [GroupConfig(id: '${type.id}_a1_def', name: 'Any', isLocked: true)];
+      }
+      if (!_axis2Groups.containsKey(type.id)) {
+        _axis2Groups[type.id] = [GroupConfig(id: '${type.id}_a2_def', name: 'Everything Else', isLocked: true)];
       }
     }
+  }
 
-    for (String c in existingCategories) {
-      if (c.toLowerCase() == 'everything else') continue; // Locked default handles this
-      if (!_categories.any((config) => config.name.toLowerCase() == c.toLowerCase())) {
-        _categories.add(CategoryConfig(id: DateTime.now().microsecondsSinceEpoch.toString() + c.hashCode.toString(), name: c));
-        changed = true;
+  // --- PUBLIC GETTERS ---
+  List<GroupConfig> getAxis1Groups(String typeId) => _axis1Groups[typeId] ?? [];
+  List<GroupConfig> getAxis2Groups(String typeId) => _axis2Groups[typeId] ?? [];
+
+  bool getAnchorAxis1(String typeId) => _anchorAxis1ToTop[typeId] ?? false;
+  bool getAnchorAxis2(String typeId) => _anchorAxis2ToTop[typeId] ?? false;
+
+  AppListType getTypeById(String typeId) {
+    return allTypes.firstWhere((t) => t.id == typeId, orElse: () => AppListType.shopping);
+  }
+
+  // --- CUSTOM TYPE MANAGEMENT ---
+  void createCustomType(String name, String axis1Label, String axis2Label) {
+    final newType = AppListType(
+      id: 'custom_${DateTime.now().millisecondsSinceEpoch}',
+      name: name.trim(),
+      axis1Label: axis1Label.trim(),
+      axis2Label: axis2Label.trim(),
+      iconCodePoint: Icons.folder_special_outlined.codePoint,
+    );
+    _customTypes.add(newType);
+
+    _axis1Groups[newType.id] = [GroupConfig(id: '${newType.id}_a1_def', name: 'Any', isLocked: true)];
+    _axis2Groups[newType.id] = [GroupConfig(id: '${newType.id}_a2_def', name: 'Everything Else', isLocked: true)];
+
+    _saveSettings();
+    notifyListeners();
+  }
+
+  // --- GROUP OPERATIONS ---
+  void toggleAnchor(String typeId, {required bool isAxis1}) {
+    if (isAxis1) {
+      _anchorAxis1ToTop[typeId] = !(_anchorAxis1ToTop[typeId] ?? false);
+    } else {
+      _anchorAxis2ToTop[typeId] = !(_anchorAxis2ToTop[typeId] ?? false);
+    }
+    _enforceAnchorLogic(typeId, isAxis1: isAxis1);
+    _saveSettings();
+    notifyListeners();
+  }
+
+  void _enforceAnchorLogic(String typeId, {required bool isAxis1}) {
+    final groups = isAxis1 ? _axis1Groups[typeId] : _axis2Groups[typeId];
+    if (groups == null) return;
+
+    final anchorToTop = isAxis1 ? getAnchorAxis1(typeId) : getAnchorAxis2(typeId);
+    final lockedIndex = groups.indexWhere((g) => g.isLocked);
+
+    if (lockedIndex != -1) {
+      final locked = groups.removeAt(lockedIndex);
+      anchorToTop ? groups.insert(0, locked) : groups.add(locked);
+    }
+  }
+
+  void addGroup(String typeId, String name, String subtitle, {required bool isAxis1}) {
+    final groups = isAxis1 ? _axis1Groups[typeId] : _axis2Groups[typeId];
+    if (groups != null) {
+      // FIXED: Uses Microseconds + Hashcode to guarantee unique IDs during fast loop seeding
+      final safeId = '${DateTime.now().microsecondsSinceEpoch}_${name.hashCode}';
+
+      groups.add(GroupConfig(
+        id: safeId,
+        name: name.trim(),
+        subtitle: subtitle.trim(),
+      ));
+      _enforceAnchorLogic(typeId, isAxis1: isAxis1);
+      _saveSettings();
+      notifyListeners();
+    }
+  }
+
+  void updateGroup(String typeId, String groupId, String newName, String newSubtitle, {required bool isAxis1}) {
+    final groups = isAxis1 ? _axis1Groups[typeId] : _axis2Groups[typeId];
+    if (groups != null) {
+      final index = groups.indexWhere((g) => g.id == groupId);
+      if (index != -1 && !groups[index].isLocked) {
+        groups[index] = groups[index].copyWith(name: newName.trim(), subtitle: newSubtitle.trim());
+        _saveSettings();
+        notifyListeners();
       }
     }
+  }
 
-    if (changed) {
-      _enforceStoreAnchor();
-      _enforceCategoryAnchor();
+  void deleteGroup(String typeId, String groupId, {required bool isAxis1}) {
+    final groups = isAxis1 ? _axis1Groups[typeId] : _axis2Groups[typeId];
+    if (groups != null) {
+      groups.removeWhere((g) => g.id == groupId && !g.isLocked);
       _saveSettings();
       notifyListeners();
     }
   }
 
-  void toggleStoreAnchor() {
-    _anchorStoreToTop = !_anchorStoreToTop;
-    _enforceStoreAnchor();
-    _saveSettings();
-    notifyListeners();
-  }
+  void reorderGroups(String typeId, int oldIndex, int newIndex, {required bool isAxis1}) {
+    final groups = isAxis1 ? _axis1Groups[typeId] : _axis2Groups[typeId];
+    if (groups == null) return;
 
-  void toggleCategoryAnchor() {
-    _anchorCategoryToTop = !_anchorCategoryToTop;
-    _enforceCategoryAnchor();
-    _saveSettings();
-    notifyListeners();
-  }
-
-  void _enforceStoreAnchor() {
-    final lockedIndex = _stores.indexWhere((s) => s.isLocked);
-    if (lockedIndex != -1) {
-      final locked = _stores.removeAt(lockedIndex);
-      _anchorStoreToTop ? _stores.insert(0, locked) : _stores.add(locked);
-    }
-  }
-
-  void _enforceCategoryAnchor() {
-    final lockedIndex = _categories.indexWhere((c) => c.isLocked);
-    if (lockedIndex != -1) {
-      final locked = _categories.removeAt(lockedIndex);
-      _anchorCategoryToTop ? _categories.insert(0, locked) : _categories.add(locked);
-    }
-  }
-
-  // --- STORE MANAGEMENT ---
-  void addStore(String name, String address) {
-    _stores.add(StoreConfig(id: DateTime.now().millisecondsSinceEpoch.toString(), name: name.trim(), address: address.trim()));
-    _enforceStoreAnchor();
-    _saveSettings();
-    notifyListeners();
-  }
-
-  void updateStore(String id, String newName, String newAddress) {
-    final index = _stores.indexWhere((s) => s.id == id);
-    if (index != -1 && !_stores[index].isLocked) {
-      _stores[index] = _stores[index].copyWith(name: newName.trim(), address: newAddress.trim());
-      _saveSettings();
-      notifyListeners();
-    }
-  }
-
-  void deleteStore(String id) {
-    _stores.removeWhere((s) => s.id == id && !s.isLocked);
-    _saveSettings();
-    notifyListeners();
-  }
-
-  void reorderStores(int oldIndex, int newIndex) {
     if (oldIndex < newIndex) newIndex -= 1;
-    if (_stores[oldIndex].isLocked) return;
-    final item = _stores.removeAt(oldIndex);
-    _stores.insert(newIndex, item);
-    _enforceStoreAnchor();
-    _saveSettings();
-    notifyListeners();
-  }
+    if (groups[oldIndex].isLocked) return;
 
-  // --- CATEGORY MANAGEMENT ---
-  void addCategory(String name) {
-    _categories.add(CategoryConfig(id: DateTime.now().millisecondsSinceEpoch.toString(), name: name.trim()));
-    _enforceCategoryAnchor();
-    _saveSettings();
-    notifyListeners();
-  }
-
-  void updateCategory(String id, String newName) {
-    final index = _categories.indexWhere((c) => c.id == id);
-    if (index != -1 && !_categories[index].isLocked) {
-      _categories[index] = _categories[index].copyWith(name: newName.trim());
-      _saveSettings();
-      notifyListeners();
-    }
-  }
-
-  void deleteCategory(String id) {
-    _categories.removeWhere((c) => c.id == id && !c.isLocked);
-    _saveSettings();
-    notifyListeners();
-  }
-
-  void reorderCategories(int oldIndex, int newIndex) {
-    if (oldIndex < newIndex) newIndex -= 1;
-    if (_categories[oldIndex].isLocked) return;
-    final item = _categories.removeAt(oldIndex);
-    _categories.insert(newIndex, item);
-    _enforceCategoryAnchor();
+    final item = groups.removeAt(oldIndex);
+    groups.insert(newIndex, item);
+    _enforceAnchorLogic(typeId, isAxis1: isAxis1);
     _saveSettings();
     notifyListeners();
   }

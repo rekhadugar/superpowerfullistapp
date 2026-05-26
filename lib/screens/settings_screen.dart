@@ -1,135 +1,230 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/settings_provider.dart';
+import '../providers/macro_list_provider.dart';
+import '../providers/list_provider.dart';
 import '../models/settings_models.dart';
+import '../models/app_list_type.dart';
+import '../models/list_item.dart';
 import '../theme/app_theme.dart';
+import 'create_list_screen.dart';
 
-class SettingsScreen extends StatefulWidget {
+// ==========================================
+// LEVEL 1: THE HUB (List of all Types)
+// ==========================================
+class SettingsScreen extends StatelessWidget {
   const SettingsScreen({Key? key}) : super(key: key);
 
-  @override
-  State<SettingsScreen> createState() => _SettingsScreenState();
-}
-
-class _SettingsScreenState extends State<SettingsScreen> {
-
-  // --- BOTTOM SHEET EDIT/ADD MODAL ---
-  void _showEditSheet(BuildContext context, {StoreConfig? store, CategoryConfig? category, required bool isStoreMode}) {
-    final provider = context.read<SettingsProvider>();
-    final isEditing = store != null || category != null;
-
-    final nameController = TextEditingController(text: store?.name ?? category?.name ?? '');
-    final addressController = TextEditingController(text: store?.address ?? '');
+  void _showCreateCustomTypeSheet(BuildContext context) {
+    final nameCtrl = TextEditingController();
+    final axis1Ctrl = TextEditingController();
+    final axis2Ctrl = TextEditingController();
 
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (ctx) {
-        return Padding(
-          padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
-          child: Container(
-            padding: const EdgeInsets.all(24.0),
-            decoration: BoxDecoration(
-              color: Theme.of(context).cardColor,
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(24.0)),
+      builder: (ctx) => Padding(
+        padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom, top: 24, left: 24, right: 24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('New Custom Type', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 16),
+            TextField(controller: nameCtrl, decoration: const InputDecoration(labelText: 'Type Name (e.g., Wine Collection)', border: OutlineInputBorder())),
+            const SizedBox(height: 16),
+            TextField(controller: axis1Ctrl, decoration: const InputDecoration(labelText: 'Primary Group (e.g., Region)', border: OutlineInputBorder())),
+            const SizedBox(height: 16),
+            TextField(controller: axis2Ctrl, decoration: const InputDecoration(labelText: 'Secondary Group (e.g., Varietal)', border: OutlineInputBorder())),
+            const SizedBox(height: 24),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                style: ElevatedButton.styleFrom(backgroundColor: AppColors.primaryAction, padding: const EdgeInsets.symmetric(vertical: 16)),
+                onPressed: () {
+                  if (nameCtrl.text.isNotEmpty && axis1Ctrl.text.isNotEmpty && axis2Ctrl.text.isNotEmpty) {
+                    context.read<SettingsProvider>().createCustomType(nameCtrl.text, axis1Ctrl.text, axis2Ctrl.text);
+                    Navigator.pop(ctx);
+                  }
+                },
+                child: const Text('Create Type', style: TextStyle(color: Colors.white)),
+              ),
             ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  isEditing
-                      ? 'Edit ${isStoreMode ? 'Store' : 'Category'}'
-                      : 'New ${isStoreMode ? 'Store' : 'Category'}',
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(fontSize: 20, fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 16),
-
-                TextField(
-                  controller: nameController,
-                  autofocus: true,
-                  textCapitalization: TextCapitalization.words,
-                  decoration: InputDecoration(
-                    labelText: 'Name',
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                  ),
-                ),
-                const SizedBox(height: 16),
-
-                if (isStoreMode) ...[
-                  TextField(
-                    controller: addressController,
-                    textCapitalization: TextCapitalization.words,
-                    decoration: InputDecoration(
-                      labelText: 'Address (Optional)',
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                    ),
-                  ),
-                  const SizedBox(height: 24),
-                ],
-
-                // FIXED: explicit Save and Cancel buttons (Bugs 6 & 7)
-                Row(
-                  children: [
-                    Expanded(
-                      child: TextButton(
-                        onPressed: () => Navigator.pop(ctx),
-                        style: TextButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 16)),
-                        child: const Text('Cancel', style: TextStyle(fontSize: 16)),
-                      ),
-                    ),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: ElevatedButton(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.primaryAction,
-                          padding: const EdgeInsets.symmetric(vertical: 16),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                        ),
-                        onPressed: () {
-                          if (nameController.text.trim().isEmpty) return;
-
-                          if (isStoreMode) {
-                            if (isEditing) {
-                              provider.updateStore(store!.id, nameController.text, addressController.text);
-                            } else {
-                              provider.addStore(nameController.text, addressController.text);
-                            }
-                          } else {
-                            if (isEditing) {
-                              provider.updateCategory(category!.id, nameController.text);
-                            } else {
-                              provider.addCategory(nameController.text);
-                            }
-                          }
-                          Navigator.pop(ctx);
-                        },
-                        child: Text(isEditing ? 'Save Changes' : 'Create', style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-              ],
-            ),
-          ),
-        );
-      },
+            const SizedBox(height: 24),
+          ],
+        ),
+      ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    final provider = context.watch<SettingsProvider>();
+    final settings = context.watch<SettingsProvider>();
     final theme = Theme.of(context);
 
-    if (!provider.isInitialized) {
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    return Scaffold(
+      backgroundColor: theme.scaffoldBackgroundColor,
+      appBar: AppBar(
+        backgroundColor: theme.cardColor,
+        elevation: 0,
+        leading: IconButton(
+          icon: Icon(Icons.arrow_back_ios_new_rounded, color: theme.textTheme.titleMedium?.color),
+          onPressed: () => Navigator.pop(context),
+        ),
+        title: Text('Organize Lists', style: theme.textTheme.titleMedium?.copyWith(fontSize: 20, fontWeight: FontWeight.w700)),
+      ),
+      body: ListView.builder(
+        itemCount: settings.allTypes.length,
+        itemBuilder: (context, index) {
+          final type = settings.allTypes[index];
+          return ListTile(
+            leading: Icon(IconData(type.iconCodePoint, fontFamily: 'MaterialIcons'), color: AppColors.primaryAction),
+            title: Text(type.name, style: const TextStyle(fontWeight: FontWeight.w600)),
+            subtitle: Text('Manage ${type.axis1Label} & ${type.axis2Label}'),
+            trailing: const Icon(Icons.chevron_right_rounded, color: Colors.grey),
+            onTap: () {
+              Navigator.push(context, MaterialPageRoute(builder: (_) => TypeDetailScreen(listType: type)));
+            },
+          );
+        },
+      ),
+      floatingActionButton: FloatingActionButton.extended(
+        backgroundColor: AppColors.primaryAction,
+        icon: const Icon(Icons.add, color: Colors.white),
+        label: const Text('Custom Type', style: TextStyle(color: Colors.white)),
+        onPressed: () => _showCreateCustomTypeSheet(context),
+      ),
+    );
+  }
+}
+
+// ==========================================
+// LEVEL 2: TYPE DETAILS (3-Tab Architecture)
+// ==========================================
+class TypeDetailScreen extends StatefulWidget {
+  final AppListType listType;
+  const TypeDetailScreen({Key? key, required this.listType}) : super(key: key);
+
+  @override
+  State<TypeDetailScreen> createState() => _TypeDetailScreenState();
+}
+
+class _TypeDetailScreenState extends State<TypeDetailScreen> {
+  bool _requiresSyncOnExit = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // SEEDING ENGINE: Only seed if the currently loaded list in memory matches this Type
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final macroProvider = context.read<MacroListProvider>();
+      final listProvider = context.read<ListProvider>();
+      final settings = context.read<SettingsProvider>();
+
+      if (macroProvider.activeList?.typeId == widget.listType.id) {
+        _requiresSyncOnExit = true;
+
+        final Set<String> existingA1 = {};
+        final Set<String> existingA2 = {};
+
+        for (var item in listProvider.activeItems) {
+          existingA1.add(item.type);
+          existingA2.add(item.category);
+        }
+        for (var item in listProvider.checkedDisplayList) {
+          if (item is ListItem) {
+            existingA1.add(item.type);
+            existingA2.add(item.category);
+          }
+        }
+
+        // Manual seed loop since we removed the generic one to support dynamic mapping
+        for (String s in existingA1) {
+          if (s.toLowerCase() == 'any') continue;
+          if (!settings.getAxis1Groups(widget.listType.id).any((g) => g.name.toLowerCase() == s.toLowerCase())) {
+            settings.addGroup(widget.listType.id, s, '', isAxis1: true);
+          }
+        }
+        for (String c in existingA2) {
+          if (c.toLowerCase() == 'everything else') continue;
+          if (!settings.getAxis2Groups(widget.listType.id).any((g) => g.name.toLowerCase() == c.toLowerCase())) {
+            settings.addGroup(widget.listType.id, c, '', isAxis1: false);
+          }
+        }
+      }
+    });
+  }
+
+  void _triggerSyncOnExit(BuildContext context) {
+    if (_requiresSyncOnExit && context.mounted) {
+      final settings = context.read<SettingsProvider>();
+      context.read<ListProvider>().syncWithGlobalSettings(
+        settings.getAxis1Groups(widget.listType.id).map((g) => g.name).toList(),
+        settings.getAxis2Groups(widget.listType.id).map((g) => g.name).toList(),
+      );
     }
+  }
+
+  void _showEditGroupSheet(BuildContext context, {GroupConfig? group, required bool isAxis1}) {
+    final provider = context.read<SettingsProvider>();
+    final isEditing = group != null;
+    final nameCtrl = TextEditingController(text: group?.name ?? '');
+    final subtitleCtrl = TextEditingController(text: group?.subtitle ?? '');
+    final label = isAxis1 ? widget.listType.axis1Label : widget.listType.axis2Label;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      builder: (ctx) => Padding(
+        padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom, top: 24, left: 24, right: 24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(isEditing ? 'Edit $label' : 'New $label', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 16),
+            TextField(controller: nameCtrl, autofocus: true, textCapitalization: TextCapitalization.words, decoration: const InputDecoration(labelText: 'Name', border: OutlineInputBorder())),
+            const SizedBox(height: 16),
+            TextField(controller: subtitleCtrl, textCapitalization: TextCapitalization.words, decoration: const InputDecoration(labelText: 'Subtitle (Optional)', border: OutlineInputBorder())),
+            const SizedBox(height: 24),
+            Row(
+              children: [
+                Expanded(child: TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel'))),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(backgroundColor: AppColors.primaryAction, padding: const EdgeInsets.symmetric(vertical: 16)),
+                    onPressed: () {
+                      if (nameCtrl.text.isNotEmpty) {
+                        if (isEditing) {
+                          provider.updateGroup(widget.listType.id, group.id, nameCtrl.text, subtitleCtrl.text, isAxis1: isAxis1);
+                        } else {
+                          provider.addGroup(widget.listType.id, nameCtrl.text, subtitleCtrl.text, isAxis1: isAxis1);
+                        }
+                        Navigator.pop(ctx);
+                      }
+                    },
+                    child: Text(isEditing ? 'Save' : 'Create', style: const TextStyle(color: Colors.white)),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 24),
+          ],
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final settings = context.watch<SettingsProvider>();
+    final macroProvider = context.watch<MacroListProvider>();
+    final theme = Theme.of(context);
+    final activeLists = macroProvider.lists.where((l) => l.typeId == widget.listType.id).toList();
 
     return DefaultTabController(
-      length: 2,
+      length: 3,
       child: Scaffold(
         backgroundColor: theme.scaffoldBackgroundColor,
         appBar: AppBar(
@@ -137,86 +232,112 @@ class _SettingsScreenState extends State<SettingsScreen> {
           elevation: 0,
           leading: IconButton(
             icon: Icon(Icons.arrow_back_ios_new_rounded, color: theme.textTheme.titleMedium?.color),
-            onPressed: () => Navigator.pop(context),
+            onPressed: () {
+              _triggerSyncOnExit(context);
+              Navigator.pop(context);
+            },
           ),
-          title: Text('Manage Lists', style: theme.textTheme.titleMedium?.copyWith(fontSize: 20, fontWeight: FontWeight.w700)),
+          title: Text(widget.listType.name, style: theme.textTheme.titleMedium?.copyWith(fontSize: 20, fontWeight: FontWeight.w700)),
           bottom: TabBar(
             labelColor: AppColors.primaryAction,
             unselectedLabelColor: theme.textTheme.bodyMedium?.color,
             indicatorColor: AppColors.primaryAction,
-            tabs: const [
-              Tab(text: 'Stores'),
-              Tab(text: 'Categories'),
+            tabs: [
+              const Tab(text: 'Lists'),
+              Tab(text: widget.listType.axis1Label),
+              Tab(text: widget.listType.axis2Label),
             ],
           ),
         ),
-        body: TabBarView(
-          children: [
-            // --- STORES TAB ---
-            Column(
-              children: [
-                // FIXED: Dedicated Toggle for Stores inside the list
-                SwitchListTile(
-                  title: const Text('Anchor "Any" to Top'),
-                  subtitle: const Text('Keep untagged items at the top of your list'),
-                  value: provider.anchorStoreToTop,
-                  activeColor: AppColors.primaryAction,
-                  onChanged: (val) => provider.toggleStoreAnchor(),
-                ),
-                const Divider(height: 1, thickness: 1),
-                Expanded(
-                  child: ReorderableListView.builder(
-                    buildDefaultDragHandles: false,
-                    padding: const EdgeInsets.only(bottom: 100),
-                    itemCount: provider.stores.length,
-                    onReorder: provider.reorderStores,
-                    itemBuilder: (context, index) {
-                      final store = provider.stores[index];
-                      return _buildStoreTile(context, store, index);
-                    },
-                  ),
-                ),
-              ],
-            ),
+        body: PopScope(
+          canPop: true,
+          onPopInvoked: (didPop) {
+            if (didPop) _triggerSyncOnExit(context);
+          },
+          child: TabBarView(
+            children: [
+              // TAB 1: LIST REORDERING
+              activeLists.isEmpty
+                  ? const Center(child: Text('No lists of this type yet.'))
+                  : ReorderableListView.builder(
+                padding: const EdgeInsets.only(bottom: 100),
+                itemCount: activeLists.length,
+                onReorder: (oldIndex, newIndex) {
+                  // Find true indices in the global macro list to preserve math
+                  final globalOld = macroProvider.lists.indexOf(activeLists[oldIndex]);
+                  final globalNew = macroProvider.lists.indexOf(activeLists[newIndex < activeLists.length ? newIndex : activeLists.length - 1]);
+                  macroProvider.reorderLists(globalOld, globalNew);
+                },
+                itemBuilder: (context, index) {
+                  final list = activeLists[index];
+                  return ListTile(
+                    key: ValueKey(list.id),
+                    tileColor: theme.cardColor,
+                    title: Text(list.name, style: const TextStyle(fontWeight: FontWeight.w600)),
+                    leading: const Icon(Icons.list, color: Colors.grey),
+                    trailing: const Icon(Icons.drag_handle_rounded, color: Colors.grey),
+                  );
+                },
+              ),
 
-            // --- CATEGORIES TAB ---
-            Column(
-              children: [
-                // FIXED: Dedicated Toggle for Categories inside the list
-                SwitchListTile(
-                  title: const Text('Anchor "Everything Else" to Top'),
-                  subtitle: const Text('Keep untagged items at the top of your list'),
-                  value: provider.anchorCategoryToTop,
-                  activeColor: AppColors.primaryAction,
-                  onChanged: (val) => provider.toggleCategoryAnchor(),
-                ),
-                const Divider(height: 1, thickness: 1),
-                Expanded(
-                  child: ReorderableListView.builder(
-                    buildDefaultDragHandles: false,
-                    padding: const EdgeInsets.only(bottom: 100),
-                    itemCount: provider.categories.length,
-                    onReorder: provider.reorderCategories,
-                    itemBuilder: (context, index) {
-                      final category = provider.categories[index];
-                      return _buildCategoryTile(context, category, index);
-                    },
+              // TAB 2: AXIS 1 (e.g., Stores/Platforms)
+              Column(
+                children: [
+                  SwitchListTile(
+                    title: const Text('Anchor "Any" to Top'),
+                    value: settings.getAnchorAxis1(widget.listType.id),
+                    activeColor: AppColors.primaryAction,
+                    onChanged: (val) => settings.toggleAnchor(widget.listType.id, isAxis1: true),
                   ),
-                ),
-              ],
-            ),
-          ],
+                  const Divider(height: 1, thickness: 1),
+                  Expanded(
+                    child: ReorderableListView.builder(
+                      buildDefaultDragHandles: false,
+                      padding: const EdgeInsets.only(bottom: 100),
+                      itemCount: settings.getAxis1Groups(widget.listType.id).length,
+                      onReorder: (oldIdx, newIdx) => settings.reorderGroups(widget.listType.id, oldIdx, newIdx, isAxis1: true),
+                      itemBuilder: (context, index) => _buildGroupTile(context, settings.getAxis1Groups(widget.listType.id)[index], index, isAxis1: true),
+                    ),
+                  ),
+                ],
+              ),
+
+              // TAB 3: AXIS 2 (e.g., Categories/Genres)
+              Column(
+                children: [
+                  SwitchListTile(
+                    title: const Text('Anchor "Everything Else" to Top'),
+                    value: settings.getAnchorAxis2(widget.listType.id),
+                    activeColor: AppColors.primaryAction,
+                    onChanged: (val) => settings.toggleAnchor(widget.listType.id, isAxis1: false),
+                  ),
+                  const Divider(height: 1, thickness: 1),
+                  Expanded(
+                    child: ReorderableListView.builder(
+                      buildDefaultDragHandles: false,
+                      padding: const EdgeInsets.only(bottom: 100),
+                      itemCount: settings.getAxis2Groups(widget.listType.id).length,
+                      onReorder: (oldIdx, newIdx) => settings.reorderGroups(widget.listType.id, oldIdx, newIdx, isAxis1: false),
+                      itemBuilder: (context, index) => _buildGroupTile(context, settings.getAxis2Groups(widget.listType.id)[index], index, isAxis1: false),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
-
         floatingActionButton: Builder(
             builder: (ctx) {
               return FloatingActionButton(
                 backgroundColor: AppColors.primaryAction,
                 child: const Icon(Icons.add, color: Colors.white),
                 onPressed: () {
-                  final tabController = DefaultTabController.of(ctx);
-                  final isStore = tabController.index == 0;
-                  _showEditSheet(context, isStoreMode: isStore);
+                  final tabIndex = DefaultTabController.of(ctx).index;
+                  if (tabIndex == 0) {
+                    Navigator.push(context, MaterialPageRoute(builder: (_) => const CreateListScreen()));
+                  } else {
+                    _showEditGroupSheet(context, isAxis1: tabIndex == 1);
+                  }
                 },
               );
             }
@@ -225,82 +346,26 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  // --- TILE BUILDERS ---
-
-  Widget _buildStoreTile(BuildContext context, StoreConfig store, int index) {
+  Widget _buildGroupTile(BuildContext context, GroupConfig group, int index, {required bool isAxis1}) {
     final theme = Theme.of(context);
-
     final tile = ListTile(
-      key: ValueKey(store.id),
+      key: ValueKey(group.id),
       tileColor: theme.cardColor,
-      title: Text(store.name, style: TextStyle(fontWeight: store.isLocked ? FontWeight.bold : FontWeight.normal)),
-      subtitle: store.address.isNotEmpty ? Text(store.address) : null,
-      leading: store.isLocked ? const Icon(Icons.lock_outline, color: Colors.grey) : null,
-      trailing: store.isLocked
-          ? const SizedBox.shrink()
-          : ReorderableDragStartListener(
-        index: index,
-        child: const Icon(Icons.drag_handle_rounded, color: Colors.grey),
-      ),
-      onTap: store.isLocked ? null : () => _showEditSheet(context, store: store, isStoreMode: true),
+      title: Text(group.name, style: TextStyle(fontWeight: group.isLocked ? FontWeight.bold : FontWeight.normal)),
+      subtitle: group.subtitle.isNotEmpty ? Text(group.subtitle) : null,
+      leading: group.isLocked ? const Icon(Icons.lock_outline, color: Colors.grey) : null,
+      trailing: group.isLocked ? const SizedBox.shrink() : ReorderableDragStartListener(index: index, child: const Icon(Icons.drag_handle_rounded, color: Colors.grey)),
+      onTap: group.isLocked ? null : () => _showEditGroupSheet(context, group: group, isAxis1: isAxis1),
     );
 
-    if (store.isLocked) return tile;
+    if (group.isLocked) return tile;
 
     return Dismissible(
-      key: ValueKey('dismiss_${store.id}'),
+      key: ValueKey('dismiss_${group.id}'),
       direction: DismissDirection.endToStart,
-      background: Container(
-        color: AppColors.destructiveAction,
-        alignment: Alignment.centerRight,
-        padding: const EdgeInsets.only(right: 20),
-        child: const Icon(Icons.delete_outline, color: Colors.white),
-      ),
-      onDismissed: (_) => context.read<SettingsProvider>().deleteStore(store.id),
-      child: Column(
-        children: [
-          tile,
-          const Divider(height: 1, indent: 16),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildCategoryTile(BuildContext context, CategoryConfig category, int index) {
-    final theme = Theme.of(context);
-
-    final tile = ListTile(
-      key: ValueKey(category.id),
-      tileColor: theme.cardColor,
-      title: Text(category.name, style: TextStyle(fontWeight: category.isLocked ? FontWeight.bold : FontWeight.normal)),
-      leading: category.isLocked ? const Icon(Icons.lock_outline, color: Colors.grey) : null,
-      trailing: category.isLocked
-          ? const SizedBox.shrink()
-          : ReorderableDragStartListener(
-        index: index,
-        child: const Icon(Icons.drag_handle_rounded, color: Colors.grey),
-      ),
-      onTap: category.isLocked ? null : () => _showEditSheet(context, category: category, isStoreMode: false),
-    );
-
-    if (category.isLocked) return tile;
-
-    return Dismissible(
-      key: ValueKey('dismiss_${category.id}'),
-      direction: DismissDirection.endToStart,
-      background: Container(
-        color: AppColors.destructiveAction,
-        alignment: Alignment.centerRight,
-        padding: const EdgeInsets.only(right: 20),
-        child: const Icon(Icons.delete_outline, color: Colors.white),
-      ),
-      onDismissed: (_) => context.read<SettingsProvider>().deleteCategory(category.id),
-      child: Column(
-        children: [
-          tile,
-          const Divider(height: 1, indent: 16),
-        ],
-      ),
+      background: Container(color: AppColors.destructiveAction, alignment: Alignment.centerRight, padding: const EdgeInsets.only(right: 20), child: const Icon(Icons.delete_outline, color: Colors.white)),
+      onDismissed: (_) => context.read<SettingsProvider>().deleteGroup(widget.listType.id, group.id, isAxis1: isAxis1),
+      child: Column(children: [tile, const Divider(height: 1, indent: 16)]),
     );
   }
 }

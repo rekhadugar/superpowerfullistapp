@@ -1,40 +1,53 @@
-import 'list_type.dart';
-
 class MacroList {
   final String id;
   final String name;
-  final ListType type;
-  final DateTime createdAt;
+  final String typeId;
+  final double displayOrder;
+  final DateTime createdAt; // Restored your original property!
 
   MacroList({
     required this.id,
     required this.name,
-    required this.type,
+    required this.typeId,
+    this.displayOrder = 100.0,
     required this.createdAt,
   });
 
-  // Ready for Firestore
   Map<String, dynamic> toMap() {
     return {
       'id': id,
       'name': name,
-      'type': type.name,
+      'typeId': typeId,
+      'displayOrder': displayOrder,
       'createdAt': createdAt.toIso8601String(),
     };
   }
 
-  // Ready for Firestore
   factory MacroList.fromMap(Map<String, dynamic> map) {
     return MacroList(
       id: map['id'] ?? '',
-      name: map['name'] ?? 'Unnamed List',
-      type: ListType.values.firstWhere(
-            (e) => e.name == map['type'],
-        orElse: () => ListType.shopping,
-      ),
+      name: map['name'] ?? '',
+      typeId: map['typeId'] ?? 'sys_shopping',
+      displayOrder: (map['displayOrder'] ?? 100).toDouble(),
       createdAt: map['createdAt'] != null
           ? DateTime.parse(map['createdAt'])
           : DateTime.now(),
+    );
+  }
+
+  // FIXED: Added the missing copyWith method
+  MacroList copyWith({
+    String? name,
+    String? typeId,
+    double? displayOrder,
+    DateTime? createdAt,
+  }) {
+    return MacroList(
+      id: id,
+      name: name ?? this.name,
+      typeId: typeId ?? this.typeId,
+      displayOrder: displayOrder ?? this.displayOrder,
+      createdAt: createdAt ?? this.createdAt,
     );
   }
 }

@@ -1,13 +1,13 @@
-class StoreConfig {
+class GroupConfig {
   final String id;
   final String name;
-  final String address;
-  final bool isLocked; // Protects the "Any" default
+  final String subtitle;
+  final bool isLocked;
 
-  StoreConfig({
+  GroupConfig({
     required this.id,
     required this.name,
-    this.address = '',
+    this.subtitle = '',
     this.isLocked = false,
   });
 
@@ -15,61 +15,26 @@ class StoreConfig {
     return {
       'id': id,
       'name': name,
-      'address': address,
+      'subtitle': subtitle,
       'isLocked': isLocked,
     };
   }
 
-  factory StoreConfig.fromMap(Map<String, dynamic> map) {
-    return StoreConfig(
+  factory GroupConfig.fromMap(Map<String, dynamic> map) {
+    return GroupConfig(
       id: map['id'] ?? '',
       name: map['name'] ?? '',
-      address: map['address'] ?? '',
+      subtitle: map['subtitle'] ?? '',
       isLocked: map['isLocked'] ?? false,
     );
   }
 
-  StoreConfig copyWith({String? name, String? address}) {
-    return StoreConfig(
-      id: id,
+  // FIXED: Added String? id to the parameters so the sanitizer can repair corrupted IDs
+  GroupConfig copyWith({String? id, String? name, String? subtitle}) {
+    return GroupConfig(
+      id: id ?? this.id, // Now accepts the repaired ID
       name: name ?? this.name,
-      address: address ?? this.address,
-      isLocked: isLocked,
-    );
-  }
-}
-
-class CategoryConfig {
-  final String id;
-  final String name;
-  final bool isLocked; // Protects the "Everything Else" default
-
-  CategoryConfig({
-    required this.id,
-    required this.name,
-    this.isLocked = false,
-  });
-
-  Map<String, dynamic> toMap() {
-    return {
-      'id': id,
-      'name': name,
-      'isLocked': isLocked,
-    };
-  }
-
-  factory CategoryConfig.fromMap(Map<String, dynamic> map) {
-    return CategoryConfig(
-      id: map['id'] ?? '',
-      name: map['name'] ?? '',
-      isLocked: map['isLocked'] ?? false,
-    );
-  }
-
-  CategoryConfig copyWith({String? name}) {
-    return CategoryConfig(
-      id: id,
-      name: name ?? this.name,
+      subtitle: subtitle ?? this.subtitle,
       isLocked: isLocked,
     );
   }
