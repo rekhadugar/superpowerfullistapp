@@ -2,6 +2,7 @@
 
 import 'package:flutter/material.dart';
 import 'package:listicle_v2/providers/macro_list_provider.dart';
+import 'package:listicle_v2/providers/settings_provider.dart';
 import 'package:provider/provider.dart';
 import 'theme/app_theme.dart';
 import 'providers/list_provider.dart';
@@ -20,6 +21,7 @@ void main() {
         ChangeNotifierProvider(create: (_) => ThemeProvider()), // <--- NEW
         ChangeNotifierProvider(create: (_) => MacroListProvider()),
         ChangeNotifierProvider(create: (_) => ListProvider()),
+        ChangeNotifierProvider(create: (_) => SettingsProvider()),
       ],
       child: const ListicleApp(),
     ),

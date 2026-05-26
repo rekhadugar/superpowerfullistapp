@@ -1037,4 +1037,43 @@ class ListProvider extends ChangeNotifier {
     }
     return id;
   }
+
+  // --- SETTINGS BRIDGE: ORPHAN REASSIGNMENT & SORT SYNC ---
+  void syncWithGlobalSettings(List<String> activeStores, List<String> activeCategories) {
+    bool itemsChanged = false;
+
+    // 1. Adopt the exact custom sort orders defined by the user in Settings
+    preferredTypeOrder = activeStores;
+    preferredCategoryOrder = activeCategories;
+
+    // 2. Orphan Reassignment Sweep
+    for (int i = 0; i < _items.length; i++) {
+      String newType = _items[i].type;
+      String newCategory = _items[i].category;
+      bool modified = false;
+
+      if (!activeStores.contains(newType)) {
+        newType = 'Any';
+        modified = true;
+      }
+      if (!activeCategories.contains(newCategory)) {
+        newCategory = 'Everything Else';
+        modified = true;
+      }
+
+      if (modified) {
+        _items[i] = _items[i].copyWith(type: newType, category: newCategory);
+        itemsChanged = true;
+      }
+    }
+
+    // 3. Save updates to local storage (if orphans were caught) and rebuild the UI
+    if (itemsChanged) {
+      _saveItemsToStorage();
+    }
+
+    _buildDisplayList();
+    _buildCheckedDisplayList();
+    notifyListeners();
+  }
 }
