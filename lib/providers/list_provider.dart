@@ -29,11 +29,11 @@ class ListProvider extends ChangeNotifier {
   final List<double> cumulativeYOffsets = [];
   double totalListHeight = 0.0;
 
-  // NEW: COMPLETED LIST CACHE
+  // COMPLETED LIST CACHE
   final List<dynamic> checkedDisplayList = [];
   final List<double> checkedCumulativeYOffsets = [];
 
-  // --- SEPARATED INTERACTION STATE (PRODUCTION ARCHITECTURE) ---
+  // --- SEPARATED INTERACTION STATE ---
   final Set<String> _selectedItemIds = {};
   String? _editItemId;
 
@@ -97,7 +97,7 @@ class ListProvider extends ChangeNotifier {
 
   ListProvider() {
     _buildDisplayList();
-    _buildCheckedDisplayList(); // NEW
+    _buildCheckedDisplayList();
     runDataMigration();
   }
 
@@ -107,8 +107,26 @@ class ListProvider extends ChangeNotifier {
 
     _currentListId = listId;
     final prefs = await SharedPreferences.getInstance();
-    final String? itemsJson = prefs.getString('items_$_currentListId');
 
+    // FIXED: Always load the Global Settings on cold boot!
+    final storesJson = prefs.getString('global_stores');
+    if (storesJson != null) {
+      final List<dynamic> decoded = jsonDecode(storesJson);
+      preferredTypeOrder = decoded.map((m) => m['name'].toString()).toList();
+    } else {
+      preferredTypeOrder = ['Any', 'Costco', 'Target', 'Walmart', 'Trader Joe\'s'];
+    }
+
+    final catJson = prefs.getString('global_categories');
+    if (catJson != null) {
+      final List<dynamic> decoded = jsonDecode(catJson);
+      preferredCategoryOrder = decoded.map((m) => m['name'].toString()).toList();
+    } else {
+      preferredCategoryOrder = ['Produce', 'Dairy', 'Bakery', 'Everything Else'];
+    }
+
+    // Load Items
+    final String? itemsJson = prefs.getString('items_$_currentListId');
     if (itemsJson != null) {
       final List<dynamic> decoded = jsonDecode(itemsJson);
       _items = decoded.map((map) => ListItem.fromMap(map)).toList();
@@ -120,7 +138,7 @@ class ListProvider extends ChangeNotifier {
 
     _recalculateWraps();
     _buildDisplayList();
-    _buildCheckedDisplayList(); // NEW
+    _buildCheckedDisplayList();
     notifyListeners();
   }
 
@@ -183,7 +201,7 @@ class ListProvider extends ChangeNotifier {
     }
 
     _buildDisplayList();
-    _buildCheckedDisplayList(); // NEW
+    _buildCheckedDisplayList();
     _saveItemsToStorage();
     notifyListeners();
   }
@@ -370,7 +388,7 @@ class ListProvider extends ChangeNotifier {
     _items.add(newItem);
     _recalculateWraps();
     _buildDisplayList();
-    _buildCheckedDisplayList(); // NEW
+    _buildCheckedDisplayList();
     _saveItemsToStorage();
 
     _flashItemId = newItem.id;
@@ -530,13 +548,13 @@ class ListProvider extends ChangeNotifier {
     bool changed = false;
     for (int i = 0; i < _items.length; i++) {
       if (!_items[i].isDeleted && !_items[i].isCompleted) {
-        _items[i] = _items[i].copyWith(isCompleted: true, completedAt: DateTime.now()); // NEW
+        _items[i] = _items[i].copyWith(isCompleted: true, completedAt: DateTime.now());
         changed = true;
       }
     }
     if (changed) {
       _buildDisplayList();
-      _buildCheckedDisplayList(); // NEW
+      _buildCheckedDisplayList();
       _saveItemsToStorage();
       notifyListeners();
     }
@@ -552,7 +570,7 @@ class ListProvider extends ChangeNotifier {
     }
     if (changed) {
       _buildDisplayList();
-      _buildCheckedDisplayList(); // NEW
+      _buildCheckedDisplayList();
       _saveItemsToStorage();
       notifyListeners();
     }
@@ -562,11 +580,11 @@ class ListProvider extends ChangeNotifier {
     final checkedIds = List<String>.from(_selectedItemIds);
     for (String id in checkedIds) {
       final index = _items.indexWhere((item) => item.id == id);
-      if (index != -1) _items[index] = _items[index].copyWith(isCompleted: true, completedAt: DateTime.now()); // NEW
+      if (index != -1) _items[index] = _items[index].copyWith(isCompleted: true, completedAt: DateTime.now());
     }
     clearSelection();
     _buildDisplayList();
-    _buildCheckedDisplayList(); // NEW
+    _buildCheckedDisplayList();
     _saveItemsToStorage();
     return checkedIds;
   }
@@ -579,12 +597,11 @@ class ListProvider extends ChangeNotifier {
     }
     clearSelection();
     _buildDisplayList();
-    _buildCheckedDisplayList(); // NEW
+    _buildCheckedDisplayList();
     _saveItemsToStorage();
     return deletedIds;
   }
 
-  // --- CROSS-LIST BATCH ACTIONS ---
   Future<void> moveSelectedToTargetList(String targetListId) async {
     if (targetListId == _currentListId || _selectedItemIds.isEmpty) return;
 
@@ -593,7 +610,7 @@ class ListProvider extends ChangeNotifier {
 
     _items.removeWhere((item) => _selectedItemIds.contains(item.id));
     _buildDisplayList();
-    _buildCheckedDisplayList(); // NEW
+    _buildCheckedDisplayList();
     await _saveItemsToStorage();
 
     final prefs = await SharedPreferences.getInstance();
@@ -642,7 +659,6 @@ class ListProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  // --- UNDO ENGINE ---
   void restoreItems(List<String> ids) {
     bool changed = false;
     for (String id in ids) {
@@ -651,14 +667,14 @@ class ListProvider extends ChangeNotifier {
         _items[index] = _items[index].copyWith(
           isDeleted: false,
           isCompleted: false,
-          completedAt: null, // NEW
+          completedAt: null,
         );
         changed = true;
       }
     }
     if (changed) {
       _buildDisplayList();
-      _buildCheckedDisplayList(); // NEW
+      _buildCheckedDisplayList();
       _saveItemsToStorage();
       notifyListeners();
     }
@@ -681,12 +697,11 @@ class ListProvider extends ChangeNotifier {
       _items.addAll(newItems);
       clearSelection();
       _buildDisplayList();
-      _buildCheckedDisplayList(); // NEW
+      _buildCheckedDisplayList();
       _saveItemsToStorage();
     }
   }
 
-  // --- MULTI-DIMENSIONAL EDIT ITEM (SECTION AWARE) ---
   void editItem(String id, String newTitle, List<String> newAttributes, String type, String category, int newQty, String newUnit) {
     final index = _items.indexWhere((item) => item.id == id);
     if (index != -1) {
@@ -717,7 +732,7 @@ class ListProvider extends ChangeNotifier {
 
         _recalculateWraps();
         _buildDisplayList();
-        _buildCheckedDisplayList(); // NEW
+        _buildCheckedDisplayList();
         _saveItemsToStorage();
         triggerSequentialFlash(existingItem.id);
         notifyListeners();
@@ -752,15 +767,13 @@ class ListProvider extends ChangeNotifier {
         unit: newUnit,
         categoryOrder: newCatOrder,
         typeOrder: newTypeOrder,
-
-        // NEW: "Edit = Restore" UX Flow. Saving edits instantly pulls the item out of the completed list!
         isCompleted: false,
         completedAt: null,
       );
 
       _recalculateWraps();
       _buildDisplayList();
-      _buildCheckedDisplayList(); // NEW
+      _buildCheckedDisplayList();
       _saveItemsToStorage();
       notifyListeners();
     }
@@ -792,7 +805,7 @@ class ListProvider extends ChangeNotifier {
     if (changed) {
       _recalculateWraps();
       _recalculateYOffsets();
-      _recalculateCheckedYOffsets(); // NEW
+      _recalculateCheckedYOffsets();
       notifyListeners();
     }
   }
@@ -880,16 +893,14 @@ class ListProvider extends ChangeNotifier {
 
     if (stateChanged || displayList.isEmpty) {
       _buildDisplayList();
-      _buildCheckedDisplayList(); // NEW
+      _buildCheckedDisplayList();
       notifyListeners();
     }
   }
 
-  // --- NEW: COMPLETED LIST CHRONOLOGICAL ENGINE ---
   void _buildCheckedDisplayList() {
     final checkedItems = _items.where((item) => item.isCompleted && !item.isDeleted).toList();
 
-    // Sort descending (most recently checked off items at the top)
     checkedItems.sort((a, b) => (b.completedAt ?? DateTime.fromMillisecondsSinceEpoch(0))
         .compareTo(a.completedAt ?? DateTime.fromMillisecondsSinceEpoch(0)));
 
@@ -938,51 +949,116 @@ class ListProvider extends ChangeNotifier {
     checkedCumulativeYOffsets.addAll(calculatedOffsets);
   }
 
-  // --- ACTIVE LIST GROUPING ENGINE ---
+  // --- SETTINGS BRIDGE: ORPHAN REASSIGNMENT & SORT SYNC ---
+  void syncWithGlobalSettings(List<String> activeStores, List<String> activeCategories) {
+    bool itemsChanged = false;
+
+    preferredTypeOrder = activeStores;
+    preferredCategoryOrder = activeCategories;
+
+    for (int i = 0; i < _items.length; i++) {
+      String newType = _items[i].type;
+      String newCategory = _items[i].category;
+      bool modified = false;
+
+      if (!activeStores.contains(newType)) {
+        newType = 'Any';
+        modified = true;
+      }
+      if (!activeCategories.contains(newCategory)) {
+        newCategory = 'Everything Else';
+        modified = true;
+      }
+
+      if (modified) {
+        _items[i] = _items[i].copyWith(type: newType, category: newCategory);
+        itemsChanged = true;
+      }
+    }
+
+    if (itemsChanged) {
+      _saveItemsToStorage();
+    }
+
+    _buildDisplayList();
+    _buildCheckedDisplayList();
+    notifyListeners();
+  }
+
+  // --- FIXED: BULLETPROOF ACTIVE LIST GROUPING ENGINE ---
   void _buildDisplayList() {
-    List<String>? activeGroupOrder;
-    if (_currentSortMode == SortMode.types) activeGroupOrder = preferredTypeOrder;
-    else if (_currentSortMode == SortMode.categories) activeGroupOrder = preferredCategoryOrder;
-
-    final flattenedArray = SortModeEngine.execute(
-      activeItems,
-      _currentSortMode,
-      groupOrder: activeGroupOrder,
-    );
-
     List<dynamic> strictlySortedArray = [];
 
-    if (_currentSortMode != SortMode.az) {
-      List<ListItem> currentGroup = [];
-      String? currentHeader;
+    // If grouping by Category or Store, bypass the SortModeEngine and enforce Settings Index exactly
+    if (_currentSortMode == SortMode.categories || _currentSortMode == SortMode.types) {
 
-      for (var item in flattenedArray) {
-        if (item is String) {
-          if (currentHeader != null || currentGroup.isNotEmpty) {
-            currentGroup.sort((a, b) {
-              if (_currentSortMode == SortMode.categories) return a.categoryOrder.compareTo(b.categoryOrder);
-              if (_currentSortMode == SortMode.types) return a.typeOrder.compareTo(b.typeOrder);
-              return a.globalCustomOrder.compareTo(b.globalCustomOrder);
-            });
-            strictlySortedArray.addAll(currentGroup);
-            currentGroup.clear();
-          }
-          currentHeader = item;
-          strictlySortedArray.add(item);
-        } else if (item is ListItem) {
-          currentGroup.add(item);
-        }
+      // 1. Bucket the items
+      Map<String, List<ListItem>> groups = {};
+      for (var item in activeItems) {
+        String key = _currentSortMode == SortMode.categories ? item.category : item.type;
+        if (!groups.containsKey(key)) groups[key] = [];
+        groups[key]!.add(item);
       }
-      if (currentGroup.isNotEmpty) {
+
+      // 2. Sort the Group Headers based purely on Global Settings Index
+      List<String> sortedKeys = groups.keys.toList();
+      List<String> referenceOrder = _currentSortMode == SortMode.categories ? preferredCategoryOrder : preferredTypeOrder;
+
+      sortedKeys.sort((a, b) {
+        int indexA = referenceOrder.indexWhere((e) => e.toLowerCase() == a.toLowerCase());
+        int indexB = referenceOrder.indexWhere((e) => e.toLowerCase() == b.toLowerCase());
+
+        if (indexA != -1 && indexB != -1) return indexA.compareTo(indexB);
+        if (indexA != -1) return -1; // A is recognized, B is an orphan
+        if (indexB != -1) return 1;  // B is recognized, A is an orphan
+        return a.compareTo(b);       // Both orphans fallback to alphabetical
+      });
+
+      // 3. Assemble the final flattened array
+      for (String key in sortedKeys) {
+        strictlySortedArray.add(key); // Header String
+        List<ListItem> currentGroup = groups[key]!;
+
+        // Sort the individual items *inside* the group
         currentGroup.sort((a, b) {
           if (_currentSortMode == SortMode.categories) return a.categoryOrder.compareTo(b.categoryOrder);
           if (_currentSortMode == SortMode.types) return a.typeOrder.compareTo(b.typeOrder);
           return a.globalCustomOrder.compareTo(b.globalCustomOrder);
         });
+
         strictlySortedArray.addAll(currentGroup);
       }
     } else {
-      strictlySortedArray = flattenedArray;
+      // 4. Fallback for A-Z or Custom Flat sorting
+      final flattenedArray = SortModeEngine.execute(
+        activeItems,
+        _currentSortMode,
+      );
+
+      if (_currentSortMode != SortMode.az) {
+        List<ListItem> currentGroup = [];
+        String? currentHeader;
+
+        for (var item in flattenedArray) {
+          if (item is String) {
+            if (currentHeader != null || currentGroup.isNotEmpty) {
+              currentGroup.sort((a, b) => a.globalCustomOrder.compareTo(b.globalCustomOrder));
+              strictlySortedArray.addAll(currentGroup);
+              currentGroup.clear();
+            }
+            currentHeader = item;
+            strictlySortedArray.add(item);
+          } else if (item is ListItem) {
+            currentGroup.add(item);
+          }
+        }
+        if (currentGroup.isNotEmpty) {
+          currentGroup.sort((a, b) => a.globalCustomOrder.compareTo(b.globalCustomOrder));
+          strictlySortedArray.addAll(currentGroup);
+        }
+      } else {
+        strictlySortedArray = flattenedArray;
+      }
     }
 
     displayList.clear();
@@ -1016,10 +1092,10 @@ class ListProvider extends ChangeNotifier {
       final isNowCompleted = !_items[index].isCompleted;
       _items[index] = _items[index].copyWith(
         isCompleted: isNowCompleted,
-        completedAt: isNowCompleted ? DateTime.now() : null, // NEW
+        completedAt: isNowCompleted ? DateTime.now() : null,
       );
       _buildDisplayList();
-      _buildCheckedDisplayList(); // NEW
+      _buildCheckedDisplayList();
       _saveItemsToStorage();
       notifyListeners();
     }
@@ -1031,49 +1107,10 @@ class ListProvider extends ChangeNotifier {
     if (index != -1) {
       _items[index] = _items[index].copyWith(isDeleted: true);
       _buildDisplayList();
-      _buildCheckedDisplayList(); // NEW
+      _buildCheckedDisplayList();
       _saveItemsToStorage();
       notifyListeners();
     }
     return id;
-  }
-
-  // --- SETTINGS BRIDGE: ORPHAN REASSIGNMENT & SORT SYNC ---
-  void syncWithGlobalSettings(List<String> activeStores, List<String> activeCategories) {
-    bool itemsChanged = false;
-
-    // 1. Adopt the exact custom sort orders defined by the user in Settings
-    preferredTypeOrder = activeStores;
-    preferredCategoryOrder = activeCategories;
-
-    // 2. Orphan Reassignment Sweep
-    for (int i = 0; i < _items.length; i++) {
-      String newType = _items[i].type;
-      String newCategory = _items[i].category;
-      bool modified = false;
-
-      if (!activeStores.contains(newType)) {
-        newType = 'Any';
-        modified = true;
-      }
-      if (!activeCategories.contains(newCategory)) {
-        newCategory = 'Everything Else';
-        modified = true;
-      }
-
-      if (modified) {
-        _items[i] = _items[i].copyWith(type: newType, category: newCategory);
-        itemsChanged = true;
-      }
-    }
-
-    // 3. Save updates to local storage (if orphans were caught) and rebuild the UI
-    if (itemsChanged) {
-      _saveItemsToStorage();
-    }
-
-    _buildDisplayList();
-    _buildCheckedDisplayList();
-    notifyListeners();
   }
 }

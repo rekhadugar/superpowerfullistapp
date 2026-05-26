@@ -85,13 +85,12 @@ class AppDrawer extends StatelessWidget {
               leading: const Icon(Icons.tune_rounded, color: Colors.grey),
               title: const Text('Manage Stores & Categories', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
               onTap: () async {
+                // FIXED: Capture the providers and navigator BEFORE we close the drawer
                 final listProvider = context.read<ListProvider>();
                 final settings = context.read<SettingsProvider>();
+                final navigator = Navigator.of(context);
 
-                // 1. Close drawer visually
-                Navigator.pop(context);
-
-                // 2. SEED ENGINE: Harvest all existing strings from active and checked items!
+                // 1. SEED ENGINE: Harvest all existing strings from active and checked items!
                 final Set<String> existingStores = {};
                 final Set<String> existingCategories = {};
 
@@ -100,26 +99,27 @@ class AppDrawer extends StatelessWidget {
                   existingCategories.add(item.category);
                 }
                 for (var item in listProvider.checkedDisplayList) {
-                  if (item is ListItem) { // Ignore header strings
+                  if (item is ListItem) {
                     existingStores.add(item.type);
                     existingCategories.add(item.category);
                   }
                 }
                 settings.seedFromExisting(existingStores.toList(), existingCategories.toList());
 
+                // 2. Close drawer visually using the captured navigator
+                navigator.pop();
+
                 // 3. Navigate
-                await Navigator.push(
-                    context,
+                await navigator.push(
                     MaterialPageRoute(builder: (_) => const SettingsScreen())
                 );
 
-                // 4. ON RETURN: Grab fresh settings and trigger Orphan Reassignment!
-                if (context.mounted) {
-                  context.read<ListProvider>().syncWithGlobalSettings(
-                    settings.stores.map((s) => s.name).toList(),
-                    settings.categories.map((c) => c.name).toList(),
-                  );
-                }
+                // 4. ON RETURN: Trigger Orphan Reassignment using captured providers!
+                // No context.mounted check needed because we hold the direct references!
+                listProvider.syncWithGlobalSettings(
+                  settings.stores.map((s) => s.name).toList(),
+                  settings.categories.map((c) => c.name).toList(),
+                );
               },
             ),
             const Divider(height: 1),
