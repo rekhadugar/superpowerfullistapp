@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../models/list_item.dart';
 import '../providers/list_provider.dart';
 import '../providers/macro_list_provider.dart';
 import '../providers/theme_provider.dart';
@@ -78,23 +79,42 @@ class AppDrawer extends StatelessWidget {
             const Divider(height: 1),
 
             // NEW: Settings Navigation Link
+            // NEW: Settings Navigation Link
             ListTile(
               contentPadding: const EdgeInsets.symmetric(horizontal: 16.0),
               leading: const Icon(Icons.tune_rounded, color: Colors.grey),
               title: const Text('Manage Stores & Categories', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
               onTap: () async {
-                // 1. Close the side drawer visually
+                final listProvider = context.read<ListProvider>();
+                final settings = context.read<SettingsProvider>();
+
+                // 1. Close drawer visually
                 Navigator.pop(context);
 
-                // 2. Navigate to Settings and WAIT for the user to pop the screen
+                // 2. SEED ENGINE: Harvest all existing strings from active and checked items!
+                final Set<String> existingStores = {};
+                final Set<String> existingCategories = {};
+
+                for (var item in listProvider.activeItems) {
+                  existingStores.add(item.type);
+                  existingCategories.add(item.category);
+                }
+                for (var item in listProvider.checkedDisplayList) {
+                  if (item is ListItem) { // Ignore header strings
+                    existingStores.add(item.type);
+                    existingCategories.add(item.category);
+                  }
+                }
+                settings.seedFromExisting(existingStores.toList(), existingCategories.toList());
+
+                // 3. Navigate
                 await Navigator.push(
                     context,
                     MaterialPageRoute(builder: (_) => const SettingsScreen())
                 );
 
-                // 3. ON RETURN: Grab the fresh settings and trigger Orphan Reassignment!
+                // 4. ON RETURN: Grab fresh settings and trigger Orphan Reassignment!
                 if (context.mounted) {
-                  final settings = context.read<SettingsProvider>();
                   context.read<ListProvider>().syncWithGlobalSettings(
                     settings.stores.map((s) => s.name).toList(),
                     settings.categories.map((c) => c.name).toList(),

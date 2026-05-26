@@ -6,9 +6,13 @@ import '../models/settings_models.dart';
 class SettingsProvider extends ChangeNotifier {
   List<StoreConfig> _stores = [];
   List<CategoryConfig> _categories = [];
-  bool _anchorDefaultsToTop = false;
 
-  bool get anchorDefaultsToTop => _anchorDefaultsToTop;
+  // FIXED 1: Separate anchors for Stores and Categories
+  bool _anchorStoreToTop = false;
+  bool _anchorCategoryToTop = false;
+
+  bool get anchorStoreToTop => _anchorStoreToTop;
+  bool get anchorCategoryToTop => _anchorCategoryToTop;
   List<StoreConfig> get stores => _stores;
   List<CategoryConfig> get categories => _categories;
 
@@ -22,14 +26,14 @@ class SettingsProvider extends ChangeNotifier {
   Future<void> _loadSettings() async {
     final prefs = await SharedPreferences.getInstance();
 
-    _anchorDefaultsToTop = prefs.getBool('anchorDefaultsToTop') ?? false;
+    _anchorStoreToTop = prefs.getBool('anchorStoreToTop') ?? false;
+    _anchorCategoryToTop = prefs.getBool('anchorCategoryToTop') ?? false;
 
     final storesJson = prefs.getString('global_stores');
     if (storesJson != null) {
       final List<dynamic> decoded = jsonDecode(storesJson);
       _stores = decoded.map((map) => StoreConfig.fromMap(map)).toList();
     } else {
-      // Default Factory Load
       _stores = [
         StoreConfig(id: 'default_store', name: 'Any', isLocked: true),
         StoreConfig(id: 's1', name: 'Costco'),
@@ -44,7 +48,6 @@ class SettingsProvider extends ChangeNotifier {
       final List<dynamic> decoded = jsonDecode(categoriesJson);
       _categories = decoded.map((map) => CategoryConfig.fromMap(map)).toList();
     } else {
-      // Default Factory Load
       _categories = [
         CategoryConfig(id: 'c1', name: 'Produce'),
         CategoryConfig(id: 'c2', name: 'Dairy'),
@@ -53,57 +56,82 @@ class SettingsProvider extends ChangeNotifier {
       ];
     }
 
-    _enforceAnchorLogic();
+    _enforceStoreAnchor();
+    _enforceCategoryAnchor();
     _isInitialized = true;
     notifyListeners();
   }
 
   Future<void> _saveSettings() async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool('anchorDefaultsToTop', _anchorDefaultsToTop);
+    await prefs.setBool('anchorStoreToTop', _anchorStoreToTop);
+    await prefs.setBool('anchorCategoryToTop', _anchorCategoryToTop);
     await prefs.setString('global_stores', jsonEncode(_stores.map((s) => s.toMap()).toList()));
     await prefs.setString('global_categories', jsonEncode(_categories.map((c) => c.toMap()).toList()));
   }
 
-  void toggleAnchor() {
-    _anchorDefaultsToTop = !_anchorDefaultsToTop;
-    _enforceAnchorLogic();
+  // --- NEW: SEEDING ENGINE (Fixes Bugs 3, 4, & 5) ---
+  void seedFromExisting(List<String> existingStores, List<String> existingCategories) {
+    bool changed = false;
+
+    for (String s in existingStores) {
+      if (s.toLowerCase() == 'any') continue; // Locked default handles this
+      if (!_stores.any((config) => config.name.toLowerCase() == s.toLowerCase())) {
+        _stores.add(StoreConfig(id: DateTime.now().microsecondsSinceEpoch.toString() + s.hashCode.toString(), name: s));
+        changed = true;
+      }
+    }
+
+    for (String c in existingCategories) {
+      if (c.toLowerCase() == 'everything else') continue; // Locked default handles this
+      if (!_categories.any((config) => config.name.toLowerCase() == c.toLowerCase())) {
+        _categories.add(CategoryConfig(id: DateTime.now().microsecondsSinceEpoch.toString() + c.hashCode.toString(), name: c));
+        changed = true;
+      }
+    }
+
+    if (changed) {
+      _enforceStoreAnchor();
+      _enforceCategoryAnchor();
+      _saveSettings();
+      notifyListeners();
+    }
+  }
+
+  void toggleStoreAnchor() {
+    _anchorStoreToTop = !_anchorStoreToTop;
+    _enforceStoreAnchor();
     _saveSettings();
     notifyListeners();
   }
 
-  void _enforceAnchorLogic() {
-    // 1. Force the locked store ('Any') to the exact top or bottom
-    final lockedStoreIndex = _stores.indexWhere((s) => s.isLocked);
-    if (lockedStoreIndex != -1) {
-      final lockedStore = _stores.removeAt(lockedStoreIndex);
-      if (_anchorDefaultsToTop) {
-        _stores.insert(0, lockedStore);
-      } else {
-        _stores.add(lockedStore);
-      }
-    }
+  void toggleCategoryAnchor() {
+    _anchorCategoryToTop = !_anchorCategoryToTop;
+    _enforceCategoryAnchor();
+    _saveSettings();
+    notifyListeners();
+  }
 
-    // 2. Force the locked category ('Everything Else') to the exact top or bottom
-    final lockedCatIndex = _categories.indexWhere((c) => c.isLocked);
-    if (lockedCatIndex != -1) {
-      final lockedCat = _categories.removeAt(lockedCatIndex);
-      if (_anchorDefaultsToTop) {
-        _categories.insert(0, lockedCat);
-      } else {
-        _categories.add(lockedCat);
-      }
+  void _enforceStoreAnchor() {
+    final lockedIndex = _stores.indexWhere((s) => s.isLocked);
+    if (lockedIndex != -1) {
+      final locked = _stores.removeAt(lockedIndex);
+      _anchorStoreToTop ? _stores.insert(0, locked) : _stores.add(locked);
+    }
+  }
+
+  void _enforceCategoryAnchor() {
+    final lockedIndex = _categories.indexWhere((c) => c.isLocked);
+    if (lockedIndex != -1) {
+      final locked = _categories.removeAt(lockedIndex);
+      _anchorCategoryToTop ? _categories.insert(0, locked) : _categories.add(locked);
     }
   }
 
   // --- STORE MANAGEMENT ---
   void addStore(String name, String address) {
-    _stores.add(StoreConfig(
-      id: DateTime.now().millisecondsSinceEpoch.toString(),
-      name: name.trim(),
-      address: address.trim(),
-    ));
-    _enforceAnchorLogic();
+    _stores.add(StoreConfig(id: DateTime.now().millisecondsSinceEpoch.toString(), name: name.trim(), address: address.trim()));
+    _enforceStoreAnchor();
     _saveSettings();
     notifyListeners();
   }
@@ -126,21 +154,17 @@ class SettingsProvider extends ChangeNotifier {
   void reorderStores(int oldIndex, int newIndex) {
     if (oldIndex < newIndex) newIndex -= 1;
     if (_stores[oldIndex].isLocked) return;
-
     final item = _stores.removeAt(oldIndex);
     _stores.insert(newIndex, item);
-    _enforceAnchorLogic();
+    _enforceStoreAnchor();
     _saveSettings();
     notifyListeners();
   }
 
   // --- CATEGORY MANAGEMENT ---
   void addCategory(String name) {
-    _categories.add(CategoryConfig(
-      id: DateTime.now().millisecondsSinceEpoch.toString(),
-      name: name.trim(),
-    ));
-    _enforceAnchorLogic();
+    _categories.add(CategoryConfig(id: DateTime.now().millisecondsSinceEpoch.toString(), name: name.trim()));
+    _enforceCategoryAnchor();
     _saveSettings();
     notifyListeners();
   }
@@ -163,10 +187,9 @@ class SettingsProvider extends ChangeNotifier {
   void reorderCategories(int oldIndex, int newIndex) {
     if (oldIndex < newIndex) newIndex -= 1;
     if (_categories[oldIndex].isLocked) return;
-
     final item = _categories.removeAt(oldIndex);
     _categories.insert(newIndex, item);
-    _enforceAnchorLogic();
+    _enforceCategoryAnchor();
     _saveSettings();
     notifyListeners();
   }

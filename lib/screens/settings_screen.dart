@@ -23,7 +23,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
     showModalBottomSheet(
       context: context,
-      isScrollControlled: true, // Allows sheet to push up with keyboard
+      isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (ctx) {
         return Padding(
@@ -46,7 +46,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
                 const SizedBox(height: 16),
 
-                // NAME FIELD
                 TextField(
                   controller: nameController,
                   autofocus: true,
@@ -58,7 +57,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
                 const SizedBox(height: 16),
 
-                // ADDRESS FIELD (Stores Only)
                 if (isStoreMode) ...[
                   TextField(
                     controller: addressController,
@@ -71,35 +69,46 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   const SizedBox(height: 24),
                 ],
 
-                // SAVE BUTTON
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.primaryAction,
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                // FIXED: explicit Save and Cancel buttons (Bugs 6 & 7)
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextButton(
+                        onPressed: () => Navigator.pop(ctx),
+                        style: TextButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 16)),
+                        child: const Text('Cancel', style: TextStyle(fontSize: 16)),
+                      ),
                     ),
-                    onPressed: () {
-                      if (nameController.text.trim().isEmpty) return;
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.primaryAction,
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                        onPressed: () {
+                          if (nameController.text.trim().isEmpty) return;
 
-                      if (isStoreMode) {
-                        if (isEditing) {
-                          provider.updateStore(store!.id, nameController.text, addressController.text);
-                        } else {
-                          provider.addStore(nameController.text, addressController.text);
-                        }
-                      } else {
-                        if (isEditing) {
-                          provider.updateCategory(category!.id, nameController.text);
-                        } else {
-                          provider.addCategory(nameController.text);
-                        }
-                      }
-                      Navigator.pop(ctx);
-                    },
-                    child: Text(isEditing ? 'Save Changes' : 'Create', style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
-                  ),
+                          if (isStoreMode) {
+                            if (isEditing) {
+                              provider.updateStore(store!.id, nameController.text, addressController.text);
+                            } else {
+                              provider.addStore(nameController.text, addressController.text);
+                            }
+                          } else {
+                            if (isEditing) {
+                              provider.updateCategory(category!.id, nameController.text);
+                            } else {
+                              provider.addCategory(nameController.text);
+                            }
+                          }
+                          Navigator.pop(ctx);
+                        },
+                        child: Text(isEditing ? 'Save Changes' : 'Create', style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+                      ),
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 16),
               ],
@@ -141,48 +150,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ],
           ),
         ),
-        body: Column(
+        body: TabBarView(
           children: [
-            // GLOBAL ANCHOR SETTING
-            Container(
-              color: theme.cardColor,
-              padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  // FIXED: Expanded prevents the text from pushing the button off-screen
-                  Expanded(
-                    child: Text(
-                      'Anchor Untagged Items To:',
-                      style: theme.textTheme.titleMedium,
-                    ),
-                  ),
-                  const SizedBox(width: 16), // Safety buffer
-                  SegmentedButton<bool>(
-                    segments: const [
-                      ButtonSegment(value: true, label: Text('Top')),
-                      ButtonSegment(value: false, label: Text('Bottom')),
-                    ],
-                    selected: {provider.anchorDefaultsToTop},
-                    onSelectionChanged: (Set<bool> newSelection) {
-                      provider.toggleAnchor();
-                    },
-                    style: SegmentedButton.styleFrom(
-                      selectedBackgroundColor: AppColors.primaryAction.withOpacity(0.1),
-                      selectedForegroundColor: AppColors.primaryAction,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const Divider(height: 1, thickness: 1),
-
-            // TAB VIEWS (Reorderable Lists)
-            Expanded(
-              child: TabBarView(
-                children: [
-                  // --- STORES TAB ---
-                  ReorderableListView.builder(
+            // --- STORES TAB ---
+            Column(
+              children: [
+                // FIXED: Dedicated Toggle for Stores inside the list
+                SwitchListTile(
+                  title: const Text('Anchor "Any" to Top'),
+                  subtitle: const Text('Keep untagged items at the top of your list'),
+                  value: provider.anchorStoreToTop,
+                  activeColor: AppColors.primaryAction,
+                  onChanged: (val) => provider.toggleStoreAnchor(),
+                ),
+                const Divider(height: 1, thickness: 1),
+                Expanded(
+                  child: ReorderableListView.builder(
                     buildDefaultDragHandles: false,
                     padding: const EdgeInsets.only(bottom: 100),
                     itemCount: provider.stores.length,
@@ -192,9 +175,24 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       return _buildStoreTile(context, store, index);
                     },
                   ),
+                ),
+              ],
+            ),
 
-                  // --- CATEGORIES TAB ---
-                  ReorderableListView.builder(
+            // --- CATEGORIES TAB ---
+            Column(
+              children: [
+                // FIXED: Dedicated Toggle for Categories inside the list
+                SwitchListTile(
+                  title: const Text('Anchor "Everything Else" to Top'),
+                  subtitle: const Text('Keep untagged items at the top of your list'),
+                  value: provider.anchorCategoryToTop,
+                  activeColor: AppColors.primaryAction,
+                  onChanged: (val) => provider.toggleCategoryAnchor(),
+                ),
+                const Divider(height: 1, thickness: 1),
+                Expanded(
+                  child: ReorderableListView.builder(
                     buildDefaultDragHandles: false,
                     padding: const EdgeInsets.only(bottom: 100),
                     itemCount: provider.categories.length,
@@ -204,13 +202,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       return _buildCategoryTile(context, category, index);
                     },
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
           ],
         ),
 
-        // FAB (Contextually aware of which tab is active)
         floatingActionButton: Builder(
             builder: (ctx) {
               return FloatingActionButton(
