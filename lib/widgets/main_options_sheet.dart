@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/list_provider.dart';
+import '../providers/macro_list_provider.dart';
+import '../providers/settings_provider.dart';
 import '../theme/app_theme.dart';
 import '../engine/sort_mode_engine.dart';
 
@@ -42,7 +44,13 @@ class MainOptionsSheet extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<ListProvider>();
+    final macroProvider = context.watch<MacroListProvider>();
+    final settings = context.watch<SettingsProvider>();
     final theme = Theme.of(context);
+
+    // ALIAS MAPPING: Fetch dynamic taxonomy labels
+    final typeId = macroProvider.activeList?.typeId ?? 'sys_shopping';
+    final appType = settings.getTypeById(typeId);
 
     return Container(
       decoration: BoxDecoration(
@@ -106,8 +114,9 @@ class MainOptionsSheet extends StatelessWidget {
             physics: const BouncingScrollPhysics(),
             child: Row(
               children: [
-                _buildGroupButton(context, 'Category', SortMode.categories, provider.currentSortMode, provider),
-                _buildGroupButton(context, 'Store', SortMode.types, provider.currentSortMode, provider),
+                // FIXED: Inject dynamic taxonomy labels for the list grouping modes
+                _buildGroupButton(context, appType.axis2Label, SortMode.categories, provider.currentSortMode, provider),
+                _buildGroupButton(context, appType.axis1Label, SortMode.types, provider.currentSortMode, provider),
                 _buildGroupButton(context, 'A-Z', SortMode.az, provider.currentSortMode, provider),
                 _buildGroupButton(context, 'Custom Layout', SortMode.customFlat, provider.currentSortMode, provider),
               ],

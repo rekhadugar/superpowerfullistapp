@@ -2,10 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/list_provider.dart';
 import '../providers/macro_list_provider.dart';
-import '../providers/theme_provider.dart';
+import '../providers/settings_provider.dart'; // Re-added for allTypes
 import '../screens/create_list_screen.dart';
-import '../providers/settings_provider.dart';
-import '../screens/settings_screen.dart';
+import '../screens/global_settings_screen.dart';
 
 class AppDrawer extends StatelessWidget {
   const AppDrawer({Key? key}) : super(key: key);
@@ -13,7 +12,6 @@ class AppDrawer extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<MacroListProvider>();
-    final themeProvider = context.watch<ThemeProvider>();
     final settings = context.watch<SettingsProvider>();
 
     final lists = provider.lists;
@@ -77,39 +75,15 @@ class AppDrawer extends StatelessWidget {
             ),
             const Divider(height: 1),
 
-            // NAVIGATION HUB
+            // SETTINGS PORTAL
             ListTile(
               contentPadding: const EdgeInsets.symmetric(horizontal: 16.0),
-              leading: const Icon(Icons.tune_rounded, color: Colors.grey),
-              title: const Text('Organize Lists', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+              leading: const Icon(Icons.settings_outlined, color: Colors.grey),
+              title: const Text('Settings', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
               onTap: () {
                 Navigator.pop(context);
-                Navigator.push(context, MaterialPageRoute(builder: (_) => const SettingsScreen()));
+                Navigator.push(context, MaterialPageRoute(builder: (_) => const GlobalSettingsScreen()));
               },
-            ),
-            const Divider(height: 1),
-
-            // FONT SIZE
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text('App Font Size', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.grey)),
-                  const SizedBox(height: 8),
-                  Wrap(
-                    spacing: 8.0,
-                    children: AppFontSize.values.map((size) {
-                      final isSelected = themeProvider.fontSize == size;
-                      return ChoiceChip(
-                        label: Text(size.name.toUpperCase()),
-                        selected: isSelected,
-                        onSelected: (val) => themeProvider.setFontSize(size),
-                      );
-                    }).toList(),
-                  ),
-                ],
-              ),
             ),
             const Divider(height: 1),
 

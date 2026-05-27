@@ -31,11 +31,11 @@ class SettingsScreen extends StatelessWidget {
           children: [
             const Text('New Custom Type', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
             const SizedBox(height: 16),
-            TextField(controller: nameCtrl, decoration: const InputDecoration(labelText: 'Type Name (e.g., Wine Collection)', border: OutlineInputBorder())),
+            TextField(controller: nameCtrl, textCapitalization: TextCapitalization.words, decoration: const InputDecoration(labelText: 'Type Name (e.g., Wine Collection)', border: OutlineInputBorder())),
             const SizedBox(height: 16),
-            TextField(controller: axis1Ctrl, decoration: const InputDecoration(labelText: 'Primary Group (e.g., Region)', border: OutlineInputBorder())),
+            TextField(controller: axis1Ctrl, textCapitalization: TextCapitalization.words, decoration: const InputDecoration(labelText: 'Primary Group (e.g., Region)', border: OutlineInputBorder())),
             const SizedBox(height: 16),
-            TextField(controller: axis2Ctrl, decoration: const InputDecoration(labelText: 'Secondary Group (e.g., Varietal)', border: OutlineInputBorder())),
+            TextField(controller: axis2Ctrl, textCapitalization: TextCapitalization.words, decoration: const InputDecoration(labelText: 'Secondary Group (e.g., Varietal)', border: OutlineInputBorder())),
             const SizedBox(height: 24),
             SizedBox(
               width: double.infinity,
@@ -60,7 +60,15 @@ class SettingsScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final settings = context.watch<SettingsProvider>();
+    final macroProvider = context.watch<MacroListProvider>();
     final theme = Theme.of(context);
+
+    // FIXED: Smart Visibility Engine
+    // Hide system types if they are empty. Always show custom types so they can be deleted.
+    final visibleTypes = settings.allTypes.where((type) {
+      final hasActiveLists = macroProvider.lists.any((l) => l.typeId == type.id);
+      return hasActiveLists || !type.isSystem;
+    }).toList();
 
     return Scaffold(
       backgroundColor: theme.scaffoldBackgroundColor,
@@ -73,22 +81,22 @@ class SettingsScreen extends StatelessWidget {
         ),
         title: Text('Organize Lists', style: theme.textTheme.titleMedium?.copyWith(fontSize: 20, fontWeight: FontWeight.w700)),
       ),
-      body: ListView.builder(
-        itemCount: settings.allTypes.length,
+      body: visibleTypes.isEmpty
+          ? const Center(child: Text('You have no active lists.'))
+          : ListView.builder(
+        itemCount: visibleTypes.length,
         itemBuilder: (context, index) {
-          final type = settings.allTypes[index];
+          final type = visibleTypes[index];
           return ListTile(
             leading: Icon(IconData(type.iconCodePoint, fontFamily: 'MaterialIcons'), color: AppColors.primaryAction),
             title: Text(type.name, style: const TextStyle(fontWeight: FontWeight.w600)),
             subtitle: Text('Manage ${type.axis1Label} & ${type.axis2Label}'),
 
-            // FIXED: Show delete icon ONLY for custom types
             trailing: type.isSystem
                 ? const Icon(Icons.chevron_right_rounded, color: Colors.grey)
                 : IconButton(
               icon: const Icon(Icons.delete_outline, color: AppColors.destructiveAction),
               onPressed: () {
-                // 1. Show severe warning dialog
                 showDialog(
                   context: context,
                   builder: (ctx) => AlertDialog(
@@ -102,7 +110,6 @@ class SettingsScreen extends StatelessWidget {
                       ElevatedButton(
                         style: ElevatedButton.styleFrom(backgroundColor: AppColors.destructiveAction),
                         onPressed: () async {
-                          // 2. Fire the Cascading Delete!
                           Navigator.pop(ctx);
                           await context.read<MacroListProvider>().deleteAllListsOfType(type.id);
                           context.read<SettingsProvider>().deleteCustomType(type.id);
@@ -145,7 +152,7 @@ class _TypeDetailScreenState extends State<TypeDetailScreen> with SingleTickerPr
   bool _requiresSyncOnExit = false;
 
   late TabController _tabController;
-  final Set<String> _selectedIds = {}; // NEW: Multi-select state
+  final Set<String> _selectedIds = {};
 
   @override
   void initState() {
@@ -154,7 +161,7 @@ class _TypeDetailScreenState extends State<TypeDetailScreen> with SingleTickerPr
     _tabController = TabController(length: 3, vsync: this);
     _tabController.addListener(() {
       if (_tabController.indexIsChanging && _selectedIds.isNotEmpty) {
-        setState(() => _selectedIds.clear()); // Clear selections when switching tabs
+        setState(() => _selectedIds.clear());
       }
     });
 
@@ -212,7 +219,6 @@ class _TypeDetailScreenState extends State<TypeDetailScreen> with SingleTickerPr
     }
   }
 
-  // --- BATCH DELETE ACTION ---
   void _deleteSelectedItems() {
     final settings = context.read<SettingsProvider>();
     final macros = context.read<MacroListProvider>();
@@ -239,7 +245,6 @@ class _TypeDetailScreenState extends State<TypeDetailScreen> with SingleTickerPr
     });
   }
 
-  // --- EDIT SHEETS ---
   void _showEditListSheet(BuildContext context, MacroList list) {
     final nameCtrl = TextEditingController(text: list.name);
 
@@ -372,7 +377,6 @@ class _TypeDetailScreenState extends State<TypeDetailScreen> with SingleTickerPr
     return Scaffold(
       backgroundColor: theme.scaffoldBackgroundColor,
 
-      // FIXED: Contextual Action Bar
       appBar: isBatchMode
           ? AppBar(
         backgroundColor: AppColors.primaryAction,
@@ -505,19 +509,12 @@ class _TypeDetailScreenState extends State<TypeDetailScreen> with SingleTickerPr
         ),
       ),
 
-      // HIDE FAB WHEN IN BATCH MODE
       floatingActionButton: isBatchMode ? const SizedBox.shrink() : FloatingActionButton(
         backgroundColor: AppColors.primaryAction,
         child: const Icon(Icons.add, color: Colors.white),
         onPressed: () {
           if (_tabController.index == 0) {
-            // Need to mock a push to create list or just use existing navigation
-            Navigator.pushNamed(context, '/create_list'); // Assuming you have a route, otherwise you can keep the previous import and direct push.
-            // (We'll safely use standard import since CreateListScreen might be needed).
-            // Wait, CreateListScreen is imported in settings_screen? No, it's not.
-            // Let's just pop an alert or use a basic create modal for Lists to stay self-contained.
             _showEditListSheet(context, MacroList(id: DateTime.now().toString(), name: '', typeId: widget.listType.id, createdAt: DateTime.now()));
-            // Note: For true "Create" vs "Edit" on lists, passing an empty MacroList to the sheet works perfectly!
           } else {
             _showEditGroupSheet(context, isAxis1: _tabController.index == 1);
           }
