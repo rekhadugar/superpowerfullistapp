@@ -1270,4 +1270,27 @@ class ListProvider extends ChangeNotifier {
     }
     notifyListeners();
   }
+
+  Future<void> unbanishShoppingItems(List<String> itemIds) async {
+    if (_activeShoppingStore == null) return;
+
+    for (String itemId in itemIds) {
+      final index = _shoppingModeItems.indexWhere((i) => i.id == itemId);
+      if (index == -1) continue;
+
+      ListItem item = _shoppingModeItems[index];
+      final currentExclusions = List<String>.from(item.excludedLocations);
+      final storeLower = _activeShoppingStore!.toLowerCase();
+
+      if (currentExclusions.map((e) => e.toLowerCase()).contains(storeLower)) {
+        currentExclusions.removeWhere((e) => e.toLowerCase() == storeLower);
+        item = item.copyWith(excludedLocations: currentExclusions);
+
+        _shoppingModeItems[index] = item;
+        await _updateOriginListStorage(itemId, item);
+      }
+    }
+    clearSelection(); // Clear multi-select state when done
+    notifyListeners();
+  }
 }

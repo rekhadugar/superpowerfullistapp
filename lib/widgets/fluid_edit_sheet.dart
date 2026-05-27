@@ -61,6 +61,14 @@ class _FluidEditSheetState extends State<FluidEditSheet> {
         }
       }
 
+      // FIXED: Added fallback to search Shopping Mode items if not found in standard lists
+      if (foundItem == null) {
+        final shoppingIndex = provider.shoppingModeItems.indexWhere((item) => item.id == provider.editItemId);
+        if (shoppingIndex != -1) {
+          foundItem = provider.shoppingModeItems[shoppingIndex];
+        }
+      }
+
       if (foundItem != null) {
         final item = foundItem as ListItem;
         if (_draftItem == null || _draftItem!.id != item.id) {

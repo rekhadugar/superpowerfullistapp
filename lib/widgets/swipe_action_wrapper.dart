@@ -13,7 +13,12 @@ class SwipeActionWrapper extends StatefulWidget {
   final VoidCallback onCheckout;
   final bool requireConfirm;
   final bool isBatchModeActive;
-  final bool isCompletedScreen; // NEW: Context awareness flag
+  final bool isCompletedScreen;
+
+  // NEW: Custom overrides for the left swipe action
+  final Color menuColor;
+  final IconData menuIcon;
+  final String menuLabel;
 
   const SwipeActionWrapper({
     Key? key,
@@ -24,7 +29,10 @@ class SwipeActionWrapper extends StatefulWidget {
     required this.onCheckout,
     this.requireConfirm = true,
     this.isBatchModeActive = false,
-    this.isCompletedScreen = false, // NEW
+    this.isCompletedScreen = false,
+    this.menuColor = AppColors.destructiveAction,
+    this.menuIcon = Icons.delete_outline,
+    this.menuLabel = 'Tap To Delete',
   }) : super(key: key);
 
   @override
@@ -405,7 +413,7 @@ class _SwipeActionWrapperState extends State<SwipeActionWrapper> with TickerProv
                           behavior: HitTestBehavior.opaque,
                           child: ClipRect(
                             child: Container(
-                              color: AppColors.destructiveAction,
+                              color: widget.menuColor, // FIXED: Dynamic Color
                               child: Stack(
                                 children: [
                                   Positioned(
@@ -414,7 +422,7 @@ class _SwipeActionWrapperState extends State<SwipeActionWrapper> with TickerProv
                                     bottom: 0,
                                     child: Opacity(
                                       opacity: (1.0 - _confirmAnimation.value).clamp(0.0, 1.0),
-                                      child: const Icon(Icons.delete_outline, color: Colors.white, size: 24.0),
+                                      child: Icon(widget.menuIcon, color: Colors.white, size: 24.0), // FIXED: Dynamic Icon
                                     ),
                                   ),
                                   Positioned(
@@ -425,10 +433,10 @@ class _SwipeActionWrapperState extends State<SwipeActionWrapper> with TickerProv
                                     child: IgnorePointer(
                                       child: Opacity(
                                         opacity: _confirmAnimation.value.clamp(0.0, 1.0),
-                                        child: const Center(
+                                        child: Center(
                                           child: Text(
-                                            'Tap To Delete',
-                                            style: TextStyle(
+                                            widget.menuLabel, // FIXED: Dynamic Label
+                                            style: const TextStyle(
                                               color: Colors.white,
                                               fontWeight: FontWeight.w600,
                                               fontSize: 14.0,

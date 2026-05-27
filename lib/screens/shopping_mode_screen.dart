@@ -54,36 +54,43 @@ class _ShoppingModeScreenState extends State<ShoppingModeScreen> {
     );
   }
 
-  Widget _buildItemCard(ListItem item, String activeStore, ListProvider provider) {
+  Widget _buildItemCard(ListItem item, String activeStore, ListProvider provider, {bool isHidden = false}) {
     final isBatchMode = provider.selectedItemIds.isNotEmpty;
 
     return SwipeActionWrapper(
       itemId: item.id,
-      requireConfirm: true, // FIXED: Re-enabled the Tap to Confirm safety for delete
+      requireConfirm: true,
       isBatchModeActive: isBatchMode,
+
+      // FIXED: Custom orange swipe for active items, blue swipe for hidden items
+      menuColor: isHidden ? AppColors.primaryAction : Colors.orange,
+      menuIcon: isHidden ? Icons.visibility : Icons.visibility_off,
+      menuLabel: isHidden ? 'Tap To Unhide' : 'Tap To Hide',
+
       onCheckout: () {
         provider.toggleShoppingItemsCompletion([item.id]);
         _showActionToast(context, '${item.title} checked off', [item.id], provider);
       },
       onEdit: () {
-        // FIXED: Wired up the Fluid Edit Sheet trigger
         provider.clearAllInteractions();
         provider.setEditItem(item.id);
         provider.setFullEditRequest(true);
       },
       onDelete: () {
-        // FIXED: Mapped the swipe-delete action to "Hide from Store" (Banish)
-        provider.banishShoppingItems([item.id]);
-        ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('${item.title} hidden from $activeStore'))
-        );
+        if (isHidden) {
+          provider.unbanishShoppingItems([item.id]);
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${item.title} restored to $activeStore')));
+        } else {
+          provider.banishShoppingItems([item.id]);
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${item.title} hidden from $activeStore')));
+        }
       },
       child: ListItemCard(
         title: item.title,
         quantity: item.quantity,
         unit: item.unit,
         nWrap: item.nWrap,
-        nTagRows: item.nTagRows > 0 ? item.nTagRows : 1, // Ensure the store tag shows if orphaned
+        nTagRows: item.nTagRows > 0 ? item.nTagRows : 1,
         attributeRows: item.attributeRows,
         type: item.type,
         category: item.category,
@@ -91,16 +98,18 @@ class _ShoppingModeScreenState extends State<ShoppingModeScreen> {
         isHighlighted: false,
         isBatchModeActive: isBatchMode,
         isBatchSelected: provider.selectedItemIds.contains(item.id),
-        isFluidEditing: false,
+        isFluidEditing: provider.editItemId == item.id,
         onTap: () {
           if (isBatchMode) {
             provider.toggleSelection(item.id);
           } else {
-            provider.toggleShoppingItemsCompletion([item.id]);
-            _showActionToast(context, '${item.title} checked off', [item.id], provider);
+            // FIXED: Tap always opens Fluid Edit in Shopping Mode
+            provider.clearAllInteractions();
+            provider.setEditItem(item.id);
+            provider.setFullEditRequest(true);
           }
         },
-        onCheck: () { // ListItemCard still correctly uses onCheck
+        onCheck: () {
           provider.toggleShoppingItemsCompletion([item.id]);
           _showActionToast(context, '${item.title} checked off', [item.id], provider);
         },
@@ -290,7 +299,8 @@ class _ShoppingModeScreenState extends State<ShoppingModeScreen> {
                         title: Text('Hidden from this store (${result.excludedItems.length})', style: const TextStyle(color: Colors.grey, fontWeight: FontWeight.bold)),
                         children: result.excludedItems.map((item) => Opacity(
                           opacity: 0.5,
-                          child: _buildItemCard(item, listProvider.activeShoppingStore!, listProvider),
+                          // FIXED: Pass isHidden: true so it uses the Unhide logic!
+                          child: _buildItemCard(item, listProvider.activeShoppingStore!, listProvider, isHidden: true),
                         )).toList(),
                       ),
                     ),
@@ -303,6 +313,7 @@ class _ShoppingModeScreenState extends State<ShoppingModeScreen> {
           // FIXED: Injected the Edit Sheet so swipe-to-edit can actually render the UI
           const FluidEditSheet(),
 
+          // --- ENHANCEMENT 3: Custom Shopping Mode Batch Bar ---
           // --- ENHANCEMENT 3: Custom Shopping Mode Batch Bar ---
           AnimatedPositioned(
             duration: const Duration(milliseconds: 300),
@@ -318,36 +329,65 @@ class _ShoppingModeScreenState extends State<ShoppingModeScreen> {
                 boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.3), blurRadius: 15, offset: const Offset(0, 5))],
               ),
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20.0),
+                padding: const EdgeInsets.symmetric(horizontal: 16.0),
                 child: Row(
                   children: [
                     IconButton(
                       icon: Icon(Icons.close, color: theme.colorScheme.onInverseSurface),
                       onPressed: () => listProvider.clearSelection(),
                     ),
-                    const SizedBox(width: 8),
+                    const SizedBox(width: 4),
                     Text(
                       '${listProvider.selectedItemIds.length}',
                       style: TextStyle(color: theme.colorScheme.onInverseSurface, fontSize: 18, fontWeight: FontWeight.bold),
                     ),
                     const Spacer(),
-                    TextButton.icon(
-                      icon: const Icon(Icons.visibility_off, color: Colors.white, size: 18),
-                      label: const Text('HIDE', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                      onPressed: () {
-                        final ids = listProvider.selectedItemIds.toList();
-                        listProvider.banishShoppingItems(ids);
-                        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${ids.length} items hidden from ${listProvider.activeShoppingStore}')));
-                      },
-                    ),
-                    TextButton.icon(
-                      icon: const Icon(Icons.check, color: AppColors.primaryAction, size: 18),
-                      label: const Text('CHECK OFF', style: TextStyle(color: AppColors.primaryAction, fontWeight: FontWeight.bold)),
-                      onPressed: () {
-                        final ids = listProvider.selectedItemIds.toList();
-                        listProvider.toggleShoppingItemsCompletion(ids);
-                        _showActionToast(context, '${ids.length} items checked off', ids, listProvider);
-                      },
+
+                    // FIXED: Dynamically check if selected items contain Hidden, Active, or Both
+                    Builder(
+                        builder: (context) {
+                          final selectedItems = listProvider.shoppingModeItems.where((i) => listProvider.selectedItemIds.contains(i.id)).toList();
+                          final storeLower = listProvider.activeShoppingStore!.toLowerCase();
+
+                          final hasHidden = selectedItems.any((i) => i.excludedLocations.map((e)=>e.toLowerCase()).contains(storeLower));
+                          final hasActive = selectedItems.any((i) => !i.excludedLocations.map((e)=>e.toLowerCase()).contains(storeLower));
+
+                          return Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              if (hasHidden)
+                                TextButton.icon(
+                                  icon: const Icon(Icons.visibility, color: Colors.white, size: 16),
+                                  label: const Text('UNHIDE', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                                  onPressed: () {
+                                    final hiddenIds = selectedItems.where((i) => i.excludedLocations.map((e)=>e.toLowerCase()).contains(storeLower)).map((i) => i.id).toList();
+                                    listProvider.unbanishShoppingItems(hiddenIds);
+                                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${hiddenIds.length} items restored')));
+                                  },
+                                ),
+                              if (hasActive)
+                                TextButton.icon(
+                                  icon: const Icon(Icons.visibility_off, color: Colors.white, size: 16),
+                                  label: const Text('HIDE', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                                  onPressed: () {
+                                    final activeIds = selectedItems.where((i) => !i.excludedLocations.map((e)=>e.toLowerCase()).contains(storeLower)).map((i) => i.id).toList();
+                                    listProvider.banishShoppingItems(activeIds);
+                                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${activeIds.length} items hidden')));
+                                  },
+                                ),
+                              if (hasActive)
+                                TextButton.icon(
+                                  icon: const Icon(Icons.check, color: AppColors.primaryAction, size: 16),
+                                  label: const Text('CHECK OFF', style: TextStyle(color: AppColors.primaryAction, fontWeight: FontWeight.bold)),
+                                  onPressed: () {
+                                    final activeIds = selectedItems.where((i) => !i.excludedLocations.map((e)=>e.toLowerCase()).contains(storeLower)).map((i) => i.id).toList();
+                                    listProvider.toggleShoppingItemsCompletion(activeIds);
+                                    _showActionToast(context, '${activeIds.length} items checked off', activeIds, listProvider);
+                                  },
+                                ),
+                            ],
+                          );
+                        }
                     ),
                   ],
                 ),
