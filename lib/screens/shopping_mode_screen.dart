@@ -6,6 +6,7 @@ import '../engine/shopping_mode_engine.dart';
 import '../models/list_item.dart';
 import '../theme/app_theme.dart';
 import '../theme/app_constants.dart';
+import '../widgets/fluid_edit_sheet.dart';
 import '../widgets/list_item_card.dart';
 import '../widgets/swipe_action_wrapper.dart';
 import '../engine/sort_mode_engine.dart'; // Needed for ListItemCard sortMode
@@ -58,17 +59,25 @@ class _ShoppingModeScreenState extends State<ShoppingModeScreen> {
 
     return SwipeActionWrapper(
       itemId: item.id,
-      requireConfirm: false, // Fast swipes in shopping mode
+      requireConfirm: true, // FIXED: Re-enabled the Tap to Confirm safety for delete
       isBatchModeActive: isBatchMode,
-
-      // FIXED: Corrected parameter name from onCheck to onCheckout
       onCheckout: () {
         provider.toggleShoppingItemsCompletion([item.id]);
         _showActionToast(context, '${item.title} checked off', [item.id], provider);
       },
-
-      onEdit: () {},
-      onDelete: () {},
+      onEdit: () {
+        // FIXED: Wired up the Fluid Edit Sheet trigger
+        provider.clearAllInteractions();
+        provider.setEditItem(item.id);
+        provider.setFullEditRequest(true);
+      },
+      onDelete: () {
+        // FIXED: Mapped the swipe-delete action to "Hide from Store" (Banish)
+        provider.banishShoppingItems([item.id]);
+        ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('${item.title} hidden from $activeStore'))
+        );
+      },
       child: ListItemCard(
         title: item.title,
         quantity: item.quantity,
@@ -290,6 +299,9 @@ class _ShoppingModeScreenState extends State<ShoppingModeScreen> {
               ],
             ),
           ),
+
+          // FIXED: Injected the Edit Sheet so swipe-to-edit can actually render the UI
+          const FluidEditSheet(),
 
           // --- ENHANCEMENT 3: Custom Shopping Mode Batch Bar ---
           AnimatedPositioned(
