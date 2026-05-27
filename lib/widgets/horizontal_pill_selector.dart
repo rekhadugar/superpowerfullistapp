@@ -7,7 +7,7 @@ class HorizontalPillSelector extends StatelessWidget {
   final List<String> dictionary;
   final List<String> selectedItems;
   final bool isMultiSelect;
-  final bool isTag; // NEW: Controls the compact, boundary-highlighted styling
+  final bool isTag;
   final Function(List<String>) onSelectionChanged;
 
   const HorizontalPillSelector({
@@ -16,7 +16,7 @@ class HorizontalPillSelector extends StatelessWidget {
     required this.dictionary,
     required this.selectedItems,
     this.isMultiSelect = false,
-    this.isTag = false, // Defaults to false for Store and Category
+    this.isTag = false,
     required this.onSelectionChanged,
   }) : super(key: key);
 
@@ -41,7 +41,14 @@ class HorizontalPillSelector extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final String emptyFallback = title == 'Category' ? 'Everything Else' : (title == 'Store' ? 'Any' : 'None');
+
+    // FIXED: Smart detection for the fallback state instead of hardcoded title checks
+    String emptyFallback = 'None';
+    if (dictionary.contains('Everything Else')) {
+      emptyFallback = 'Everything Else';
+    } else if (dictionary.contains('Any')) {
+      emptyFallback = 'Any';
+    }
 
     List<String> pillsToDisplay = [];
     if (isMultiSelect) {
@@ -100,18 +107,15 @@ class HorizontalPillSelector extends StatelessWidget {
                   : (selectedItems.isNotEmpty && selectedItems.first == item) ||
                   (selectedItems.isEmpty && isFallback);
 
-              // We only show the 'x' if it's selected AND it's not the default fallback state
               final bool showX = isSelected && !isFallback;
 
-              // Style Definitions based on isTag and isSelected
               Color bgColor;
               Color textColor;
               Border border;
 
               if (isSelected) {
                 if (isTag) {
-                  // NEW: Boundary highlighted only for tags
-                  bgColor = theme.scaffoldBackgroundColor; // Match the background
+                  bgColor = theme.scaffoldBackgroundColor;
                   textColor = AppColors.primaryAction;
                   border = Border.all(color: AppColors.primaryAction, width: 1.5);
                 } else {
@@ -138,7 +142,6 @@ class HorizontalPillSelector extends StatelessWidget {
                       }
                       onSelectionChanged(newSelections);
                     } else {
-                      // NEW: Unselect to empty if it's already selected
                       if (isSelected && !isFallback) {
                         onSelectionChanged([]);
                       } else {
@@ -148,7 +151,6 @@ class HorizontalPillSelector extends StatelessWidget {
                   },
                   child: AnimatedContainer(
                     duration: const Duration(milliseconds: 200),
-                    // NEW: Smaller padding for tags
                     padding: EdgeInsets.symmetric(
                         horizontal: isTag ? 12.0 : 16.0,
                         vertical: isTag ? 6.0 : 8.0
@@ -166,7 +168,7 @@ class HorizontalPillSelector extends StatelessWidget {
                           style: TextStyle(
                             color: textColor,
                             fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
-                            fontSize: isTag ? 12.0 : 14.0, // NEW: Smaller text for tags
+                            fontSize: isTag ? 12.0 : 14.0,
                           ),
                         ),
                         if (showX) ...[
@@ -181,7 +183,7 @@ class HorizontalPillSelector extends StatelessWidget {
             }).toList(),
           ),
         ),
-        const SizedBox(height: 12), // Reduced bottom margin slightly to account for the new dividers
+        const SizedBox(height: 12),
       ],
     );
   }

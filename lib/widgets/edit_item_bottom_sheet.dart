@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models/list_item.dart';
 import '../providers/list_provider.dart';
+import '../providers/macro_list_provider.dart';
+import '../providers/settings_provider.dart';
 import '../theme/app_theme.dart';
 import 'horizontal_pill_selector.dart';
 import '../data/mock_global_dictionary.dart';
@@ -26,11 +28,10 @@ class _EditItemBottomSheetState extends State<EditItemBottomSheet> {
 
   late int _quantity;
   late String _unit;
-  late String _selectedCategory;
-  late String _selectedStore;
+  late String _selectedCategory; // Conceptually Axis 2
+  late String _selectedStore;    // Conceptually Axis 1
   late List<String> _selectedTags;
 
-  // SMART PREFILL STATE
   bool _isConfirmationState = false;
   List<SmartItem> _suggestions = [];
 
@@ -66,7 +67,6 @@ class _EditItemBottomSheetState extends State<EditItemBottomSheet> {
     super.dispose();
   }
 
-  // 1. ONLY UPDATE SUGGESTIONS WHILE TYPING
   void _onSearchChanged(String val) {
     if (mounted) {
       setState(() {
@@ -75,7 +75,6 @@ class _EditItemBottomSheetState extends State<EditItemBottomSheet> {
     }
   }
 
-  // 2. EXPLICIT INTENT: TAPPING A SUGGESTION
   void _selectSuggestion(SmartItem item) {
     _titleController.text = item.title;
     _titleFocus.unfocus();
@@ -89,14 +88,12 @@ class _EditItemBottomSheetState extends State<EditItemBottomSheet> {
     });
   }
 
-  // 3. EXPLICIT INTENT: HITTING 'DONE' ON KEYBOARD
   void _onKeyboardDone(String val) {
     final title = val.trim();
     if (title.isEmpty) return;
 
     final provider = context.read<ListProvider>();
 
-    // Quick Save from Discovery State (Grabs the user's most popular variant of this item)
     if (!_isConfirmationState) {
       final match = provider.getMostPopularVariant(title);
       if (match != null) {
@@ -106,19 +103,14 @@ class _EditItemBottomSheetState extends State<EditItemBottomSheet> {
       }
     }
 
-    // Standard Save (Using currently selected pills)
     widget.onSave(title, _selectedTags, _selectedStore, _selectedCategory, _quantity, _unit);
     Navigator.pop(context);
   }
 
-  // 4. MANUAL EXECUTIONS: TAPPING THE SAVE BUTTON
   void _onSaveButtonTapped() {
     final title = _titleController.text.trim();
     if (title.isEmpty) return;
 
-    // Standard Save
-    // Note: The ListProvider's addItem/editItem functions now handle the exact-match
-    // merging automatically behind the scenes!
     widget.onSave(title, _selectedTags, _selectedStore, _selectedCategory, _quantity, _unit);
     Navigator.pop(context);
   }
@@ -147,7 +139,6 @@ class _EditItemBottomSheetState extends State<EditItemBottomSheet> {
     }
 
     children.addAll(_suggestions.map((item) {
-      // NEW: Check if this specific variant is active
       final isActiveVariant = provider.isActiveVariant(item.title, item.category, item.store, item.tags);
 
       return ListTile(
@@ -171,12 +162,19 @@ class _EditItemBottomSheetState extends State<EditItemBottomSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final provider = context.watch<ListProvider>();
+    final listProvider = context.watch<ListProvider>();
+    final macroProvider = context.watch<MacroListProvider>();
+    final settings = context.watch<SettingsProvider>();
     final theme = Theme.of(context);
 
-    final categoriesDict = provider.activeCategoryDictionary;
-    final storesDict = provider.activeStoreDictionary;
-    final tagsDict = provider.activeTagDictionary;
+    // --- ALIAS MAPPING ENGINE ---
+    final typeId = macroProvider.activeList?.typeId ?? 'sys_shopping';
+    final appType = settings.getTypeById(typeId);
+
+    // Fetch the correct dictionary for THIS specific list type
+    final axis1Dict = settings.getAxis1Groups(typeId).map((g) => g.name).toList();
+    final axis2Dict = settings.getAxis2Groups(typeId).map((g) => g.name).toList();
+    final tagsDict = listProvider.activeTagDictionary;
 
     return Container(
       decoration: BoxDecoration(
@@ -236,7 +234,7 @@ class _EditItemBottomSheetState extends State<EditItemBottomSheet> {
             const SizedBox(height: 16.0),
 
             if (!_isConfirmationState)
-              _buildSuggestions(provider, theme)
+              _buildSuggestions(listProvider, theme)
             else ...[
               Row(
                 children: [
@@ -272,8 +270,8 @@ class _EditItemBottomSheetState extends State<EditItemBottomSheet> {
               const Divider(height: 32.0, thickness: 1.0),
 
               HorizontalPillSelector(
-                title: 'Category',
-                dictionary: categoriesDict,
+                title: appType.axis2Label, // FIXED: Dynamic Label
+                dictionary: axis2Dict,     // FIXED: Dynamic Dictionary
                 selectedItems: _selectedCategory.isNotEmpty ? [_selectedCategory] : [],
                 isMultiSelect: false,
                 onSelectionChanged: (vals) => setState(() => _selectedCategory = vals.isNotEmpty ? vals.first : ''),
@@ -282,8 +280,8 @@ class _EditItemBottomSheetState extends State<EditItemBottomSheet> {
               const Divider(height: 32.0, thickness: 1.0),
 
               HorizontalPillSelector(
-                title: 'Store',
-                dictionary: storesDict,
+                title: appType.axis1Label, // FIXED: Dynamic Label
+                dictionary: axis1Dict,     // FIXED: Dynamic Dictionary
                 selectedItems: _selectedStore.isNotEmpty ? [_selectedStore] : [],
                 isMultiSelect: false,
                 onSelectionChanged: (vals) => setState(() => _selectedStore = vals.isNotEmpty ? vals.first : ''),

@@ -1,19 +1,26 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/list_provider.dart';
+import '../providers/macro_list_provider.dart';
+import '../providers/settings_provider.dart';
 import '../theme/app_theme.dart';
 
 class BatchActionBar extends StatelessWidget {
-  final bool isCompletedScreen; // NEW: Context awareness flag
+  final bool isCompletedScreen;
 
   const BatchActionBar({
     Key? key,
-    this.isCompletedScreen = false, // Default to false for the main screen
+    this.isCompletedScreen = false,
   }) : super(key: key);
 
   void _showTargetListSelector(BuildContext context, bool isCopy) {
     final provider = context.read<ListProvider>();
-    final currentType = provider.currentListType;
+    final macroProvider = context.read<MacroListProvider>();
+    final settings = context.read<SettingsProvider>();
+
+    // ALIAS MAPPING: Dynamically fetch the current list type name
+    final typeId = macroProvider.activeList?.typeId ?? 'sys_shopping';
+    final currentTypeName = settings.getTypeById(typeId).name;
 
     showModalBottomSheet(
       context: context,
@@ -34,7 +41,7 @@ class BatchActionBar extends StatelessWidget {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  'Showing your other $currentType lists.',
+                  'Showing your other $currentTypeName lists.', // FIXED
                   style: TextStyle(color: Colors.grey.shade600, fontSize: 14),
                 ),
                 const SizedBox(height: 16),
@@ -47,7 +54,7 @@ class BatchActionBar extends StatelessWidget {
                       final mockTargetListId = 'mock_list_id_$index';
                       return ListTile(
                         leading: const Icon(Icons.list_alt, color: AppColors.primaryAction),
-                        title: Text('My Other Shopping List ${index + 1}'),
+                        title: Text('My Other $currentTypeName List ${index + 1}'), // FIXED
                         onTap: () {
                           if (isCopy) {
                             provider.copySelectedToTargetList(mockTargetListId);
@@ -90,14 +97,11 @@ class BatchActionBar extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 12.0),
           child: Row(
             children: [
-              // Deselect Button
               IconButton(
                 icon: const Icon(Icons.close_rounded, color: Colors.white70),
                 onPressed: () => provider.clearSelection(),
                 tooltip: 'Clear Selection',
               ),
-
-              // Count Indicator
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 6.0),
                 decoration: BoxDecoration(
@@ -109,38 +113,28 @@ class BatchActionBar extends StatelessWidget {
                   style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
                 ),
               ),
-
               const Spacer(),
-
-              // DYNAMIC ACTIONS BASED ON CONTEXT
               if (isCompletedScreen) ...[
-                // Restore Button (Only on Completed Screen)
                 TextButton.icon(
                   icon: const Icon(Icons.restore, color: Colors.white),
                   label: const Text('Restore', style: TextStyle(color: Colors.white)),
                   onPressed: () {
-                    // Reusing checkSelectedItems because toggle logic pulls it back to active
                     provider.restoreItems(provider.selectedItemIds.toList());
                     provider.clearSelection();
                   },
                 ),
               ] else ...[
-                // Move Button (Only on Active Screen)
                 IconButton(
                   icon: const Icon(Icons.drive_file_move_outline, color: Colors.white),
                   tooltip: 'Move',
                   onPressed: () => _showTargetListSelector(context, false),
                 ),
-
-                // Copy Button (Only on Active Screen)
                 IconButton(
                   icon: const Icon(Icons.copy_rounded, color: Colors.white),
                   tooltip: 'Copy',
                   onPressed: () => _showTargetListSelector(context, true),
                 ),
               ],
-
-              // Delete Button (Available on both, but label changes conceptually)
               IconButton(
                 icon: const Icon(Icons.delete_outline_rounded, color: Colors.redAccent),
                 tooltip: 'Delete',

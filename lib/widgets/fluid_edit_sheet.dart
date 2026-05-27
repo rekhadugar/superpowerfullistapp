@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/list_provider.dart';
+import '../providers/macro_list_provider.dart';
+import '../providers/settings_provider.dart';
 import '../models/list_item.dart';
 import '../theme/app_theme.dart';
 import 'horizontal_pill_selector.dart';
@@ -38,7 +40,6 @@ class _FluidEditSheetState extends State<FluidEditSheet> {
     super.dispose();
   }
 
-  // FIXED: Safely sync data before the build phase to prevent UI freezing!
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
@@ -48,14 +49,12 @@ class _FluidEditSheetState extends State<FluidEditSheet> {
 
   void _syncDraftWithProvider(ListProvider provider) {
     if (provider.editItemId != null) {
-      // 1. Search Active List First
       int itemIndex = provider.displayList.indexWhere((item) => item is ListItem && item.id == provider.editItemId);
       dynamic foundItem;
 
       if (itemIndex != -1) {
         foundItem = provider.displayList[itemIndex];
       } else {
-        // 2. Search Completed List if not found in Active
         itemIndex = provider.checkedDisplayList.indexWhere((item) => item is ListItem && item.id == provider.editItemId);
         if (itemIndex != -1) {
           foundItem = provider.checkedDisplayList[itemIndex];
@@ -64,7 +63,6 @@ class _FluidEditSheetState extends State<FluidEditSheet> {
 
       if (foundItem != null) {
         final item = foundItem as ListItem;
-        // Only override the draft if it's a completely new item selection
         if (_draftItem == null || _draftItem!.id != item.id) {
           _draftItem = item.copyWith();
           _titleController.text = item.title;
@@ -76,7 +74,6 @@ class _FluidEditSheetState extends State<FluidEditSheet> {
     }
   }
 
-  // NEW: Dedicated save function for the separated architecture
   void _saveDraft(ListProvider provider) {
     if (_draftItem != null) {
       provider.editItem(
@@ -85,17 +82,15 @@ class _FluidEditSheetState extends State<FluidEditSheet> {
         _draftItem!.attributeRows,
         _draftItem!.type,
         _draftItem!.category,
-        _draftItem!.quantity, // Use the local draft quantity
+        _draftItem!.quantity,
         _draftItem!.unit,
       );
     }
-    // Close the sheet gracefully
     provider.setEditItem(null);
     provider.setFullEditRequest(false);
     _titleFocus.unfocus();
   }
 
-  // HELPER: To render the action buttons efficiently
   Widget _buildPillButton(IconData icon, String label, VoidCallback onTap, {Color color = AppColors.primaryAction}) {
     return Expanded(
       child: GestureDetector(
@@ -150,7 +145,6 @@ class _FluidEditSheetState extends State<FluidEditSheet> {
         ),
         child: Column(
           children: [
-            // TOP BAR: Anchored permanently to the top of the container
             GestureDetector(
               behavior: HitTestBehavior.opaque,
               onVerticalDragEnd: (details) {
@@ -161,7 +155,7 @@ class _FluidEditSheetState extends State<FluidEditSheet> {
                     _titleFocus.unfocus();
                   } else {
                     _titleFocus.unfocus();
-                    provider.setEditItem(null); // Safely close sheet
+                    provider.setEditItem(null);
                   }
                 } else if (velocity < -200) {
                   provider.setFullEditRequest(true);
@@ -175,7 +169,7 @@ class _FluidEditSheetState extends State<FluidEditSheet> {
                     TextButton(
                       onPressed: () {
                         _titleFocus.unfocus();
-                        provider.setEditItem(null); // Cancel closes sheet natively
+                        provider.setEditItem(null);
                         provider.setFullEditRequest(false);
                       },
                       child: Text('Cancel', style: TextStyle(color: Theme.of(context).textTheme.bodyMedium?.color, fontSize: 16)),
@@ -189,7 +183,7 @@ class _FluidEditSheetState extends State<FluidEditSheet> {
                       ),
                     ),
                     TextButton(
-                      onPressed: () => _saveDraft(provider), // Triggers specific save execution
+                      onPressed: () => _saveDraft(provider),
                       child: const Text('Save', style: TextStyle(color: AppColors.primaryAction, fontSize: 16, fontWeight: FontWeight.bold)),
                     ),
                   ],
@@ -198,13 +192,11 @@ class _FluidEditSheetState extends State<FluidEditSheet> {
             ),
 
             Expanded(
-              // SHIELD: Stops inner scrolls from bubbling to the background list
               child: NotificationListener<ScrollNotification>(
                 onNotification: (_) => true,
                 child: SingleChildScrollView(
                   physics: isFull ? const BouncingScrollPhysics() : const NeverScrollableScrollPhysics(),
                   keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-                  // DYNAMIC PADDING: Pushes contents up above the keyboard natively
                   padding: EdgeInsets.only(left: 20.0, right: 20.0, bottom: keyboardHeight + 20.0),
                   child: _buildSingleEditView(provider, isFull),
                 ),
@@ -218,6 +210,17 @@ class _FluidEditSheetState extends State<FluidEditSheet> {
 
   Widget _buildSingleEditView(ListProvider provider, bool isFull) {
     if (_draftItem == null) return const SizedBox.shrink();
+
+    // --- ALIAS MAPPING ENGINE ---
+    final macroProvider = context.watch<MacroListProvider>();
+    final settings = context.watch<SettingsProvider>();
+
+    final typeId = macroProvider.activeList?.typeId ?? 'sys_shopping';
+    final appType = settings.getTypeById(typeId);
+
+    final axis1Dict = settings.getAxis1Groups(typeId).map((g) => g.name).toList();
+    final axis2Dict = settings.getAxis2Groups(typeId).map((g) => g.name).toList();
+    final tagsDict = provider.activeTagDictionary;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -241,7 +244,6 @@ class _FluidEditSheetState extends State<FluidEditSheet> {
               decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12.0)),
               child: Row(
                 children: [
-                  // FIXED: Updates quantity locally on the draft before hitting save
                   IconButton(icon: const Icon(Icons.remove), onPressed: () => setState(() => _draftItem = _draftItem!.copyWith(quantity: (_draftItem!.quantity - 1).clamp(0, 99)))),
                   SizedBox(width: 24, child: Text('${_draftItem!.quantity}', textAlign: TextAlign.center, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold))),
                   IconButton(icon: const Icon(Icons.add), onPressed: () => setState(() => _draftItem = _draftItem!.copyWith(quantity: (_draftItem!.quantity + 1).clamp(0, 99)))),
@@ -275,8 +277,6 @@ class _FluidEditSheetState extends State<FluidEditSheet> {
                 _titleFocus.requestFocus();
               }, color: AppColors.primaryAction),
               const SizedBox(width: 8),
-
-              // FIXED: Local copy override for separated state
               _buildPillButton(Icons.copy_rounded, 'Copy', () {
                 provider.addItem(
                   '${_draftItem!.title} (Copy)', _draftItem!.attributeRows, _draftItem!.type, _draftItem!.category, _draftItem!.quantity, _draftItem!.unit,
@@ -284,8 +284,6 @@ class _FluidEditSheetState extends State<FluidEditSheet> {
                 provider.setEditItem(null);
               }),
               const SizedBox(width: 8),
-
-              // FIXED: Local delete override for separated state
               _buildPillButton(Icons.delete_outline_rounded, 'Delete', () {
                 final id = provider.deleteItem(_draftItem!.id);
                 provider.setEditItem(null);
@@ -302,8 +300,8 @@ class _FluidEditSheetState extends State<FluidEditSheet> {
           const Divider(height: 32.0, thickness: 1.0),
 
           HorizontalPillSelector(
-            title: 'Category',
-            dictionary: provider.activeCategoryDictionary,
+            title: appType.axis2Label, // FIXED: Dynamic Label
+            dictionary: axis2Dict,     // FIXED: Dynamic Dictionary
             selectedItems: _draftItem!.category != 'Everything Else' ? [_draftItem!.category] : [],
             isMultiSelect: false,
             onSelectionChanged: (vals) => setState(() => _draftItem = _draftItem!.copyWith(category: vals.isNotEmpty ? vals.first : '')),
@@ -312,8 +310,8 @@ class _FluidEditSheetState extends State<FluidEditSheet> {
           const Divider(height: 32.0, thickness: 1.0),
 
           HorizontalPillSelector(
-            title: 'Store',
-            dictionary: provider.activeStoreDictionary,
+            title: appType.axis1Label, // FIXED: Dynamic Label
+            dictionary: axis1Dict,     // FIXED: Dynamic Dictionary
             selectedItems: _draftItem!.type != 'Any' ? [_draftItem!.type] : [],
             isMultiSelect: false,
             onSelectionChanged: (vals) => setState(() => _draftItem = _draftItem!.copyWith(type: vals.isNotEmpty ? vals.first : '')),
@@ -323,7 +321,7 @@ class _FluidEditSheetState extends State<FluidEditSheet> {
 
           HorizontalPillSelector(
             title: 'Tags',
-            dictionary: provider.activeTagDictionary,
+            dictionary: tagsDict,
             selectedItems: _draftItem!.attributeRows,
             isMultiSelect: true,
             isTag: true,

@@ -2,6 +2,9 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:provider/provider.dart'; // NEW
+import '../providers/macro_list_provider.dart'; // NEW
+import '../providers/settings_provider.dart'; // NEW
 import '../theme/app_constants.dart';
 import '../theme/app_theme.dart';
 import '../engine/sort_mode_engine.dart';
@@ -20,7 +23,6 @@ class ListItemCard extends StatefulWidget {
   final bool isDragging;
   final bool isFeedback;
 
-  // PRODUCTION REFACTOR: STRICTLY SEPARATED CONCERNS
   final bool isBatchModeActive;
   final bool isBatchSelected;
   final bool isFluidEditing;
@@ -59,7 +61,6 @@ class _ListItemCardState extends State<ListItemCard> with SingleTickerProviderSt
   late AnimationController _flashController;
   late Animation<Color?> _colorAnimation;
 
-  // --- PASSIVE DUAL-INTENT STATE ---
   Offset? _startPosition;
   bool _isGrabbed = false;
   bool _hasMoved = false;
@@ -102,7 +103,7 @@ class _ListItemCardState extends State<ListItemCard> with SingleTickerProviderSt
   }
 
   void _handleTap() {
-    if (_wasLongPressed) return; // Absorb rogue taps from the gesture arena
+    if (_wasLongPressed) return;
 
     if (widget.isBatchModeActive) {
       widget.onToggleSelection();
@@ -111,7 +112,6 @@ class _ListItemCardState extends State<ListItemCard> with SingleTickerProviderSt
     }
   }
 
-  // --- PASSIVE POINTER TRACKING ---
   void _onPointerDown(PointerDownEvent event) {
     if (widget.isBatchModeActive) return;
 
@@ -152,14 +152,11 @@ class _ListItemCardState extends State<ListItemCard> with SingleTickerProviderSt
         if (mounted) _wasLongPressed = false;
       });
 
-      // INTENT A: Held and released safely. Trigger selection!
       widget.onToggleSelection();
     }
   }
 
   void _onPointerCancel(PointerEvent event) {
-    // INTENT B: ReorderableListView stole the pointer to start dragging!
-    // Cancel everything and let the drop-in-place fallback handle it.
     _grabTimer?.cancel();
     _wasLongPressed = true;
     if (mounted) setState(() => _isGrabbed = false);
@@ -190,8 +187,21 @@ class _ListItemCardState extends State<ListItemCard> with SingleTickerProviderSt
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final textScale = MediaQuery.textScalerOf(context).scale(1.0);
-    final String contextBadgeText = widget.sortMode == SortMode.categories ? widget.type : widget.category;
-    final IconData contextIcon = widget.sortMode == SortMode.categories ? Icons.storefront : Icons.category_outlined;
+
+    // --- ALIAS MAPPING ENGINE ---
+    final macroProvider = context.watch<MacroListProvider>();
+    final settings = context.watch<SettingsProvider>();
+    final typeId = macroProvider.activeList?.typeId ?? 'sys_shopping';
+    final appType = settings.getTypeById(typeId);
+
+    // If sorting by Categories (Axis 2), display the Store (Axis 1) badge for context
+    final bool showAxis1 = widget.sortMode == SortMode.categories;
+    final String contextBadgeText = showAxis1 ? widget.type : widget.category;
+
+    // Dynamically assign the list's main icon to Axis 1, and a generic folder to Axis 2
+    final IconData contextIcon = showAxis1
+        ? IconData(appType.iconCodePoint, fontFamily: 'MaterialIcons')
+        : Icons.folder_outlined;
 
     return AnimatedScale(
       scale: _isGrabbed ? 0.96 : 1.0,
@@ -208,7 +218,6 @@ class _ListItemCardState extends State<ListItemCard> with SingleTickerProviderSt
           child: AnimatedBuilder(
             animation: _colorAnimation,
             builder: (context, child) {
-              // COMBINED HIGHLIGHT LOGIC: Highlights if part of a batch OR if currently fluid editing
               Color? backgroundColor = (widget.isBatchSelected || widget.isFluidEditing)
                   ? AppColors.primaryAction.withOpacity(0.08)
                   : theme.cardColor;
