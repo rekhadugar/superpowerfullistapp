@@ -240,36 +240,41 @@ class _ShoppingModeScreenState extends State<ShoppingModeScreen> {
                   ),
                 ),
 
-                ...sortedMainCategories.expand((category) {
+                // 1. Render Main Categories with Slivers (Sticky!)
+                ...sortedMainCategories.map((category) {
                   final mainItems = result.mainItemsByCategory[category] ?? [];
                   final alsoAvailable = result.alsoAvailableByCategory[category] ?? [];
 
-                  return [
-                    SliverPersistentHeader(
-                      pinned: true,
-                      delegate: _CategoryHeaderDelegate(category, theme.scaffoldBackgroundColor),
-                    ),
-                    SliverList(
-                      delegate: SliverChildListDelegate([
-                        ...mainItems.map((item) => _buildItemCard(item, listProvider.activeShoppingStore!, listProvider)),
-                        if (alsoAvailable.isNotEmpty)
-                          Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 4.0),
-                            child: Theme(
-                              data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
-                              child: ExpansionTile(
-                                collapsedBackgroundColor: theme.cardColor,
-                                backgroundColor: theme.cardColor,
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: Colors.grey.shade300)),
-                                collapsedShape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: Colors.grey.shade300)),
-                                title: Text('Also available here (${alsoAvailable.length})', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
-                                children: alsoAvailable.map((item) => _buildItemCard(item, listProvider.activeShoppingStore!, listProvider)).toList(),
+                  // FIXED: SliverMainAxisGroup binds the header to the list,
+                  // causing the next header to natively push this one off screen.
+                  return SliverMainAxisGroup(
+                    slivers: [
+                      SliverPersistentHeader(
+                        pinned: true,
+                        delegate: _CategoryHeaderDelegate(category, theme.scaffoldBackgroundColor),
+                      ),
+                      SliverList(
+                        delegate: SliverChildListDelegate([
+                          ...mainItems.map((item) => _buildItemCard(item, listProvider.activeShoppingStore!, listProvider)),
+                          if (alsoAvailable.isNotEmpty)
+                            Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 4.0),
+                              child: Theme(
+                                data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+                                child: ExpansionTile(
+                                  collapsedBackgroundColor: theme.cardColor,
+                                  backgroundColor: theme.cardColor,
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: Colors.grey.shade300)),
+                                  collapsedShape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: Colors.grey.shade300)),
+                                  title: Text('Also available here (${alsoAvailable.length})', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
+                                  children: alsoAvailable.map((item) => _buildItemCard(item, listProvider.activeShoppingStore!, listProvider)).toList(),
+                                ),
                               ),
                             ),
-                          ),
-                      ]),
-                    ),
-                  ];
+                        ]),
+                      ),
+                    ],
+                  );
                 }).toList(),
 
                 SliverList(
@@ -357,24 +362,26 @@ class _ShoppingModeScreenState extends State<ShoppingModeScreen> {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
 
-                  // ROW 1: Close, Count, Spacer, Delete
+                  // ROW 1: Close, Count (Centered), Delete
                   Row(
                     children: [
                       GestureDetector(
                         onTap: () => listProvider.clearSelection(),
                         child: Icon(Icons.close, color: theme.colorScheme.onInverseSurface, size: 24),
                       ),
-                      const SizedBox(width: 8),
-                      Text(
-                        '${listProvider.selectedItemIds.length} Selected',
-                        style: TextStyle(color: theme.colorScheme.onInverseSurface, fontSize: 16, fontWeight: FontWeight.bold),
+                      Expanded( // FIXED: Expands to perfectly center the text between the two 24px icons
+                        child: Text(
+                          '${listProvider.selectedItemIds.length} Selected',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(color: theme.colorScheme.onInverseSurface, fontSize: 16, fontWeight: FontWeight.bold),
+                        ),
                       ),
-                      const Spacer(),
                       GestureDetector(
                         onTap: () {
                           final ids = listProvider.selectedItemIds.toList();
                           listProvider.deleteShoppingItems(ids);
-                          _showActionToast(context, '${ids.length} items deleted', null); // Null skips the Undo
+                          // FIXED: Now passes the Undo callback to restore deleted items
+                          _showActionToast(context, '${ids.length} items deleted', () => listProvider.restoreDeletedShoppingItems(ids));
                         },
                         child: const Icon(Icons.delete_outline, color: AppColors.destructiveAction, size: 24),
                       ),

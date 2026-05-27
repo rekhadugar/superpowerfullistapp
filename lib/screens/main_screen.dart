@@ -114,19 +114,16 @@ class _MainScreenState extends State<MainScreen> {
 
   // FIXED: Auto-dodging SnackBar Helper
   // FIXED: Flush Geometry Masking SnackBar with Auto-Contrast
-  void _showActionToast(BuildContext context, String message, List<String> itemIds) {
+  // FIXED: Now accepts a dynamic onUndo callback to prevent unmounted context crashes
+  void _showActionToast(BuildContext context, String message, VoidCallback? onUndo) {
     final theme = Theme.of(context);
-
     ScaffoldMessenger.of(context).clearSnackBars();
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         padding: EdgeInsets.zero,
-        behavior: SnackBarBehavior.fixed, // FIXED: Snaps perfectly to the screen edges
-        backgroundColor: theme.colorScheme.inverseSurface, // FIXED: Dark in light mode, Light in dark mode
-        elevation: 0, // Sits perfectly flat like the bottom bar
-
-        // Flutter automatically adds the bottom safe area to 'fixed' snackbars,
-        // so we only need to specify our 70px bar height here.
+        behavior: SnackBarBehavior.fixed,
+        backgroundColor: theme.colorScheme.inverseSurface,
+        elevation: 0,
         content: SizedBox(
           height: 70.0,
           child: Padding(
@@ -134,22 +131,16 @@ class _MainScreenState extends State<MainScreen> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Expanded(
-                  child: Text(
-                    message,
-                    style: TextStyle(
-                        color: theme.colorScheme.onInverseSurface, // FIXED: Contrasting text color
-                        fontWeight: FontWeight.bold
-                    ),
+                Expanded(child: Text(message, style: TextStyle(color: theme.colorScheme.onInverseSurface, fontWeight: FontWeight.bold))),
+
+                if (onUndo != null)
+                  TextButton(
+                    onPressed: () {
+                      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+                      onUndo();
+                    },
+                    child: const Text('Undo', style: TextStyle(color: AppColors.primaryAction, fontWeight: FontWeight.bold)),
                   ),
-                ),
-                TextButton(
-                  onPressed: () {
-                    ScaffoldMessenger.of(context).hideCurrentSnackBar();
-                    context.read<ListProvider>().restoreItems(itemIds);
-                  },
-                  child: const Text('Undo', style: TextStyle(color: AppColors.primaryAction, fontWeight: FontWeight.bold)),
-                ),
               ],
             ),
           ),
@@ -329,8 +320,9 @@ class _MainScreenState extends State<MainScreen> {
                           isFluidEditing: listProvider.editItemId == item.id,
 
                           onCheck: () {
-                            final id = context.read<ListProvider>().toggleCompletion(item.id);
-                            _showActionToast(context, '${item.title} checked off', [id]);
+                            final id = listProvider.toggleCompletion(item.id);
+                            // FIXED: Uses the top-level listProvider reference, preventing the crash
+                            _showActionToast(context, '${item.title} checked off', () => listProvider.restoreItems([id]));
                           },
                           onTap: () {
                             if (listProvider.openSwipeItemId.value != null) {
@@ -359,8 +351,9 @@ class _MainScreenState extends State<MainScreen> {
                             requireConfirm: true,
                             isBatchModeActive: listProvider.isBatchModeActive,
                             onCheckout: () {
-                              final id = context.read<ListProvider>().toggleCompletion(item.id);
-                              _showActionToast(context, '${item.title} checked off', [id]);
+                              final id = listProvider.toggleCompletion(item.id);
+                              // FIXED: Uses the top-level listProvider reference, preventing the crash
+                              _showActionToast(context, '${item.title} checked off', () => listProvider.restoreItems([id]));
                             },
                             onEdit: () {
                               listProvider.clearAllInteractions();
@@ -368,8 +361,9 @@ class _MainScreenState extends State<MainScreen> {
                               listProvider.setFullEditRequest(true);
                             },
                             onDelete: () {
-                              final id = context.read<ListProvider>().deleteItem(item.id);
-                              _showActionToast(context, '${item.title} deleted', [id]);
+                              final id = listProvider.deleteItem(item.id);
+                              // FIXED: Safely restores item without relying on the destroyed list item context
+                              _showActionToast(context, '${item.title} deleted', () => listProvider.restoreItems([id]));
                             },
                             child: coreCard,
                           ),

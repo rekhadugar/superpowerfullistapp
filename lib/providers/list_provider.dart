@@ -1286,6 +1286,50 @@ class ListProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> restoreDeletedShoppingItems(List<String> itemIds) async {
+    for (String itemId in itemIds) {
+      final listId = _itemOriginMap[itemId];
+      if (listId == null) continue;
+
+      final prefs = await SharedPreferences.getInstance();
+      final String? itemsJson = prefs.getString('items_$listId');
+      if (itemsJson != null) {
+        final List<dynamic> decoded = json.decode(itemsJson);
+        final List<ListItem> listItems = decoded.map((m) => ListItem.fromMap(m)).toList();
+
+        final listIndex = listItems.indexWhere((i) => i.id == itemId);
+        if (listIndex != -1) {
+          ListItem item = listItems[listIndex];
+          item = item.copyWith(isDeleted: false);
+          listItems[listIndex] = item;
+          await prefs.setString('items_$listId', json.encode(listItems.map((i) => i.toMap()).toList()));
+
+          // Put it back in the correct array
+          if (!item.isCompleted) {
+            _shoppingModeItems.insert(0, item);
+          } else {
+            _shoppingCompletedItems.insert(0, item);
+          }
+        }
+      }
+
+      // Keep main UI synced if we happen to be viewing the same list
+      if (_currentListId == listId) {
+        final activeIndex = _items.indexWhere((i) => i.id == itemId);
+        if (activeIndex != -1) {
+          _items[activeIndex] = _items[activeIndex].copyWith(isDeleted: false);
+        }
+      }
+    }
+
+    if (_currentListId != null) {
+      _buildDisplayList();
+      _buildCheckedDisplayList();
+    }
+
+    notifyListeners();
+  }
+
   Future<void> banishShoppingItems(List<String> itemIds) async {
     if (_activeShoppingStore == null) return;
 

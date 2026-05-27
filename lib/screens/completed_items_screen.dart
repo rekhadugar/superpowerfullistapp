@@ -67,9 +67,9 @@ class _CompletedItemsScreenState extends State<CompletedItemsScreen> {
     }
   }
 
-  void _showActionToast(BuildContext context, String message, List<String> itemIds) {
+  // FIXED: Now accepts a dynamic onUndo callback to prevent unmounted context crashes
+  void _showActionToast(BuildContext context, String message, VoidCallback? onUndo) {
     final theme = Theme.of(context);
-
     ScaffoldMessenger.of(context).clearSnackBars();
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -77,7 +77,6 @@ class _CompletedItemsScreenState extends State<CompletedItemsScreen> {
         behavior: SnackBarBehavior.fixed,
         backgroundColor: theme.colorScheme.inverseSurface,
         elevation: 0,
-
         content: SizedBox(
           height: 70.0,
           child: Padding(
@@ -85,22 +84,16 @@ class _CompletedItemsScreenState extends State<CompletedItemsScreen> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Expanded(
-                  child: Text(
-                    message,
-                    style: TextStyle(
-                        color: theme.colorScheme.onInverseSurface,
-                        fontWeight: FontWeight.bold
-                    ),
+                Expanded(child: Text(message, style: TextStyle(color: theme.colorScheme.onInverseSurface, fontWeight: FontWeight.bold))),
+
+                if (onUndo != null)
+                  TextButton(
+                    onPressed: () {
+                      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+                      onUndo();
+                    },
+                    child: const Text('Undo', style: TextStyle(color: AppColors.primaryAction, fontWeight: FontWeight.bold)),
                   ),
-                ),
-                TextButton(
-                  onPressed: () {
-                    ScaffoldMessenger.of(context).hideCurrentSnackBar();
-                    context.read<ListProvider>().restoreItems(itemIds);
-                  },
-                  child: const Text('Undo', style: TextStyle(color: AppColors.primaryAction, fontWeight: FontWeight.bold)),
-                ),
               ],
             ),
           ),
@@ -208,11 +201,10 @@ class _CompletedItemsScreenState extends State<CompletedItemsScreen> {
                           onCheck: () { // (And do the exact same for onCheckout below it)
                             if (widget.isShoppingMode) {
                               listProvider.restoreShoppingItems([item.id]);
-                              _showActionToast(context, '${item.title} restored', [item.id]);
+                              _showActionToast(context, '${item.title} restored', () => listProvider.toggleShoppingItemsCompletion([item.id]));
                             } else {
-                              // FIXED: Corrected the method name to match your provider
                               final id = listProvider.toggleCompletion(item.id);
-                              _showActionToast(context, '${item.title} restored', [id]);
+                              _showActionToast(context, '${item.title} restored', () => listProvider.toggleCompletion(id)); // Undo restore
                             }
                           },
                           onTap: () {
@@ -240,14 +232,13 @@ class _CompletedItemsScreenState extends State<CompletedItemsScreen> {
                           isBatchModeActive: listProvider.isBatchModeActive,
                           isCompletedScreen: true,
 
-                          onCheckout: () { // (And do the exact same for onCheckout below it)
+                          onCheckout: () {
                             if (widget.isShoppingMode) {
                               listProvider.restoreShoppingItems([item.id]);
-                              _showActionToast(context, '${item.title} restored', [item.id]);
+                              _showActionToast(context, '${item.title} restored', () => listProvider.toggleShoppingItemsCompletion([item.id]));
                             } else {
-                              // FIXED: Corrected the method name to match your provider
                               final id = listProvider.toggleCompletion(item.id);
-                              _showActionToast(context, '${item.title} restored', [id]);
+                              _showActionToast(context, '${item.title} restored', () => listProvider.toggleCompletion(id)); // Undo restore
                             }
                           },
                           onEdit: () {
@@ -258,10 +249,11 @@ class _CompletedItemsScreenState extends State<CompletedItemsScreen> {
                           onDelete: () {
                             if (widget.isShoppingMode) {
                               listProvider.deleteShoppingItemPermanently(item.id);
-                              _showActionToast(context, '${item.title} permanently deleted', [item.id]);
+                              // FIXED: Now we can restore items permanently deleted from the completed screen!
+                              _showActionToast(context, '${item.title} permanently deleted', () => listProvider.restoreDeletedShoppingItems([item.id]));
                             } else {
                               final id = listProvider.deleteItem(item.id);
-                              _showActionToast(context, '${item.title} permanently deleted', [id]);
+                              _showActionToast(context, '${item.title} permanently deleted', () => listProvider.restoreItems([id]));
                             }
                           },
                           child: coreCard,
