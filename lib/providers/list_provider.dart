@@ -1204,47 +1204,70 @@ class ListProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> toggleShoppingItemCompletion(String itemId) async {
-    final index = _shoppingModeItems.indexWhere((i) => i.id == itemId);
-    if (index == -1) return;
+  Future<void> toggleShoppingItemsCompletion(List<String> itemIds) async {
+    for (String itemId in itemIds) {
+      final index = _shoppingModeItems.indexWhere((i) => i.id == itemId);
+      if (index == -1) continue;
 
-    ListItem item = _shoppingModeItems[index];
-    final isNowCompleted = !item.isCompleted;
+      ListItem item = _shoppingModeItems[index];
+      final isNowCompleted = !item.isCompleted;
 
-    // THE LEARNING LOOP: If checking off, learn this location!
-    if (isNowCompleted && _activeShoppingStore != null && _activeShoppingStore != 'Any') {
-      final currentLocs = List<String>.from(item.locations);
-      if (!currentLocs.map((e) => e.toLowerCase()).contains(_activeShoppingStore!.toLowerCase())) {
-        currentLocs.add(_activeShoppingStore!);
-        item = item.copyWith(locations: currentLocs);
+      // THE LEARNING LOOP: If checking off, learn this location!
+      if (isNowCompleted && _activeShoppingStore != null && _activeShoppingStore != 'Any') {
+        final currentLocs = List<String>.from(item.locations);
+        if (!currentLocs.map((e) => e.toLowerCase()).contains(_activeShoppingStore!.toLowerCase())) {
+          currentLocs.add(_activeShoppingStore!);
+          item = item.copyWith(locations: currentLocs);
+        }
       }
-    }
 
-    // Mark completed
-    item = item.copyWith(
-      isCompleted: isNowCompleted,
-      completedAt: isNowCompleted ? DateTime.now() : null,
-    );
-
-    _shoppingModeItems[index] = item;
-    await _updateOriginListStorage(itemId, item);
-    notifyListeners();
-  }
-
-  Future<void> banishShoppingItem(String itemId) async {
-    final index = _shoppingModeItems.indexWhere((i) => i.id == itemId);
-    if (index == -1 || _activeShoppingStore == null) return;
-
-    ListItem item = _shoppingModeItems[index];
-    final currentExclusions = List<String>.from(item.excludedLocations);
-
-    if (!currentExclusions.map((e) => e.toLowerCase()).contains(_activeShoppingStore!.toLowerCase())) {
-      currentExclusions.add(_activeShoppingStore!);
-      item = item.copyWith(excludedLocations: currentExclusions);
+      // Mark completed
+      item = item.copyWith(
+        isCompleted: isNowCompleted,
+        completedAt: isNowCompleted ? DateTime.now() : null,
+      );
 
       _shoppingModeItems[index] = item;
       await _updateOriginListStorage(itemId, item);
-      notifyListeners();
     }
+    clearSelection(); // Clear multi-select state when done
+    notifyListeners();
+  }
+
+  Future<void> banishShoppingItems(List<String> itemIds) async {
+    if (_activeShoppingStore == null) return;
+
+    for (String itemId in itemIds) {
+      final index = _shoppingModeItems.indexWhere((i) => i.id == itemId);
+      if (index == -1) continue;
+
+      ListItem item = _shoppingModeItems[index];
+      final currentExclusions = List<String>.from(item.excludedLocations);
+
+      if (!currentExclusions.map((e) => e.toLowerCase()).contains(_activeShoppingStore!.toLowerCase())) {
+        currentExclusions.add(_activeShoppingStore!);
+        item = item.copyWith(excludedLocations: currentExclusions);
+
+        _shoppingModeItems[index] = item;
+        await _updateOriginListStorage(itemId, item);
+      }
+    }
+    clearSelection(); // Clear multi-select state when done
+    notifyListeners();
+  }
+
+  // NEW: Allows the Undo Toast to function properly in Shopping Mode
+  Future<void> restoreShoppingItems(List<String> itemIds) async {
+    for (String itemId in itemIds) {
+      final index = _shoppingModeItems.indexWhere((i) => i.id == itemId);
+      if (index == -1) continue;
+
+      ListItem item = _shoppingModeItems[index];
+      item = item.copyWith(isCompleted: false, completedAt: null);
+
+      _shoppingModeItems[index] = item;
+      await _updateOriginListStorage(itemId, item);
+    }
+    notifyListeners();
   }
 }
