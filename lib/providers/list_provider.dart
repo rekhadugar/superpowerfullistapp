@@ -13,6 +13,17 @@ class ListProvider extends ChangeNotifier {
   double _viewportWidth = 0.0;
   double _textScaleFactor = 1.0;
 
+  // --- CROSS-LIST SHOPPING MODE STATE ---
+  final List<ListItem> _shoppingModeItems = [];
+  final Map<String, String> _itemOriginMap = {}; // Maps itemId -> listId
+  String? _activeShoppingStore;
+
+  bool _isLoadingShoppingMode = true;
+
+  List<ListItem> get shoppingModeItems => _shoppingModeItems;
+  String? get activeShoppingStore => _activeShoppingStore;
+  bool get isLoadingShoppingMode => _isLoadingShoppingMode;
+
   // --- SORTING STATE & PREFERENCES ---
   SortMode _currentSortMode = SortMode.categories;
 
@@ -1112,5 +1123,128 @@ class ListProvider extends ChangeNotifier {
       notifyListeners();
     }
     return id;
+  }
+
+  // ==========================================
+  // SHOPPING MODE ENGINE HOOKS
+  // ==========================================
+
+  void setShoppingStore(String? store) {
+    _activeShoppingStore = store;
+    notifyListeners();
+  }
+
+  Future<void> initializeShoppingMode(List<dynamic> allMacroLists) async {
+    _isLoadingShoppingMode = true;
+    notifyListeners();
+    _shoppingModeItems.clear();
+    _itemOriginMap.clear();
+    _activeShoppingStore = null;
+
+    final prefs = await SharedPreferences.getInstance();
+
+    // DEBUG 1: Check total lists
+    print('DEBUG: Total MacroLists found: ${allMacroLists.length}');
+
+    final shoppingLists = allMacroLists.where((l) => l.typeId == 'sys_shopping').toList();
+
+    // DEBUG 2: Check how many are actually 'Shopping' lists
+    print('DEBUG: Shopping Lists filtered: ${shoppingLists.length}');
+
+    for (var list in shoppingLists) {
+      final String? itemsJson = prefs.getString('items_${list.id}');
+
+      // DEBUG 3: Check if the database key is pulling data
+      print('DEBUG: Data for list ${list.name} (Key: items_${list.id}): ${itemsJson != null ? "FOUND" : "NULL"}');
+
+      if (itemsJson != null) {
+        final List<dynamic> decoded = json.decode(itemsJson);
+        for (var itemMap in decoded) {
+          final item = ListItem.fromMap(itemMap);
+          if (!item.isCompleted && !item.isDeleted) {
+            _shoppingModeItems.add(item);
+            _itemOriginMap[item.id] = list.id;
+          }
+        }
+      }
+    }
+
+    // DEBUG 4: Final item count
+    print('DEBUG: Total valid shopping items loaded: ${_shoppingModeItems.length}');
+
+    _isLoadingShoppingMode = false;
+    notifyListeners();
+  }
+
+  Future<void> _updateOriginListStorage(String itemId, ListItem updatedItem) async {
+    final listId = _itemOriginMap[itemId];
+    if (listId == null) return;
+
+    final prefs = await SharedPreferences.getInstance();
+    final String? itemsJson = prefs.getString('items_$listId');
+    if (itemsJson != null) {
+      final List<dynamic> decoded = json.decode(itemsJson);
+      final List<ListItem> listItems = decoded.map((m) => ListItem.fromMap(m)).toList();
+
+      final listIndex = listItems.indexWhere((i) => i.id == itemId);
+      if (listIndex != -1) {
+        listItems[listIndex] = updatedItem;
+        await prefs.setString('items_$listId', json.encode(listItems.map((i) => i.toMap()).toList()));
+      }
+    }
+
+    // Sync active view if the user happens to be on that specific list
+    if (_currentListId == listId) {
+      final activeIndex = _items.indexWhere((i) => i.id == itemId);
+      if (activeIndex != -1) {
+        _items[activeIndex] = updatedItem;
+        _buildDisplayList();
+        _buildCheckedDisplayList();
+      }
+    }
+  }
+
+  Future<void> toggleShoppingItemCompletion(String itemId) async {
+    final index = _shoppingModeItems.indexWhere((i) => i.id == itemId);
+    if (index == -1) return;
+
+    ListItem item = _shoppingModeItems[index];
+    final isNowCompleted = !item.isCompleted;
+
+    // THE LEARNING LOOP: If checking off, learn this location!
+    if (isNowCompleted && _activeShoppingStore != null && _activeShoppingStore != 'Any') {
+      final currentLocs = List<String>.from(item.locations);
+      if (!currentLocs.map((e) => e.toLowerCase()).contains(_activeShoppingStore!.toLowerCase())) {
+        currentLocs.add(_activeShoppingStore!);
+        item = item.copyWith(locations: currentLocs);
+      }
+    }
+
+    // Mark completed
+    item = item.copyWith(
+      isCompleted: isNowCompleted,
+      completedAt: isNowCompleted ? DateTime.now() : null,
+    );
+
+    _shoppingModeItems[index] = item;
+    await _updateOriginListStorage(itemId, item);
+    notifyListeners();
+  }
+
+  Future<void> banishShoppingItem(String itemId) async {
+    final index = _shoppingModeItems.indexWhere((i) => i.id == itemId);
+    if (index == -1 || _activeShoppingStore == null) return;
+
+    ListItem item = _shoppingModeItems[index];
+    final currentExclusions = List<String>.from(item.excludedLocations);
+
+    if (!currentExclusions.map((e) => e.toLowerCase()).contains(_activeShoppingStore!.toLowerCase())) {
+      currentExclusions.add(_activeShoppingStore!);
+      item = item.copyWith(excludedLocations: currentExclusions);
+
+      _shoppingModeItems[index] = item;
+      await _updateOriginListStorage(itemId, item);
+      notifyListeners();
+    }
   }
 }

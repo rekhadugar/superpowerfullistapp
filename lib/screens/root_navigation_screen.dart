@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
+import 'package:listicle_v2/screens/shopping_mode_screen.dart';
 import 'package:provider/provider.dart';
 import '../providers/list_provider.dart';
+import '../providers/macro_list_provider.dart';
 import '../theme/app_constants.dart';
 import '../theme/app_theme.dart';
 import 'main_screen.dart';
@@ -20,7 +22,7 @@ class _RootNavigationScreenState extends State<RootNavigationScreen> {
 
   final List<Widget> _screens = [
     const MainScreen(),
-    const Center(child: Text('Shopping Mode\n(Coming Soon)', textAlign: TextAlign.center, style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold))),
+    const ShoppingModeScreen(),
     const GlobalSettingsScreen(),
   ];
 
@@ -41,7 +43,16 @@ class _RootNavigationScreenState extends State<RootNavigationScreen> {
 
     return Expanded(
       child: GestureDetector(
-        onTap: () => setState(() => _currentIndex = index),
+        onTap: () {
+          setState(() => _currentIndex = index);
+
+          // FIXED: Trigger the cross-list fetch ONLY when they actually tap the tab.
+          // This guarantees MacroLists are loaded, and prevents stale data.
+          if (index == 1) {
+            final macroLists = context.read<MacroListProvider>().lists;
+            context.read<ListProvider>().initializeShoppingMode(macroLists);
+          }
+        },
         behavior: HitTestBehavior.opaque,
         child: Column(
           mainAxisSize: MainAxisSize.min,

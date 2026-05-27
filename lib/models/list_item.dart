@@ -3,16 +3,15 @@ class ListItem {
   final String title;
   final List<String> attributeRows;
 
-  // --- Store-Routing & Grouping Schema (Section 9.1) ---
+  // --- Store-Routing & Grouping Schema ---
   final String category;
   final String type;
   final List<String> locations;
+  final List<String> excludedLocations; // NEW: The Banish List
 
   // --- State flags ---
   final bool isCompleted;
   final bool isDeleted;
-
-  // NEW: Chronological Tracking
   final DateTime? completedAt;
 
   // --- Item Quantity ---
@@ -35,9 +34,10 @@ class ListItem {
     this.category = "Everything Else",
     this.type = "Any",
     this.locations = const [],
+    this.excludedLocations = const [], // NEW
     this.isCompleted = false,
     this.isDeleted = false,
-    this.completedAt, // NEW
+    this.completedAt,
     this.quantity = 0,
     this.unit = 'pcs',
     this.nWrap = 0,
@@ -48,15 +48,16 @@ class ListItem {
   });
 
   ListItem copyWith({
-    String? id,
+    String? id, // FIXED: Added id parameter for copying items
     String? title,
     List<String>? attributeRows,
     String? category,
     String? type,
     List<String>? locations,
+    List<String>? excludedLocations,
     bool? isCompleted,
     bool? isDeleted,
-    DateTime? completedAt, // NEW
+    DateTime? completedAt,
     int? quantity,
     String? unit,
     int? nWrap,
@@ -66,15 +67,16 @@ class ListItem {
     double? globalCustomOrder,
   }) {
     return ListItem(
-      id: id ?? this.id,
+      id: id ?? this.id, // FIXED: Uses the new id if provided, otherwise falls back to current
       title: title ?? this.title,
       attributeRows: attributeRows ?? this.attributeRows,
       category: category ?? this.category,
       type: type ?? this.type,
       locations: locations ?? this.locations,
+      excludedLocations: excludedLocations ?? this.excludedLocations,
       isCompleted: isCompleted ?? this.isCompleted,
       isDeleted: isDeleted ?? this.isDeleted,
-      completedAt: completedAt ?? this.completedAt, // NEW
+      completedAt: completedAt ?? this.completedAt,
       quantity: quantity ?? this.quantity,
       unit: unit ?? this.unit,
       nWrap: nWrap ?? this.nWrap,
@@ -85,7 +87,6 @@ class ListItem {
     );
   }
 
-  // --- Serialization for Local Storage / Firestore ---
   Map<String, dynamic> toMap() {
     return {
       'id': id,
@@ -94,9 +95,10 @@ class ListItem {
       'category': category,
       'type': type,
       'locations': locations,
+      'excludedLocations': excludedLocations, // NEW
       'isCompleted': isCompleted,
       'isDeleted': isDeleted,
-      'completedAt': completedAt?.toIso8601String(), // NEW
+      'completedAt': completedAt?.toIso8601String(),
       'quantity': quantity,
       'unit': unit,
       'nWrap': nWrap,
@@ -115,9 +117,10 @@ class ListItem {
       category: map['category'] ?? 'Everything Else',
       type: map['type'] ?? 'Any',
       locations: List<String>.from(map['locations'] ?? []),
+      excludedLocations: List<String>.from(map['excludedLocations'] ?? []), // NEW
       isCompleted: map['isCompleted'] ?? false,
       isDeleted: map['isDeleted'] ?? false,
-      completedAt: map['completedAt'] != null ? DateTime.tryParse(map['completedAt']) : null, // NEW
+      completedAt: map['completedAt'] != null ? DateTime.tryParse(map['completedAt']) : null,
       quantity: map['quantity']?.toInt() ?? 0,
       unit: map['unit'] ?? 'pcs',
       nWrap: map['nWrap']?.toInt() ?? 0,
