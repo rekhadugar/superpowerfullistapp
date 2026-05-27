@@ -67,31 +67,48 @@ class _CompletedItemsScreenState extends State<CompletedItemsScreen> {
     }
   }
 
-  // FIXED: Crash-proof SnackBar Helper
-  void _showActionToast(BuildContext context, String message, List<String> undoIds) {
-    final messenger = ScaffoldMessenger.of(context);
+  // FIXED: Flush Geometry Masking SnackBar with Auto-Contrast
+  void _showActionToast(BuildContext context, String message, List<String> itemIds) {
+    final theme = Theme.of(context);
 
-    _toastTimer?.cancel();
-    messenger.clearSnackBars();
-
-    messenger.showSnackBar(
+    ScaffoldMessenger.of(context).clearSnackBars();
+    ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(message),
-        behavior: SnackBarBehavior.fixed,
-        duration: const Duration(seconds: 3),
-        action: SnackBarAction(
-          label: 'Undo',
-          textColor: AppColors.primaryAction,
-          onPressed: () => context.read<ListProvider>().restoreItems(undoIds),
+        padding: EdgeInsets.zero,
+        behavior: SnackBarBehavior.fixed, // FIXED: Snaps perfectly to the screen edges
+        backgroundColor: theme.colorScheme.inverseSurface, // FIXED: Dark in light mode, Light in dark mode
+        elevation: 0, // Sits perfectly flat like the bottom bar
+
+        content: SizedBox(
+          height: 70.0,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24.0),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Expanded(
+                  child: Text(
+                    message,
+                    style: TextStyle(
+                        color: theme.colorScheme.onInverseSurface, // FIXED: Contrasting text color
+                        fontWeight: FontWeight.bold
+                    ),
+                  ),
+                ),
+                TextButton(
+                  onPressed: () {
+                    ScaffoldMessenger.of(context).hideCurrentSnackBar();
+                    context.read<ListProvider>().restoreItems(itemIds);
+                  },
+                  child: const Text('Undo', style: TextStyle(color: AppColors.primaryAction, fontWeight: FontWeight.bold)),
+                ),
+              ],
+            ),
+          ),
         ),
+        duration: const Duration(seconds: 3),
       ),
     );
-
-    _toastTimer = Timer(const Duration(seconds: 3), () {
-      if (mounted) {
-        messenger.hideCurrentSnackBar();
-      }
-    });
   }
 
   @override
@@ -156,8 +173,10 @@ class _CompletedItemsScreenState extends State<CompletedItemsScreen> {
                   ListView.builder(
                     controller: _scrollController,
                     padding: EdgeInsets.only(
-                        top: 0.0,
-                        bottom: listProvider.isBatchModeActive ? 300 : safeBottomPadding + 100.0
+                        top: AppConstants.listTopPadding,
+                        bottom: listProvider.isBatchModeActive
+                            ? AppConstants.batchModeBottomClearance
+                            : safeBottomPadding + AppConstants.listBottomClearance
                     ),
                     itemCount: displayList.length,
                     itemBuilder: (context, index) {

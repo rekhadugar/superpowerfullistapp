@@ -113,33 +113,50 @@ class _MainScreenState extends State<MainScreen> {
   }
 
   // FIXED: Auto-dodging SnackBar Helper
-  // FIXED: Crash-proof SnackBar Helper
-  void _showActionToast(BuildContext context, String message, List<String> undoIds) {
-    final messenger = ScaffoldMessenger.of(context);
+  // FIXED: Flush Geometry Masking SnackBar with Auto-Contrast
+  void _showActionToast(BuildContext context, String message, List<String> itemIds) {
+    final theme = Theme.of(context);
 
-    // 1. Cancel any pending timers from previous rapid swipes
-    _toastTimer?.cancel();
-    messenger.clearSnackBars();
-
-    messenger.showSnackBar(
+    ScaffoldMessenger.of(context).clearSnackBars();
+    ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(message),
-        behavior: SnackBarBehavior.fixed,
-        duration: const Duration(seconds: 3),
-        action: SnackBarAction(
-          label: 'Undo',
-          textColor: AppColors.primaryAction,
-          onPressed: () => context.read<ListProvider>().restoreItems(undoIds),
+        padding: EdgeInsets.zero,
+        behavior: SnackBarBehavior.fixed, // FIXED: Snaps perfectly to the screen edges
+        backgroundColor: theme.colorScheme.inverseSurface, // FIXED: Dark in light mode, Light in dark mode
+        elevation: 0, // Sits perfectly flat like the bottom bar
+
+        // Flutter automatically adds the bottom safe area to 'fixed' snackbars,
+        // so we only need to specify our 70px bar height here.
+        content: SizedBox(
+          height: 70.0,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24.0),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Expanded(
+                  child: Text(
+                    message,
+                    style: TextStyle(
+                        color: theme.colorScheme.onInverseSurface, // FIXED: Contrasting text color
+                        fontWeight: FontWeight.bold
+                    ),
+                  ),
+                ),
+                TextButton(
+                  onPressed: () {
+                    ScaffoldMessenger.of(context).hideCurrentSnackBar();
+                    context.read<ListProvider>().restoreItems(itemIds);
+                  },
+                  child: const Text('Undo', style: TextStyle(color: AppColors.primaryAction, fontWeight: FontWeight.bold)),
+                ),
+              ],
+            ),
+          ),
         ),
+        duration: const Duration(seconds: 3),
       ),
     );
-
-    // 2. Use a stateful timer that safely hides the current snackbar
-    _toastTimer = Timer(const Duration(seconds: 3), () {
-      if (mounted) {
-        messenger.hideCurrentSnackBar();
-      }
-    });
   }
 
   @override
@@ -211,36 +228,6 @@ class _MainScreenState extends State<MainScreen> {
           ],
         ),
 
-        // FIXED: Native FAB so SnackBars push it up automatically
-        // FIXED: Hides FAB during Batch Mode AND Fluid Editing
-        floatingActionButton: AnimatedSlide(
-          duration: const Duration(milliseconds: 300),
-          curve: Curves.easeOutCubic,
-          // NEW: Check both batch mode and edit mode!
-          offset: (listProvider.isBatchModeActive || listProvider.editItemId != null)
-              ? const Offset(0, 2)
-              : Offset.zero,
-          child: FloatingActionButton(
-            onPressed: () {
-              showModalBottomSheet(
-                context: context,
-                isScrollControlled: true,
-                backgroundColor: Colors.transparent,
-                builder: (ctx) => EditItemBottomSheet(
-                  onSave: (title, attributes, type, category, quantity, unit) {
-                    context.read<ListProvider>().addItem(
-                      title, attributes, type, category, quantity, unit,
-                    );
-                  },
-                ),
-              );
-            },
-            backgroundColor: AppColors.primaryAction,
-            elevation: 4,
-            child: const Icon(Icons.add, color: Colors.white, size: 28),
-          ),
-        ),
-
         body: Stack(
           children: [
             displayList.isEmpty
@@ -254,7 +241,6 @@ class _MainScreenState extends State<MainScreen> {
                     textAlign: TextAlign.center,
                     style: theme.textTheme.bodyMedium,
                   ),
-                  // FIXED: Conditionally show the navigation link if there are checked items!
                   if (listProvider.checkedDisplayList.isNotEmpty) ...[
                     const SizedBox(height: 24),
                     TextButton.icon(
@@ -289,13 +275,14 @@ class _MainScreenState extends State<MainScreen> {
                   ReorderableListView.builder(
                     scrollController: _scrollController,
                     padding: EdgeInsets.only(
-                        top: 0.0,
-                        bottom: listProvider.isBatchModeActive ? 300 : safeBottomPadding + 100.0
+                        top: AppConstants.listTopPadding,
+                        bottom: listProvider.isBatchModeActive
+                            ? AppConstants.batchModeBottomClearance
+                            : safeBottomPadding + AppConstants.listBottomClearance
                     ),
                     itemCount: displayList.length,
                     buildDefaultDragHandles: false,
 
-                    // NEW: Seamless footer button mapping to the completed list screen
                     footer: Padding(
                       key: const ValueKey('completed_footer'),
                       padding: const EdgeInsets.symmetric(vertical: 24.0),
@@ -408,9 +395,36 @@ class _MainScreenState extends State<MainScreen> {
             ),
 
             const FluidEditSheet(),
-
-            // Revert BatchActionBar to normal usage
             const BatchActionBar(),
+
+            // NEW: AnimatedPositioned FAB placed inside the Stack to avoid Scaffold conflicts
+            AnimatedPositioned(
+              duration: const Duration(milliseconds: 300),
+              curve: Curves.easeOutCubic,
+              right: 16.0,
+              bottom: (listProvider.isBatchModeActive || listProvider.editItemId != null)
+                  ? -100.0 // Slides off screen during batch/edit mode
+                  : safeBottomPadding + AppConstants.listBottomClearance + 16.0, // Safely floats above the bottom bar
+              child: FloatingActionButton(
+                onPressed: () {
+                  showModalBottomSheet(
+                    context: context,
+                    isScrollControlled: true,
+                    backgroundColor: Colors.transparent,
+                    builder: (ctx) => EditItemBottomSheet(
+                      onSave: (title, attributes, type, category, quantity, unit) {
+                        context.read<ListProvider>().addItem(
+                          title, attributes, type, category, quantity, unit,
+                        );
+                      },
+                    ),
+                  );
+                },
+                backgroundColor: AppColors.primaryAction,
+                elevation: 4,
+                child: const Icon(Icons.add, color: Colors.white, size: 28),
+              ),
+            ),
           ],
         ),
       ),

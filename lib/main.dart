@@ -3,6 +3,7 @@
 import 'package:flutter/material.dart';
 import 'package:listicle_v2/providers/macro_list_provider.dart';
 import 'package:listicle_v2/providers/settings_provider.dart';
+import 'package:listicle_v2/screens/root_navigation_screen.dart';
 import 'package:provider/provider.dart';
 import 'theme/app_theme.dart';
 import 'providers/list_provider.dart';
@@ -57,7 +58,7 @@ class ListicleApp extends StatelessWidget {
           child: child!,
         );
       },
-      home: const MainScreen(),
+      home: const RootNavigationScreen(),
     );
   }
 }

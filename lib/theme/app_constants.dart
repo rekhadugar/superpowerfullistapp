@@ -34,6 +34,12 @@ class AppConstants {
   static const double badgeIconSize = 11.0;
   static const double badgeIconGap = 4.0;
   static const double badgeFontSize = 11.0;
+
+  // --- Viewport Clearance ---
+  static const double listTopPadding = 0.0;
+  static const double listBottomClearance = 100.0; // Standard clearance for bottom nav
+  static const double batchModeBottomClearance = 300.0; // Extended clearance when batch menu is open
+  static const double snackbarBottomMargin = 16.0;
 }
 
 class AppPhysics {
@@ -65,3 +71,4 @@ class AppLayout {
   static const double attributeRowHeight = 20.0; // Height per line of wrapped text/tags
   static const double cardMargin = 12.0; // Bottom margin spacing
 }
+

@@ -101,3 +101,30 @@ Currently in **Phase 2 (UI Expansion & State Hardening)**, upcoming features inc
 * Auto-hiding empty sections with virtual layout proxies.
 * Global mass-expansion pivoting to preserve viewport scroll coordinates.
 * Seamless Firebase Cloud Firestore integration with "Dual-Flash" UX conflict resolution.
+
+
+```Updated 05/26/2026 ```
+# Listicle V2 🚀
+
+Listicle V2 is a high-performance, real-time grocery and task management application engineered specifically for $120\text{Hz}$ mobile displays. Moving away from standard render-driven layout trees, Listicle utilizes a **Math-Driven, Deterministic Architecture** to achieve zero frame drops, $O(1)$ scrolling math, and seamless collaborative concurrency.
+
+## 🧠 Core Architecture
+
+Traditional Flutter lists rely on continuous $O(N)$ tree-walking to track sticky headers and active items. Listicle bypasses this entirely:
+* **$O(1)$ Layout Geometry:** All UI elements (`ListItemCard`, `SectionHeader`) are bound to strict, compile-time height constants.
+* **$O(\log N)$ Spatial Cache:** The `ListProvider` pre-computes an array of cumulative Y-offsets. During scrolling, a pure Dart `StickyHeaderEngine` runs a binary search against this cache, resolving phantom header collisions instantly without ever touching the render tree.
+* **Fractional Multi-Indexing:** Solves drag-and-drop reordering with $O(1)$ database writes using midpoint floating-point arithmetic.
+
+## ✨ New in v2.2: Dynamic Taxonomy Engine
+
+Listicle V2 is no longer just a "Shopping" app; it is a polymorphic categorization engine.
+* **Infinite Custom Types:** Users can create custom taxonomies (e.g., a "Wine Collection" sorted by "Region" and "Varietal").
+* **Alias Mapping:** The entire UI dynamically morphs to reflect the active list's taxonomy. Add/Edit sheets, batch action bars, and list rendering automatically adopt the correct contextual labels.
+* **Universal Settings Hub:** A centralized, 2-level dashboard to manage List Order, Axis Labels, and Group Configurations dynamically, featuring a Cascading Delete protocol for safe data lifecycle management.
+
+## 🛠️ Tech Stack & Design System
+
+* **Framework:** Flutter / Dart
+* **Backend:** Local SharedPreferences (Transitioning to Firebase Cloud Firestore)
+* **State Management:** `Provider` with isolated `ValueNotifier` hooks for localized gesture states.
+* **Immutable Design:** UI components strictly adhere to `AppTheme` and `AppConstants`.
