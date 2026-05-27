@@ -1,5 +1,4 @@
 import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/list_provider.dart';
@@ -14,7 +13,9 @@ import '../widgets/batch_action_bar.dart';
 import '../widgets/fluid_edit_sheet.dart';
 
 class CompletedItemsScreen extends StatefulWidget {
-  const CompletedItemsScreen({Key? key}) : super(key: key);
+  final bool isShoppingMode; // NEW: Context flag
+
+  const CompletedItemsScreen({Key? key, this.isShoppingMode = false}) : super(key: key);
 
   @override
   State<CompletedItemsScreen> createState() => _CompletedItemsScreenState();
@@ -35,7 +36,7 @@ class _CompletedItemsScreenState extends State<CompletedItemsScreen> {
 
   @override
   void dispose() {
-    _toastTimer?.cancel(); // NEW: Prevent memory leaks
+    _toastTimer?.cancel();
     _scrollController.removeListener(_onScroll);
     _scrollController.dispose();
     _phantomHeaderState.dispose();
@@ -53,7 +54,6 @@ class _CompletedItemsScreenState extends State<CompletedItemsScreen> {
     final provider = context.read<ListProvider>();
     final textScale = MediaQuery.textScalerOf(context).scale(1.0);
 
-    // Reuse the exact same spatial cache engine, but map it to the checked off arrays
     final newHeaderData = StickyHeaderEngine.calculatePhantomHeader(
       _scrollController.offset,
       provider.checkedCumulativeYOffsets,
@@ -67,7 +67,6 @@ class _CompletedItemsScreenState extends State<CompletedItemsScreen> {
     }
   }
 
-  // FIXED: Flush Geometry Masking SnackBar with Auto-Contrast
   void _showActionToast(BuildContext context, String message, List<String> itemIds) {
     final theme = Theme.of(context);
 
@@ -75,9 +74,9 @@ class _CompletedItemsScreenState extends State<CompletedItemsScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         padding: EdgeInsets.zero,
-        behavior: SnackBarBehavior.fixed, // FIXED: Snaps perfectly to the screen edges
-        backgroundColor: theme.colorScheme.inverseSurface, // FIXED: Dark in light mode, Light in dark mode
-        elevation: 0, // Sits perfectly flat like the bottom bar
+        behavior: SnackBarBehavior.fixed,
+        backgroundColor: theme.colorScheme.inverseSurface,
+        elevation: 0,
 
         content: SizedBox(
           height: 70.0,
@@ -90,7 +89,7 @@ class _CompletedItemsScreenState extends State<CompletedItemsScreen> {
                   child: Text(
                     message,
                     style: TextStyle(
-                        color: theme.colorScheme.onInverseSurface, // FIXED: Contrasting text color
+                        color: theme.colorScheme.onInverseSurface,
                         fontWeight: FontWeight.bold
                     ),
                   ),
@@ -114,9 +113,13 @@ class _CompletedItemsScreenState extends State<CompletedItemsScreen> {
   @override
   Widget build(BuildContext context) {
     final listProvider = context.watch<ListProvider>();
-    final displayList = listProvider.checkedDisplayList;
     final theme = Theme.of(context);
     final double safeBottomPadding = MediaQuery.of(context).padding.bottom;
+
+    // FIXED: Dynamically load the correct array based on context
+    List<dynamic> displayList = widget.isShoppingMode
+        ? ['Completed Shopping Items', ...listProvider.shoppingCompletedItems]
+        : listProvider.checkedDisplayList;
 
     return GestureDetector(
       onTap: () {
@@ -169,7 +172,6 @@ class _CompletedItemsScreenState extends State<CompletedItemsScreen> {
               },
               child: Stack(
                 children: [
-                  // ListView.builder replaces ReorderableListView (Drag & Drop disabled)
                   ListView.builder(
                     controller: _scrollController,
                     padding: EdgeInsets.only(
@@ -203,10 +205,15 @@ class _CompletedItemsScreenState extends State<CompletedItemsScreen> {
                           isBatchSelected: listProvider.selectedItemIds.contains(item.id),
                           isFluidEditing: listProvider.editItemId == item.id,
 
-                          // On the completed screen, clicking the checkbox immediately restores the item
-                          onCheck: () {
-                            final id = context.read<ListProvider>().toggleCompletion(item.id);
-                            _showActionToast(context, '${item.title} restored', [id]);
+                          onCheck: () { // (And do the exact same for onCheckout below it)
+                            if (widget.isShoppingMode) {
+                              listProvider.restoreShoppingItems([item.id]);
+                              _showActionToast(context, '${item.title} restored', [item.id]);
+                            } else {
+                              // FIXED: Corrected the method name to match your provider
+                              final id = listProvider.toggleCompletion(item.id);
+                              _showActionToast(context, '${item.title} restored', [id]);
+                            }
                           },
                           onTap: () {
                             if (listProvider.openSwipeItemId.value != null) {
@@ -231,11 +238,17 @@ class _CompletedItemsScreenState extends State<CompletedItemsScreen> {
                           itemId: item.id,
                           requireConfirm: true,
                           isBatchModeActive: listProvider.isBatchModeActive,
-                          isCompletedScreen: true, // Triggers Blue Restore aesthetics
+                          isCompletedScreen: true,
 
-                          onCheckout: () {
-                            final id = context.read<ListProvider>().toggleCompletion(item.id);
-                            _showActionToast(context, '${item.title} restored', [id]);
+                          onCheckout: () { // (And do the exact same for onCheckout below it)
+                            if (widget.isShoppingMode) {
+                              listProvider.restoreShoppingItems([item.id]);
+                              _showActionToast(context, '${item.title} restored', [item.id]);
+                            } else {
+                              // FIXED: Corrected the method name to match your provider
+                              final id = listProvider.toggleCompletion(item.id);
+                              _showActionToast(context, '${item.title} restored', [id]);
+                            }
                           },
                           onEdit: () {
                             listProvider.clearAllInteractions();
@@ -243,8 +256,13 @@ class _CompletedItemsScreenState extends State<CompletedItemsScreen> {
                             listProvider.setFullEditRequest(true);
                           },
                           onDelete: () {
-                            final id = context.read<ListProvider>().deleteItem(item.id);
-                            _showActionToast(context, '${item.title} permanently deleted', [id]);
+                            if (widget.isShoppingMode) {
+                              listProvider.deleteShoppingItemPermanently(item.id);
+                              _showActionToast(context, '${item.title} permanently deleted', [item.id]);
+                            } else {
+                              final id = listProvider.deleteItem(item.id);
+                              _showActionToast(context, '${item.title} permanently deleted', [id]);
+                            }
                           },
                           child: coreCard,
                         );
@@ -269,8 +287,6 @@ class _CompletedItemsScreenState extends State<CompletedItemsScreen> {
             ),
 
             const FluidEditSheet(),
-
-            // Pass true so the bar shows Restore instead of Move/Copy
             const BatchActionBar(isCompletedScreen: true),
           ],
         ),

@@ -9,7 +9,8 @@ import '../theme/app_constants.dart';
 import '../widgets/fluid_edit_sheet.dart';
 import '../widgets/list_item_card.dart';
 import '../widgets/swipe_action_wrapper.dart';
-import '../engine/sort_mode_engine.dart'; // Needed for ListItemCard sortMode
+import '../engine/sort_mode_engine.dart';
+import 'completed_items_screen.dart';
 
 class ShoppingModeScreen extends StatefulWidget {
   const ShoppingModeScreen({Key? key}) : super(key: key);
@@ -20,8 +21,8 @@ class ShoppingModeScreen extends StatefulWidget {
 
 class _ShoppingModeScreenState extends State<ShoppingModeScreen> {
 
-  // Uses the exact same geometry logic as MainScreen to perfectly mask the Bottom Nav
-  void _showActionToast(BuildContext context, String message, List<String> itemIds, ListProvider provider) {
+  // FIXED: Now accepts a nullable onUndo. If null, the Undo button is hidden.
+  void _showActionToast(BuildContext context, String message, VoidCallback? onUndo) {
     final theme = Theme.of(context);
     ScaffoldMessenger.of(context).clearSnackBars();
     ScaffoldMessenger.of(context).showSnackBar(
@@ -38,13 +39,15 @@ class _ShoppingModeScreenState extends State<ShoppingModeScreen> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Expanded(child: Text(message, style: TextStyle(color: theme.colorScheme.onInverseSurface, fontWeight: FontWeight.bold))),
-                TextButton(
-                  onPressed: () {
-                    ScaffoldMessenger.of(context).hideCurrentSnackBar();
-                    provider.restoreShoppingItems(itemIds);
-                  },
-                  child: const Text('Undo', style: TextStyle(color: AppColors.primaryAction, fontWeight: FontWeight.bold)),
-                ),
+
+                if (onUndo != null) // Conditionally render the Undo button
+                  TextButton(
+                    onPressed: () {
+                      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+                      onUndo();
+                    },
+                    child: const Text('Undo', style: TextStyle(color: AppColors.primaryAction, fontWeight: FontWeight.bold)),
+                  ),
               ],
             ),
           ),
@@ -61,15 +64,16 @@ class _ShoppingModeScreenState extends State<ShoppingModeScreen> {
       itemId: item.id,
       requireConfirm: true,
       isBatchModeActive: isBatchMode,
-
-      // FIXED: Custom orange swipe for active items, blue swipe for hidden items
       menuColor: isHidden ? AppColors.primaryAction : Colors.orange,
       menuIcon: isHidden ? Icons.visibility : Icons.visibility_off,
       menuLabel: isHidden ? 'Tap To Unhide' : 'Tap To Hide',
-
       onCheckout: () {
         provider.toggleShoppingItemsCompletion([item.id]);
-        _showActionToast(context, '${item.title} checked off', [item.id], provider);
+        _showActionToast(
+            context,
+            '${item.title} checked off',
+                () => provider.restoreShoppingItems([item.id])
+        );
       },
       onEdit: () {
         provider.clearAllInteractions();
@@ -79,10 +83,18 @@ class _ShoppingModeScreenState extends State<ShoppingModeScreen> {
       onDelete: () {
         if (isHidden) {
           provider.unbanishShoppingItems([item.id]);
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${item.title} restored to $activeStore')));
+          _showActionToast(
+              context,
+              '${item.title} restored to $activeStore',
+                  () => provider.banishShoppingItems([item.id])
+          );
         } else {
           provider.banishShoppingItems([item.id]);
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${item.title} hidden from $activeStore')));
+          _showActionToast(
+              context,
+              '${item.title} hidden from $activeStore',
+                  () => provider.unbanishShoppingItems([item.id])
+          );
         }
       },
       child: ListItemCard(
@@ -103,7 +115,6 @@ class _ShoppingModeScreenState extends State<ShoppingModeScreen> {
           if (isBatchMode) {
             provider.toggleSelection(item.id);
           } else {
-            // FIXED: Tap always opens Fluid Edit in Shopping Mode
             provider.clearAllInteractions();
             provider.setEditItem(item.id);
             provider.setFullEditRequest(true);
@@ -111,7 +122,11 @@ class _ShoppingModeScreenState extends State<ShoppingModeScreen> {
         },
         onCheck: () {
           provider.toggleShoppingItemsCompletion([item.id]);
-          _showActionToast(context, '${item.title} checked off', [item.id], provider);
+          _showActionToast(
+              context,
+              '${item.title} checked off',
+                  () => provider.restoreShoppingItems([item.id])
+          );
         },
         onToggleSelection: () => provider.toggleSelection(item.id),
       ),
@@ -168,7 +183,6 @@ class _ShoppingModeScreenState extends State<ShoppingModeScreen> {
       activeStore: listProvider.activeShoppingStore!,
     );
 
-    // --- ENHANCEMENT 2: Custom Category Sorting ---
     final List<String> sortedMainCategories = result.mainItemsByCategory.keys.toList();
     sortedMainCategories.sort((a, b) {
       int idxA = listProvider.preferredCategoryOrder.indexOf(a);
@@ -180,7 +194,6 @@ class _ShoppingModeScreenState extends State<ShoppingModeScreen> {
       return cmp;
     });
 
-    // --- ENHANCEMENT 1: Orphaned Items Aggregation ---
     final List<String> orphanedCategories = result.alsoAvailableByCategory.keys
         .where((k) => !sortedMainCategories.contains(k)).toList();
     orphanedCategories.sort((a, b) {
@@ -211,186 +224,216 @@ class _ShoppingModeScreenState extends State<ShoppingModeScreen> {
       ),
       body: Stack(
         children: [
-          // LAYER 0: The Lists
           Positioned.fill(
-            child: ListView(
-              padding: EdgeInsets.only(bottom: isBatchMode ? 300 : AppConstants.listBottomClearance + safeBottom),
-              children: [
-                if (result.mainItemsByCategory.isEmpty && result.alsoAvailableByCategory.isEmpty)
-                  const Padding(
-                    padding: EdgeInsets.all(32.0),
-                    child: Center(child: Text('You have collected all items for this store! 🎉', textAlign: TextAlign.center, style: TextStyle(fontSize: 18))),
+            child: CustomScrollView(
+              slivers: [
+                SliverPadding(
+                  padding: EdgeInsets.zero,
+                  sliver: SliverList(
+                    delegate: SliverChildListDelegate([
+                      if (result.mainItemsByCategory.isEmpty && result.alsoAvailableByCategory.isEmpty)
+                        const Padding(
+                          padding: EdgeInsets.all(32.0),
+                          child: Center(child: Text('You have collected all items for this store! 🎉', textAlign: TextAlign.center, style: TextStyle(fontSize: 18))),
+                        ),
+                    ]),
                   ),
+                ),
 
-                // 1. Render Main Categories (Sorted by User Preference)
-                ...sortedMainCategories.map((category) {
+                ...sortedMainCategories.expand((category) {
                   final mainItems = result.mainItemsByCategory[category] ?? [];
                   final alsoAvailable = result.alsoAvailableByCategory[category] ?? [];
 
-                  return Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(20, 24, 20, 8),
-                        child: Text(category.toUpperCase(), style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.primaryAction.withOpacity(0.8), letterSpacing: 1.2)),
-                      ),
-                      ...mainItems.map((item) => _buildItemCard(item, listProvider.activeShoppingStore!, listProvider)),
-
-                      // 2. Render nested "Also Available" for this specific aisle
-                      if (alsoAvailable.isNotEmpty)
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 4.0),
-                          child: Theme(
-                            data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
-                            child: ExpansionTile(
-                              collapsedBackgroundColor: theme.cardColor,
-                              backgroundColor: theme.cardColor,
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: Colors.grey.shade300)),
-                              collapsedShape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: Colors.grey.shade300)),
-                              title: Text('Also available here (${alsoAvailable.length})', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
-                              children: alsoAvailable.map((item) => _buildItemCard(item, listProvider.activeShoppingStore!, listProvider)).toList(),
-                            ),
-                          ),
-                        ),
-                    ],
-                  );
-                }),
-
-                // --- ENHANCEMENT 1: Orphaned "All Other Shopping Items" ---
-                if (orphanedCategories.isNotEmpty) ...[
-                  const Divider(height: 64, thickness: 1),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                    child: Theme(
-                      data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
-                      child: ExpansionTile(
-                        iconColor: AppColors.primaryAction,
-                        collapsedIconColor: theme.textTheme.bodyMedium?.color,
-                        title: const Text('All Other Shopping Items', style: TextStyle(fontWeight: FontWeight.bold)),
-                        subtitle: const Text('From different aisles or stores', style: TextStyle(fontSize: 12, color: Colors.grey)),
-                        children: orphanedCategories.expand((category) {
-                          final items = result.alsoAvailableByCategory[category] ?? [];
-                          return [
-                            Padding(
-                              padding: const EdgeInsets.only(top: 16.0, bottom: 4.0, left: 8.0),
-                              child: Align(
-                                alignment: Alignment.centerLeft,
-                                child: Text(category.toUpperCase(), style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey, letterSpacing: 1.0)),
+                  return [
+                    SliverPersistentHeader(
+                      pinned: true,
+                      delegate: _CategoryHeaderDelegate(category, theme.scaffoldBackgroundColor),
+                    ),
+                    SliverList(
+                      delegate: SliverChildListDelegate([
+                        ...mainItems.map((item) => _buildItemCard(item, listProvider.activeShoppingStore!, listProvider)),
+                        if (alsoAvailable.isNotEmpty)
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 4.0),
+                            child: Theme(
+                              data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+                              child: ExpansionTile(
+                                collapsedBackgroundColor: theme.cardColor,
+                                backgroundColor: theme.cardColor,
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: Colors.grey.shade300)),
+                                collapsedShape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: Colors.grey.shade300)),
+                                title: Text('Also available here (${alsoAvailable.length})', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
+                                children: alsoAvailable.map((item) => _buildItemCard(item, listProvider.activeShoppingStore!, listProvider)).toList(),
                               ),
                             ),
-                            ...items.map((item) => _buildItemCard(item, listProvider.activeShoppingStore!, listProvider))
-                          ];
-                        }).toList(),
-                      ),
+                          ),
+                      ]),
                     ),
-                  ),
-                ],
+                  ];
+                }).toList(),
 
-                // 3. Render Excluded Items (Bottom Footer)
-                if (result.excludedItems.isNotEmpty) ...[
-                  const Divider(height: 64, thickness: 1),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                    child: Theme(
-                      data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
-                      child: ExpansionTile(
-                        iconColor: Colors.grey,
-                        collapsedIconColor: Colors.grey,
-                        title: Text('Hidden from this store (${result.excludedItems.length})', style: const TextStyle(color: Colors.grey, fontWeight: FontWeight.bold)),
-                        children: result.excludedItems.map((item) => Opacity(
-                          opacity: 0.5,
-                          // FIXED: Pass isHidden: true so it uses the Unhide logic!
-                          child: _buildItemCard(item, listProvider.activeShoppingStore!, listProvider, isHidden: true),
-                        )).toList(),
+                SliverList(
+                  delegate: SliverChildListDelegate([
+                    if (orphanedCategories.isNotEmpty) ...[
+                      const Divider(height: 64, thickness: 1),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                        child: Theme(
+                          data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+                          child: ExpansionTile(
+                            iconColor: AppColors.primaryAction,
+                            collapsedIconColor: theme.textTheme.bodyMedium?.color,
+                            title: const Text('All Other Shopping Items', style: TextStyle(fontWeight: FontWeight.bold)),
+                            subtitle: const Text('From different aisles or stores', style: TextStyle(fontSize: 12, color: Colors.grey)),
+                            children: orphanedCategories.expand((category) {
+                              final items = result.alsoAvailableByCategory[category] ?? [];
+                              return [
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 16.0, bottom: 4.0, left: 8.0),
+                                  child: Align(alignment: Alignment.centerLeft, child: Text(category.toUpperCase(), style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey, letterSpacing: 1.0))),
+                                ),
+                                ...items.map((item) => _buildItemCard(item, listProvider.activeShoppingStore!, listProvider))
+                              ];
+                            }).toList(),
+                          ),
+                        ),
                       ),
-                    ),
-                  ),
-                ]
+                    ],
+
+                    if (result.excludedItems.isNotEmpty) ...[
+                      const Divider(height: 64, thickness: 1),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                        child: Theme(
+                          data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+                          child: ExpansionTile(
+                            iconColor: Colors.grey,
+                            collapsedIconColor: Colors.grey,
+                            title: Text('Hidden from this store (${result.excludedItems.length})', style: const TextStyle(color: Colors.grey, fontWeight: FontWeight.bold)),
+                            children: result.excludedItems.map((item) => Opacity(opacity: 0.5, child: _buildItemCard(item, listProvider.activeShoppingStore!, listProvider, isHidden: true))).toList(),
+                          ),
+                        ),
+                      ),
+                    ],
+
+                    if (listProvider.shoppingCompletedItems.isNotEmpty) ...[
+                      Padding(
+                        padding: const EdgeInsets.only(top: 32.0, bottom: 24.0),
+                        child: TextButton.icon(
+                          onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const CompletedItemsScreen(isShoppingMode: true))),
+                          icon: Icon(Icons.history_rounded, color: theme.textTheme.bodyMedium?.color),
+                          label: Text('View Completed Items', style: theme.textTheme.bodyMedium),
+                        ),
+                      ),
+                    ]
+                  ]),
+                ),
+
+                SliverToBoxAdapter(
+                  child: SizedBox(height: isBatchMode ? 300 : AppConstants.listBottomClearance + safeBottom),
+                ),
               ],
             ),
           ),
 
-          // FIXED: Injected the Edit Sheet so swipe-to-edit can actually render the UI
           const FluidEditSheet(),
 
-          // --- ENHANCEMENT 3: Custom Shopping Mode Batch Bar ---
-          // --- ENHANCEMENT 3: Custom Shopping Mode Batch Bar ---
+          // --- ENHANCEMENT: 2-Row Stacked Batch Bar ---
           AnimatedPositioned(
             duration: const Duration(milliseconds: 300),
             curve: Curves.easeOutCubic,
             left: 16.0,
             right: 16.0,
-            bottom: isBatchMode ? safeBottom + AppConstants.snackbarBottomMargin : -100,
-            height: 70.0,
+            bottom: isBatchMode ? safeBottom + AppConstants.snackbarBottomMargin : -150,
+            height: 110.0, // FIXED: Expanded height to comfortably fit 2 rows
             child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
               decoration: BoxDecoration(
                 color: theme.colorScheme.inverseSurface,
                 borderRadius: BorderRadius.circular(24.0),
                 boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.3), blurRadius: 15, offset: const Offset(0, 5))],
               ),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                child: Row(
-                  children: [
-                    IconButton(
-                      icon: Icon(Icons.close, color: theme.colorScheme.onInverseSurface),
-                      onPressed: () => listProvider.clearSelection(),
-                    ),
-                    const SizedBox(width: 4),
-                    Text(
-                      '${listProvider.selectedItemIds.length}',
-                      style: TextStyle(color: theme.colorScheme.onInverseSurface, fontSize: 18, fontWeight: FontWeight.bold),
-                    ),
-                    const Spacer(),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
 
-                    // FIXED: Dynamically check if selected items contain Hidden, Active, or Both
-                    Builder(
-                        builder: (context) {
-                          final selectedItems = listProvider.shoppingModeItems.where((i) => listProvider.selectedItemIds.contains(i.id)).toList();
-                          final storeLower = listProvider.activeShoppingStore!.toLowerCase();
+                  // ROW 1: Close, Count, Spacer, Delete
+                  Row(
+                    children: [
+                      GestureDetector(
+                        onTap: () => listProvider.clearSelection(),
+                        child: Icon(Icons.close, color: theme.colorScheme.onInverseSurface, size: 24),
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        '${listProvider.selectedItemIds.length} Selected',
+                        style: TextStyle(color: theme.colorScheme.onInverseSurface, fontSize: 16, fontWeight: FontWeight.bold),
+                      ),
+                      const Spacer(),
+                      GestureDetector(
+                        onTap: () {
+                          final ids = listProvider.selectedItemIds.toList();
+                          listProvider.deleteShoppingItems(ids);
+                          _showActionToast(context, '${ids.length} items deleted', null); // Null skips the Undo
+                        },
+                        child: const Icon(Icons.delete_outline, color: AppColors.destructiveAction, size: 24),
+                      ),
+                    ],
+                  ),
 
-                          final hasHidden = selectedItems.any((i) => i.excludedLocations.map((e)=>e.toLowerCase()).contains(storeLower));
-                          final hasActive = selectedItems.any((i) => !i.excludedLocations.map((e)=>e.toLowerCase()).contains(storeLower));
+                  // ROW 2: Contextual Actions (Unhide, Hide, Check Off)
+                  Builder(
+                      builder: (context) {
+                        final selectedItems = listProvider.shoppingModeItems.where((i) => listProvider.selectedItemIds.contains(i.id)).toList();
+                        final storeLower = listProvider.activeShoppingStore!.toLowerCase();
 
-                          return Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              if (hasHidden)
-                                TextButton.icon(
+                        final hasHidden = selectedItems.any((i) => i.excludedLocations.map((e)=>e.toLowerCase()).contains(storeLower));
+                        final hasActive = selectedItems.any((i) => !i.excludedLocations.map((e)=>e.toLowerCase()).contains(storeLower));
+
+                        return Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                          children: [
+                            if (hasHidden)
+                              Expanded( // FIXED: Expanded forces the buttons to evenly balance the width
+                                child: TextButton.icon(
                                   icon: const Icon(Icons.visibility, color: Colors.white, size: 16),
-                                  label: const Text('UNHIDE', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                                  label: const Text('UNHIDE', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis),
                                   onPressed: () {
                                     final hiddenIds = selectedItems.where((i) => i.excludedLocations.map((e)=>e.toLowerCase()).contains(storeLower)).map((i) => i.id).toList();
                                     listProvider.unbanishShoppingItems(hiddenIds);
-                                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${hiddenIds.length} items restored')));
+                                    _showActionToast(context, '${hiddenIds.length} items restored', () => listProvider.banishShoppingItems(hiddenIds));
                                   },
                                 ),
-                              if (hasActive)
-                                TextButton.icon(
+                              ),
+                            if (hasActive)
+                              Expanded(
+                                child: TextButton.icon(
                                   icon: const Icon(Icons.visibility_off, color: Colors.white, size: 16),
-                                  label: const Text('HIDE', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                                  label: const Text('HIDE', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis),
                                   onPressed: () {
                                     final activeIds = selectedItems.where((i) => !i.excludedLocations.map((e)=>e.toLowerCase()).contains(storeLower)).map((i) => i.id).toList();
                                     listProvider.banishShoppingItems(activeIds);
-                                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${activeIds.length} items hidden')));
+                                    _showActionToast(context, '${activeIds.length} items hidden', () => listProvider.unbanishShoppingItems(activeIds));
                                   },
                                 ),
-                              if (hasActive)
-                                TextButton.icon(
+                              ),
+                            if (hasActive)
+                              Expanded(
+                                child: TextButton.icon(
                                   icon: const Icon(Icons.check, color: AppColors.primaryAction, size: 16),
-                                  label: const Text('CHECK OFF', style: TextStyle(color: AppColors.primaryAction, fontWeight: FontWeight.bold)),
+                                  label: const Text('CHECK OFF', style: TextStyle(color: AppColors.primaryAction, fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis),
                                   onPressed: () {
                                     final activeIds = selectedItems.where((i) => !i.excludedLocations.map((e)=>e.toLowerCase()).contains(storeLower)).map((i) => i.id).toList();
                                     listProvider.toggleShoppingItemsCompletion(activeIds);
-                                    _showActionToast(context, '${activeIds.length} items checked off', activeIds, listProvider);
+                                    _showActionToast(context, '${activeIds.length} items checked off', () => listProvider.restoreShoppingItems(activeIds));
                                   },
                                 ),
-                            ],
-                          );
-                        }
-                    ),
-                  ],
-                ),
+                              ),
+                          ],
+                        );
+                      }
+                  ),
+                ],
               ),
             ),
           ),
@@ -398,4 +441,31 @@ class _ShoppingModeScreenState extends State<ShoppingModeScreen> {
       ),
     );
   }
+}
+
+class _CategoryHeaderDelegate extends SliverPersistentHeaderDelegate {
+  final String title;
+  final Color backgroundColor;
+
+  _CategoryHeaderDelegate(this.title, this.backgroundColor);
+
+  @override
+  Widget build(BuildContext context, double shrinkOffset, bool overlapsContent) {
+    return Container(
+      color: backgroundColor,
+      padding: const EdgeInsets.fromLTRB(20, 24, 20, 8),
+      alignment: Alignment.bottomLeft,
+      child: Text(
+        title.toUpperCase(),
+        style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.primaryAction.withOpacity(0.8), letterSpacing: 1.2),
+      ),
+    );
+  }
+
+  @override
+  double get maxExtent => 50.0;
+  @override
+  double get minExtent => 50.0;
+  @override
+  bool shouldRebuild(covariant _CategoryHeaderDelegate oldDelegate) => oldDelegate.title != title;
 }

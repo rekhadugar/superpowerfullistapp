@@ -15,12 +15,14 @@ class ListProvider extends ChangeNotifier {
 
   // --- CROSS-LIST SHOPPING MODE STATE ---
   final List<ListItem> _shoppingModeItems = [];
-  final Map<String, String> _itemOriginMap = {}; // Maps itemId -> listId
+  final List<ListItem> _shoppingCompletedItems = []; // NEW: Global completed array
+  final Map<String, String> _itemOriginMap = {};
   String? _activeShoppingStore;
 
   bool _isLoadingShoppingMode = true;
 
   List<ListItem> get shoppingModeItems => _shoppingModeItems;
+  List<ListItem> get shoppingCompletedItems => _shoppingCompletedItems; // NEW
   String? get activeShoppingStore => _activeShoppingStore;
   bool get isLoadingShoppingMode => _isLoadingShoppingMode;
 
@@ -1161,8 +1163,13 @@ class ListProvider extends ChangeNotifier {
         final List<dynamic> decoded = json.decode(itemsJson);
         for (var itemMap in decoded) {
           final item = ListItem.fromMap(itemMap);
-          if (!item.isCompleted && !item.isDeleted) {
-            _shoppingModeItems.add(item);
+          if (!item.isDeleted) {
+            // FIXED: Sort into active vs completed arrays
+            if (item.isCompleted) {
+              _shoppingCompletedItems.add(item);
+            } else {
+              _shoppingModeItems.add(item);
+            }
             _itemOriginMap[item.id] = list.id;
           }
         }
@@ -1206,31 +1213,76 @@ class ListProvider extends ChangeNotifier {
 
   Future<void> toggleShoppingItemsCompletion(List<String> itemIds) async {
     for (String itemId in itemIds) {
-      final index = _shoppingModeItems.indexWhere((i) => i.id == itemId);
-      if (index == -1) continue;
+      int index = _shoppingModeItems.indexWhere((i) => i.id == itemId);
+      if (index != -1) {
+        ListItem item = _shoppingModeItems[index];
+        final isNowCompleted = true;
 
-      ListItem item = _shoppingModeItems[index];
-      final isNowCompleted = !item.isCompleted;
-
-      // THE LEARNING LOOP: If checking off, learn this location!
-      if (isNowCompleted && _activeShoppingStore != null && _activeShoppingStore != 'Any') {
-        final currentLocs = List<String>.from(item.locations);
-        if (!currentLocs.map((e) => e.toLowerCase()).contains(_activeShoppingStore!.toLowerCase())) {
-          currentLocs.add(_activeShoppingStore!);
-          item = item.copyWith(locations: currentLocs);
+        if (_activeShoppingStore != null && _activeShoppingStore != 'Any') {
+          final currentLocs = List<String>.from(item.locations);
+          if (!currentLocs.map((e) => e.toLowerCase()).contains(_activeShoppingStore!.toLowerCase())) {
+            currentLocs.add(_activeShoppingStore!);
+            item = item.copyWith(locations: currentLocs);
+          }
         }
+
+        item = item.copyWith(isCompleted: true, completedAt: DateTime.now());
+
+        _shoppingModeItems.removeAt(index);
+        _shoppingCompletedItems.insert(0, item); // Move to completed array
+        await _updateOriginListStorage(itemId, item);
+      }
+    }
+    clearSelection();
+    notifyListeners();
+  }
+
+  Future<void> restoreShoppingItems(List<String> itemIds) async {
+    for (String itemId in itemIds) {
+      int compIndex = _shoppingCompletedItems.indexWhere((i) => i.id == itemId);
+      if (compIndex != -1) {
+        ListItem item = _shoppingCompletedItems[compIndex];
+        item = item.copyWith(isCompleted: false, completedAt: null);
+
+        _shoppingCompletedItems.removeAt(compIndex);
+        _shoppingModeItems.insert(0, item); // Move back to active array
+        await _updateOriginListStorage(itemId, item);
+      }
+    }
+    notifyListeners();
+  }
+
+  Future<void> deleteShoppingItemPermanently(String itemId) async {
+    int compIndex = _shoppingCompletedItems.indexWhere((i) => i.id == itemId);
+    if (compIndex != -1) {
+      ListItem item = _shoppingCompletedItems[compIndex];
+      item = item.copyWith(isDeleted: true);
+      _shoppingCompletedItems.removeAt(compIndex);
+      await _updateOriginListStorage(itemId, item);
+      notifyListeners();
+    }
+  }
+
+  Future<void> deleteShoppingItems(List<String> itemIds) async {
+    for (String itemId in itemIds) {
+      int index = _shoppingModeItems.indexWhere((i) => i.id == itemId);
+      if (index != -1) {
+        ListItem item = _shoppingModeItems[index];
+        item = item.copyWith(isDeleted: true);
+        _shoppingModeItems.removeAt(index);
+        await _updateOriginListStorage(itemId, item);
+        continue;
       }
 
-      // Mark completed
-      item = item.copyWith(
-        isCompleted: isNowCompleted,
-        completedAt: isNowCompleted ? DateTime.now() : null,
-      );
-
-      _shoppingModeItems[index] = item;
-      await _updateOriginListStorage(itemId, item);
+      int compIndex = _shoppingCompletedItems.indexWhere((i) => i.id == itemId);
+      if (compIndex != -1) {
+        ListItem item = _shoppingCompletedItems[compIndex];
+        item = item.copyWith(isDeleted: true);
+        _shoppingCompletedItems.removeAt(compIndex);
+        await _updateOriginListStorage(itemId, item);
+      }
     }
-    clearSelection(); // Clear multi-select state when done
+    clearSelection();
     notifyListeners();
   }
 
@@ -1253,21 +1305,6 @@ class ListProvider extends ChangeNotifier {
       }
     }
     clearSelection(); // Clear multi-select state when done
-    notifyListeners();
-  }
-
-  // NEW: Allows the Undo Toast to function properly in Shopping Mode
-  Future<void> restoreShoppingItems(List<String> itemIds) async {
-    for (String itemId in itemIds) {
-      final index = _shoppingModeItems.indexWhere((i) => i.id == itemId);
-      if (index == -1) continue;
-
-      ListItem item = _shoppingModeItems[index];
-      item = item.copyWith(isCompleted: false, completedAt: null);
-
-      _shoppingModeItems[index] = item;
-      await _updateOriginListStorage(itemId, item);
-    }
     notifyListeners();
   }
 
