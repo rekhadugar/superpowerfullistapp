@@ -18,9 +18,14 @@ class BatchActionBar extends StatelessWidget {
     final macroProvider = context.read<MacroListProvider>();
     final settings = context.read<SettingsProvider>();
 
-    // ALIAS MAPPING: Dynamically fetch the current list type name
+    final currentListId = macroProvider.activeListId;
     final typeId = macroProvider.activeList?.typeId ?? 'sys_shopping';
     final currentTypeName = settings.getTypeById(typeId).name;
+
+    // 1. Fetch real lists that are of the same type, strictly excluding the current active list
+    final availableLists = macroProvider.lists
+        .where((l) => l.typeId == typeId && l.id != currentListId)
+        .toList();
 
     showModalBottomSheet(
       context: context,
@@ -41,32 +46,45 @@ class BatchActionBar extends StatelessWidget {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  'Showing your other $currentTypeName lists.', // FIXED
+                  'Showing your other $currentTypeName lists.',
                   style: TextStyle(color: Colors.grey.shade600, fontSize: 14),
                 ),
                 const SizedBox(height: 16),
 
-                Expanded(
-                  child: ListView.builder(
-                    shrinkWrap: true,
-                    itemCount: 3,
-                    itemBuilder: (context, index) {
-                      final mockTargetListId = 'mock_list_id_$index';
-                      return ListTile(
-                        leading: const Icon(Icons.list_alt, color: AppColors.primaryAction),
-                        title: Text('My Other $currentTypeName List ${index + 1}'), // FIXED
-                        onTap: () {
-                          if (isCopy) {
-                            provider.copySelectedToTargetList(mockTargetListId);
-                          } else {
-                            provider.moveSelectedToTargetList(mockTargetListId);
-                          }
-                          Navigator.pop(context);
-                        },
-                      );
-                    },
+                // 2. Handle edge case where user only has 1 list total
+                if (availableLists.isEmpty)
+                  const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 32.0),
+                    child: Center(
+                      child: Text(
+                        'No other lists available.\nCreate a new list first!',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(fontSize: 16, color: Colors.grey),
+                      ),
+                    ),
+                  )
+                else
+                  Expanded(
+                    child: ListView.builder(
+                      shrinkWrap: true,
+                      itemCount: availableLists.length,
+                      itemBuilder: (context, index) {
+                        final targetList = availableLists[index];
+                        return ListTile(
+                          leading: const Icon(Icons.list_alt, color: AppColors.primaryAction),
+                          title: Text(targetList.name), // Dynamically inserts real list name
+                          onTap: () {
+                            if (isCopy) {
+                              provider.copySelectedToTargetList(targetList.id);
+                            } else {
+                              provider.moveSelectedToTargetList(targetList.id);
+                            }
+                            Navigator.pop(context); // Close the bottom sheet
+                          },
+                        );
+                      },
+                    ),
                   ),
-                ),
               ],
             ),
           ),

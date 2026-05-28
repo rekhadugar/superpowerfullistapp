@@ -316,17 +316,40 @@ class ListProvider extends ChangeNotifier {
 
     final rawIndex = _items.indexWhere((i) => i.id == draggedItem.id);
     if (rawIndex != -1) {
+      final double finalCatOrder = _currentSortMode == SortMode.categories ? newOrder : _items[rawIndex].categoryOrder;
+      final double finalTypeOrder = _currentSortMode == SortMode.types ? newOrder : _items[rawIndex].typeOrder;
+      final double finalGlobalOrder = _currentSortMode == SortMode.customFlat ? newOrder : _items[rawIndex].globalCustomOrder;
+
+      // 1. Optimistic UI Update: Forces the screen to paint instantly without stuttering
       _items[rawIndex] = _items[rawIndex].copyWith(
         category: newCategory,
         type: newType,
-        categoryOrder: _currentSortMode == SortMode.categories ? newOrder : _items[rawIndex].categoryOrder,
-        typeOrder: _currentSortMode == SortMode.types ? newOrder : _items[rawIndex].typeOrder,
-        globalCustomOrder: _currentSortMode == SortMode.customFlat ? newOrder : _items[rawIndex].globalCustomOrder,
+        categoryOrder: finalCatOrder,
+        typeOrder: finalTypeOrder,
+        globalCustomOrder: finalGlobalOrder,
       );
 
       _buildDisplayList();
-      _saveItemsToStorage();
       notifyListeners();
+
+      // 2. Background Sync to Firestore (Replacing _saveItemsToStorage)
+      final uid = AuthService.currentUserId;
+      if (uid != null && _currentListId != null) {
+        FirebaseFirestore.instance
+            .collection('users')
+            .doc(uid)
+            .collection('lists')
+            .doc(_currentListId)
+            .collection('items')
+            .doc(draggedItem.id)
+            .update({
+          'category': newCategory,
+          'type': newType,
+          'categoryOrder': finalCatOrder,
+          'typeOrder': finalTypeOrder,
+          'globalCustomOrder': finalGlobalOrder,
+        });
+      }
     }
   }
 
@@ -570,122 +593,170 @@ class ListProvider extends ChangeNotifier {
 
   // --- BATCH ACTIONS ---
   void checkAllActiveItems() {
+    final uid = AuthService.currentUserId;
+    if (uid == null || _currentListId == null) return;
+
+    final batch = FirebaseFirestore.instance.batch();
+    final listRef = FirebaseFirestore.instance.collection('users').doc(uid).collection('lists').doc(_currentListId).collection('items');
     bool changed = false;
+
     for (int i = 0; i < _items.length; i++) {
       if (!_items[i].isDeleted && !_items[i].isCompleted) {
-        _items[i] = _items[i].copyWith(isCompleted: true, completedAt: DateTime.now());
+        final now = DateTime.now();
+        _items[i] = _items[i].copyWith(isCompleted: true, completedAt: now);
+
+        batch.update(listRef.doc(_items[i].id), {
+          'isCompleted': true,
+          'completedAt': now.toIso8601String(),
+        });
         changed = true;
       }
     }
     if (changed) {
+      batch.commit();
       _buildDisplayList();
       _buildCheckedDisplayList();
-      _saveItemsToStorage();
       notifyListeners();
     }
   }
 
   void deleteCompletedItems() {
+    final uid = AuthService.currentUserId;
+    if (uid == null || _currentListId == null) return;
+
+    final batch = FirebaseFirestore.instance.batch();
+    final listRef = FirebaseFirestore.instance.collection('users').doc(uid).collection('lists').doc(_currentListId).collection('items');
     bool changed = false;
+
     for (int i = 0; i < _items.length; i++) {
       if (_items[i].isCompleted && !_items[i].isDeleted) {
         _items[i] = _items[i].copyWith(isDeleted: true);
+        batch.update(listRef.doc(_items[i].id), {'isDeleted': true});
         changed = true;
       }
     }
     if (changed) {
+      batch.commit();
       _buildDisplayList();
       _buildCheckedDisplayList();
-      _saveItemsToStorage();
       notifyListeners();
     }
   }
 
   List<String> checkSelectedItems() {
+    final uid = AuthService.currentUserId;
+    if (uid == null || _currentListId == null) return [];
+
     final checkedIds = List<String>.from(_selectedItemIds);
+    final batch = FirebaseFirestore.instance.batch();
+    final listRef = FirebaseFirestore.instance.collection('users').doc(uid).collection('lists').doc(_currentListId).collection('items');
+
     for (String id in checkedIds) {
       final index = _items.indexWhere((item) => item.id == id);
-      if (index != -1) _items[index] = _items[index].copyWith(isCompleted: true, completedAt: DateTime.now());
+      if (index != -1) {
+        final now = DateTime.now();
+        _items[index] = _items[index].copyWith(isCompleted: true, completedAt: now);
+        batch.update(listRef.doc(id), {
+          'isCompleted': true,
+          'completedAt': now.toIso8601String(),
+        });
+      }
     }
+
+    batch.commit();
     clearSelection();
     _buildDisplayList();
     _buildCheckedDisplayList();
-    _saveItemsToStorage();
     return checkedIds;
   }
 
   List<String> deleteSelectedItems() {
+    final uid = AuthService.currentUserId;
+    if (uid == null || _currentListId == null) return [];
+
     final deletedIds = List<String>.from(_selectedItemIds);
+    final batch = FirebaseFirestore.instance.batch();
+    final listRef = FirebaseFirestore.instance.collection('users').doc(uid).collection('lists').doc(_currentListId).collection('items');
+
     for (String id in deletedIds) {
       final index = _items.indexWhere((item) => item.id == id);
-      if (index != -1) _items[index] = _items[index].copyWith(isDeleted: true);
+      if (index != -1) {
+        _items[index] = _items[index].copyWith(isDeleted: true);
+        batch.update(listRef.doc(id), {'isDeleted': true});
+      }
     }
+
+    batch.commit();
     clearSelection();
     _buildDisplayList();
     _buildCheckedDisplayList();
-    _saveItemsToStorage();
     return deletedIds;
   }
 
   Future<void> moveSelectedToTargetList(String targetListId) async {
     if (targetListId == _currentListId || _selectedItemIds.isEmpty) return;
+    final uid = AuthService.currentUserId;
+    if (uid == null || _currentListId == null) return;
 
     final itemsToMove = _items.where((item) => _selectedItemIds.contains(item.id)).toList();
     if (itemsToMove.isEmpty) return;
 
+    final batch = FirebaseFirestore.instance.batch();
+    final sourceRef = FirebaseFirestore.instance.collection('users').doc(uid).collection('lists').doc(_currentListId).collection('items');
+    final destRef = FirebaseFirestore.instance.collection('users').doc(uid).collection('lists').doc(targetListId).collection('items');
+
+    // Optimistic UI Update (remove from current view instantly)
     _items.removeWhere((item) => _selectedItemIds.contains(item.id));
     _buildDisplayList();
     _buildCheckedDisplayList();
-    await _saveItemsToStorage();
 
-    final prefs = await SharedPreferences.getInstance();
-    final String? destJson = prefs.getString('items_$targetListId');
-    List<ListItem> destItems = [];
-
-    if (destJson != null) {
-      final List<dynamic> decoded = jsonDecode(destJson);
-      destItems = decoded.map((map) => ListItem.fromMap(map)).toList();
+    // Stage the network transaction
+    for (var item in itemsToMove) {
+      batch.delete(sourceRef.doc(item.id)); // Delete from old subcollection
+      batch.set(destRef.doc(item.id), item.toMap()); // Add to new subcollection
     }
 
-    destItems.addAll(itemsToMove);
-    await prefs.setString('items_$targetListId', jsonEncode(destItems.map((i) => i.toMap()).toList()));
-
+    await batch.commit();
     clearSelection();
     notifyListeners();
   }
 
   Future<void> copySelectedToTargetList(String targetListId) async {
     if (targetListId == _currentListId || _selectedItemIds.isEmpty) return;
+    final uid = AuthService.currentUserId;
+    if (uid == null || _currentListId == null) return;
 
     final itemsToCopy = _items.where((item) => _selectedItemIds.contains(item.id)).toList();
     if (itemsToCopy.isEmpty) return;
 
-    final prefs = await SharedPreferences.getInstance();
-    final String? destJson = prefs.getString('items_$targetListId');
-    List<ListItem> destItems = [];
-
-    if (destJson != null) {
-      final List<dynamic> decoded = jsonDecode(destJson);
-      destItems = decoded.map((map) => ListItem.fromMap(map)).toList();
-    }
+    final batch = FirebaseFirestore.instance.batch();
+    final destRef = FirebaseFirestore.instance.collection('users').doc(uid).collection('lists').doc(targetListId).collection('items');
 
     int timeOffset = 0;
     for (var original in itemsToCopy) {
-      destItems.add(original.copyWith(
-        id: DateTime.now().microsecondsSinceEpoch.toString() + original.id + timeOffset.toString(),
+      final newId = DateTime.now().microsecondsSinceEpoch.toString() + original.id + timeOffset.toString();
+      final copiedItem = original.copyWith(
+        id: newId,
         globalCustomOrder: original.globalCustomOrder + 10.0,
-      ));
+      );
+
+      batch.set(destRef.doc(newId), copiedItem.toMap());
       timeOffset++;
     }
 
-    await prefs.setString('items_$targetListId', jsonEncode(destItems.map((i) => i.toMap()).toList()));
-
+    await batch.commit();
     clearSelection();
     notifyListeners();
   }
 
   void restoreItems(List<String> ids) {
+    final uid = AuthService.currentUserId;
+    if (uid == null || _currentListId == null) return;
+
+    final batch = FirebaseFirestore.instance.batch();
+    final listRef = FirebaseFirestore.instance.collection('users').doc(uid).collection('lists').doc(_currentListId).collection('items');
     bool changed = false;
+
     for (String id in ids) {
       final index = _items.indexWhere((item) => item.id == id);
       if (index != -1) {
@@ -694,36 +765,50 @@ class ListProvider extends ChangeNotifier {
           isCompleted: false,
           completedAt: null,
         );
+        batch.update(listRef.doc(id), {
+          'isDeleted': false,
+          'isCompleted': false,
+          'completedAt': null,
+        });
         changed = true;
       }
     }
     if (changed) {
+      batch.commit();
       _buildDisplayList();
       _buildCheckedDisplayList();
-      _saveItemsToStorage();
       notifyListeners();
     }
   }
 
   void copySelectedItems() {
+    final uid = AuthService.currentUserId;
+    if (uid == null || _currentListId == null) return;
+
+    final batch = FirebaseFirestore.instance.batch();
+    final listRef = FirebaseFirestore.instance.collection('users').doc(uid).collection('lists').doc(_currentListId).collection('items');
     List<ListItem> newItems = [];
+
     for (String id in _selectedItemIds) {
       final index = _items.indexWhere((item) => item.id == id);
       if (index != -1) {
         final original = _items[index];
-        newItems.add(original.copyWith(
+        final copiedItem = original.copyWith(
           id: DateTime.now().microsecondsSinceEpoch.toString() + original.id,
           title: '${original.title} (Copy)',
           globalCustomOrder: original.globalCustomOrder + 10.0,
-        ));
+        );
+        newItems.add(copiedItem);
+        batch.set(listRef.doc(copiedItem.id), copiedItem.toMap());
       }
     }
+
     if (newItems.isNotEmpty) {
       _items.addAll(newItems);
+      batch.commit();
       clearSelection();
       _buildDisplayList();
       _buildCheckedDisplayList();
-      _saveItemsToStorage();
     }
   }
 
