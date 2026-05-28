@@ -8,6 +8,7 @@ import '../models/settings_models.dart';
 import '../providers/list_provider.dart';
 import '../providers/macro_list_provider.dart';
 import '../providers/settings_provider.dart';
+import '../services/auth_service.dart';
 import '../theme/app_theme.dart';
 
 // ==========================================
@@ -515,7 +516,7 @@ class _TypeDetailScreenState extends State<TypeDetailScreen> with SingleTickerPr
         child: const Icon(Icons.add, color: Colors.white),
         onPressed: () {
           if (_tabController.index == 0) {
-            _showEditListSheet(context, MacroList(id: DateTime.now().toString(), name: '', typeId: widget.listType.id, createdAt: DateTime.now()));
+            _showEditListSheet(context, MacroList(id: DateTime.now().toString(), name: '', typeId: widget.listType.id, createdAt: DateTime.now(), editors: [AuthService.currentUserId!],));
           } else {
             _showEditGroupSheet(context, isAxis1: _tabController.index == 1);
           }

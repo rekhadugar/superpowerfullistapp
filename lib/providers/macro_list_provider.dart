@@ -42,12 +42,10 @@ class MacroListProvider extends ChangeNotifier {
     final prefs = await SharedPreferences.getInstance();
     _activeListId = prefs.getString('active_list_id');
 
-    final firestore = FirebaseFirestore.instance;
-    // The Stream automatically pushes offline/online updates to the UI in real-time
-    _listSubscription = firestore
-        .collection('users')
-        .doc(uid)
+    // MULTIPLAYER MAGIC: Listen to the top-level collection, filtering by your UID
+    _listSubscription = FirebaseFirestore.instance
         .collection('lists')
+        .where('editors', arrayContains: uid)
         .snapshots()
         .listen((snapshot) {
 
@@ -90,12 +88,10 @@ class MacroListProvider extends ChangeNotifier {
       typeId: typeId,
       displayOrder: maxOrder + 100.0,
       createdAt: DateTime.now(),
+      editors: [uid], // NEW: The creator is automatically the first editor
     );
 
-    // Write to Firestore (will instantly update the stream)
     await FirebaseFirestore.instance
-        .collection('users')
-        .doc(uid)
         .collection('lists')
         .doc(newList.id)
         .set(newList.toMap());
@@ -106,8 +102,6 @@ class MacroListProvider extends ChangeNotifier {
     if (uid == null) return;
 
     await FirebaseFirestore.instance
-        .collection('users')
-        .doc(uid)
         .collection('lists')
         .doc(id)
         .update({'name': newName.trim()});
@@ -117,18 +111,9 @@ class MacroListProvider extends ChangeNotifier {
     final uid = AuthService.currentUserId;
     if (uid == null) return;
 
-    // 1. Delete the list document
-    await FirebaseFirestore.instance
-        .collection('users')
-        .doc(uid)
-        .collection('lists')
-        .doc(id)
-        .delete();
+    await FirebaseFirestore.instance.collection('lists').doc(id).delete();
 
-    // 2. Client-side subcollection wipe
     final itemsSnapshot = await FirebaseFirestore.instance
-        .collection('users')
-        .doc(uid)
         .collection('lists')
         .doc(id)
         .collection('items')
@@ -164,15 +149,11 @@ class MacroListProvider extends ChangeNotifier {
       final newOrder = (i + 1) * 100.0;
       _lists[i] = _lists[i].copyWith(displayOrder: newOrder);
 
-      final docRef = FirebaseFirestore.instance
-          .collection('users')
-          .doc(uid)
-          .collection('lists')
-          .doc(_lists[i].id);
+      final docRef = FirebaseFirestore.instance.collection('lists').doc(_lists[i].id);
       batch.update(docRef, {'displayOrder': newOrder});
     }
     await batch.commit();
-    notifyListeners(); // Optimistic immediate UI update
+    notifyListeners();
   }
 
   Future<void> deleteAllListsOfType(String typeId) async {
@@ -185,11 +166,7 @@ class MacroListProvider extends ChangeNotifier {
     final batch = FirebaseFirestore.instance.batch();
 
     for (var list in listsToDelete) {
-      final listRef = FirebaseFirestore.instance
-          .collection('users')
-          .doc(uid)
-          .collection('lists')
-          .doc(list.id);
+      final listRef = FirebaseFirestore.instance.collection('lists').doc(list.id);
       batch.delete(listRef);
 
       final itemsSnapshot = await listRef.collection('items').get();

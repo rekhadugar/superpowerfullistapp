@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:listicle_v2/screens/sign_in_screen.dart';
 import 'package:provider/provider.dart';
 
 import '../providers/theme_provider.dart';
@@ -134,13 +135,35 @@ class _GoogleAccountLinkTileState extends State<GoogleAccountLinkTile> {
     setState(() => _isLoading = true);
     final user = await AuthService.signInWithGoogle();
 
-    if (user != null && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Account successfully secured!')),
-      );
-    }
     if (mounted) {
-      setState(() => _isLoading = false);
+      setState(() => _isLoading = false); // Stop the spinner
+
+      if (user != null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Account successfully secured!')),
+        );
+      } else {
+        // If it returns null, it failed (usually because the Google account is already used)
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Failed to link. That Google account may already be tied to another user.'),
+            backgroundColor: Colors.redAccent,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _signOut() async {
+    setState(() => _isLoading = true);
+    await AuthService.signOut();
+
+    if (mounted) {
+      // Wipe the navigation stack and send them back to the brand new Sign-In Screen
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (_) => const SignInScreen()),
+            (route) => false,
+      );
     }
   }
 
@@ -160,7 +183,10 @@ class _GoogleAccountLinkTileState extends State<GoogleAccountLinkTile> {
         onPressed: _linkAccount,
         child: const Text('Link', style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.primaryAction)),
       )
-          : const Icon(Icons.check_circle, color: AppColors.successAction),
+          : TextButton(
+        onPressed: _signOut,
+        child: const Text('Sign Out', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.redAccent)),
+      ),
     );
   }
 }

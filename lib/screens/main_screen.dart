@@ -18,6 +18,7 @@ import '../widgets/fluid_edit_sheet.dart';
 import '../widgets/list_item_card.dart';
 import '../widgets/main_options_sheet.dart';
 import '../widgets/section_header.dart';
+import '../widgets/share_list_sheet.dart';
 import '../widgets/swipe_action_wrapper.dart';
 import 'completed_items_screen.dart'; // NEW IMPORT
 import 'create_list_screen.dart';
@@ -163,7 +164,6 @@ class _MainScreenState extends State<MainScreen> {
     }
 
     final activeId = macroProvider.activeListId!;
-    // FIXED: Renamed to match the exact method signature in list_provider.dart
     context.read<ListProvider>().loadItems(activeId);
 
     context.read<ListProvider>().syncGlobalDictionary(macroProvider.lists);
@@ -208,16 +208,46 @@ class _MainScreenState extends State<MainScreen> {
             fontWeight: FontWeight.w700,
           ),
           actions: [
-            IconButton(
+            // THE NEW MULTI-ACTION POPUP MENU
+            PopupMenuButton<String>(
               icon: Icon(Icons.more_vert_rounded, color: theme.textTheme.titleMedium?.color),
-              onPressed: () {
-                showModalBottomSheet(
-                  context: context,
-                  isScrollControlled: true,
-                  backgroundColor: Colors.transparent,
-                  builder: (ctx) => const MainOptionsSheet(),
-                );
+              onSelected: (String value) {
+                if (value == 'share') {
+                  if (activeList != null) {
+                    ShareListSheet.show(context, activeList);
+                  }
+                } else if (value == 'options') {
+                  showModalBottomSheet(
+                    context: context,
+                    isScrollControlled: true,
+                    backgroundColor: Colors.transparent,
+                    builder: (ctx) => const MainOptionsSheet(),
+                  );
+                }
               },
+              itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
+                const PopupMenuItem<String>(
+                  value: 'share',
+                  child: Row(
+                    children: [
+                      Icon(Icons.person_add_alt_1_rounded, size: 20, color: AppColors.primaryAction),
+                      SizedBox(width: 12),
+                      Text('Share List', style: TextStyle(fontWeight: FontWeight.w600)),
+                    ],
+                  ),
+                ),
+                const PopupMenuDivider(),
+                const PopupMenuItem<String>(
+                  value: 'options',
+                  child: Row(
+                    children: [
+                      Icon(Icons.tune_rounded, size: 20),
+                      SizedBox(width: 12),
+                      Text('List Options'),
+                    ],
+                  ),
+                ),
+              ],
             ),
           ],
         ),
@@ -324,7 +354,6 @@ class _MainScreenState extends State<MainScreen> {
 
                           onCheck: () {
                             final id = listProvider.toggleCompletion(item.id);
-                            // FIXED: Uses the top-level listProvider reference, preventing the crash
                             _showActionToast(context, '${item.title} checked off', () => listProvider.restoreItems([id]));
                           },
                           onTap: () {
@@ -355,7 +384,6 @@ class _MainScreenState extends State<MainScreen> {
                             isBatchModeActive: listProvider.isBatchModeActive,
                             onCheckout: () {
                               final id = listProvider.toggleCompletion(item.id);
-                              // FIXED: Uses the top-level listProvider reference, preventing the crash
                               _showActionToast(context, '${item.title} checked off', () => listProvider.restoreItems([id]));
                             },
                             onEdit: () {
@@ -365,7 +393,6 @@ class _MainScreenState extends State<MainScreen> {
                             },
                             onDelete: () {
                               final id = listProvider.deleteItem(item.id);
-                              // FIXED: Safely restores item without relying on the destroyed list item context
                               _showActionToast(context, '${item.title} deleted', () => listProvider.restoreItems([id]));
                             },
                             child: coreCard,
@@ -394,14 +421,13 @@ class _MainScreenState extends State<MainScreen> {
             const FluidEditSheet(),
             const BatchActionBar(),
 
-            // NEW: AnimatedPositioned FAB placed inside the Stack to avoid Scaffold conflicts
             AnimatedPositioned(
               duration: const Duration(milliseconds: 300),
               curve: Curves.easeOutCubic,
               right: 16.0,
               bottom: (listProvider.isBatchModeActive || listProvider.editItemId != null)
-                  ? -100.0 // Slides off screen during batch/edit mode
-                  : safeBottomPadding + AppConstants.listBottomClearance + 16.0, // Safely floats above the bottom bar
+                  ? -100.0
+                  : safeBottomPadding + AppConstants.listBottomClearance + 16.0,
               child: FloatingActionButton(
                 onPressed: () {
                   showModalBottomSheet(

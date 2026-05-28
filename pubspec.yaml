@@ -41,6 +41,7 @@ dependencies:
   flutter_slidable: ^4.0.3
   shared_preferences: ^2.5.5
   google_sign_in: 6.2.1
+  share_plus: ^13.1.0
 
 
 

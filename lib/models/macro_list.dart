@@ -3,7 +3,8 @@ class MacroList {
   final String name;
   final String typeId;
   final double displayOrder;
-  final DateTime createdAt; // Restored your original property!
+  final DateTime createdAt;
+  final List<String> editors; // NEW: The multiplayer bouncer
 
   MacroList({
     required this.id,
@@ -11,6 +12,7 @@ class MacroList {
     required this.typeId,
     this.displayOrder = 100.0,
     required this.createdAt,
+    required this.editors,
   });
 
   Map<String, dynamic> toMap() {
@@ -20,6 +22,7 @@ class MacroList {
       'typeId': typeId,
       'displayOrder': displayOrder,
       'createdAt': createdAt.toIso8601String(),
+      'editors': editors,
     };
   }
 
@@ -32,15 +35,17 @@ class MacroList {
       createdAt: map['createdAt'] != null
           ? DateTime.parse(map['createdAt'])
           : DateTime.now(),
+      // Default to empty array to prevent crashes on legacy data
+      editors: List<String>.from(map['editors'] ?? []),
     );
   }
 
-  // FIXED: Added the missing copyWith method
   MacroList copyWith({
     String? name,
     String? typeId,
     double? displayOrder,
     DateTime? createdAt,
+    List<String>? editors,
   }) {
     return MacroList(
       id: id,
@@ -48,6 +53,7 @@ class MacroList {
       typeId: typeId ?? this.typeId,
       displayOrder: displayOrder ?? this.displayOrder,
       createdAt: createdAt ?? this.createdAt,
+      editors: editors ?? this.editors,
     );
   }
 }

@@ -646,7 +646,7 @@ class ListProvider extends ChangeNotifier {
     if (uid == null || _currentListId == null) return;
 
     final batch = FirebaseFirestore.instance.batch();
-    final listRef = FirebaseFirestore.instance.collection('users').doc(uid).collection('lists').doc(_currentListId).collection('items');
+    final listRef = FirebaseFirestore.instance.collection('lists').doc(_currentListId).collection('items');
     bool changed = false;
 
     for (int i = 0; i < _items.length; i++) {
@@ -674,7 +674,7 @@ class ListProvider extends ChangeNotifier {
     if (uid == null || _currentListId == null) return;
 
     final batch = FirebaseFirestore.instance.batch();
-    final listRef = FirebaseFirestore.instance.collection('users').doc(uid).collection('lists').doc(_currentListId).collection('items');
+    final listRef = FirebaseFirestore.instance.collection('lists').doc(_currentListId).collection('items');
     bool changed = false;
 
     for (int i = 0; i < _items.length; i++) {
@@ -698,7 +698,7 @@ class ListProvider extends ChangeNotifier {
 
     final checkedIds = List<String>.from(_selectedItemIds);
     final batch = FirebaseFirestore.instance.batch();
-    final listRef = FirebaseFirestore.instance.collection('users').doc(uid).collection('lists').doc(_currentListId).collection('items');
+    final listRef = FirebaseFirestore.instance.collection('lists').doc(_currentListId).collection('items');
 
     for (String id in checkedIds) {
       final index = _items.indexWhere((item) => item.id == id);
@@ -725,7 +725,7 @@ class ListProvider extends ChangeNotifier {
 
     final deletedIds = List<String>.from(_selectedItemIds);
     final batch = FirebaseFirestore.instance.batch();
-    final listRef = FirebaseFirestore.instance.collection('users').doc(uid).collection('lists').doc(_currentListId).collection('items');
+    final listRef = FirebaseFirestore.instance.collection('lists').doc(_currentListId).collection('items');
 
     for (String id in deletedIds) {
       final index = _items.indexWhere((item) => item.id == id);
@@ -751,8 +751,8 @@ class ListProvider extends ChangeNotifier {
     if (itemsToMove.isEmpty) return;
 
     final batch = FirebaseFirestore.instance.batch();
-    final sourceRef = FirebaseFirestore.instance.collection('users').doc(uid).collection('lists').doc(_currentListId).collection('items');
-    final destRef = FirebaseFirestore.instance.collection('users').doc(uid).collection('lists').doc(targetListId).collection('items');
+    final sourceRef = FirebaseFirestore.instance.collection('lists').doc(_currentListId).collection('items');
+    final destRef = FirebaseFirestore.instance.collection('lists').doc(targetListId).collection('items');
 
     // Optimistic UI Update (remove from current view instantly)
     _items.removeWhere((item) => _selectedItemIds.contains(item.id));
@@ -779,7 +779,7 @@ class ListProvider extends ChangeNotifier {
     if (itemsToCopy.isEmpty) return;
 
     final batch = FirebaseFirestore.instance.batch();
-    final destRef = FirebaseFirestore.instance.collection('users').doc(uid).collection('lists').doc(targetListId).collection('items');
+    final destRef = FirebaseFirestore.instance.collection('lists').doc(targetListId).collection('items');
 
     int timeOffset = 0;
     for (var original in itemsToCopy) {
@@ -803,7 +803,7 @@ class ListProvider extends ChangeNotifier {
     if (uid == null || _currentListId == null) return;
 
     final batch = FirebaseFirestore.instance.batch();
-    final listRef = FirebaseFirestore.instance.collection('users').doc(uid).collection('lists').doc(_currentListId).collection('items');
+    final listRef = FirebaseFirestore.instance.collection('lists').doc(_currentListId).collection('items');
     bool changed = false;
 
     for (String id in ids) {
@@ -835,7 +835,7 @@ class ListProvider extends ChangeNotifier {
     if (uid == null || _currentListId == null) return;
 
     final batch = FirebaseFirestore.instance.batch();
-    final listRef = FirebaseFirestore.instance.collection('users').doc(uid).collection('lists').doc(_currentListId).collection('items');
+    final listRef = FirebaseFirestore.instance.collection('lists').doc(_currentListId).collection('items');
     List<ListItem> newItems = [];
 
     for (String id in _selectedItemIds) {
