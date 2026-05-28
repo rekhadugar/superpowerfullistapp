@@ -171,9 +171,13 @@ class _EditItemBottomSheetState extends State<EditItemBottomSheet> {
     final typeId = macroProvider.activeList?.typeId ?? 'sys_shopping';
     final appType = settings.getTypeById(typeId);
 
-    // Fetch the correct dictionary for THIS specific list type
-    final axis1Dict = settings.getAxis1Groups(typeId).map((g) => g.name).toList();
-    final axis2Dict = settings.getAxis2Groups(typeId).map((g) => g.name).toList();
+    // Fetch defaults from settings
+    final axis1Settings = settings.getAxis1Groups(typeId).map((g) => g.name).toList();
+    final axis2Settings = settings.getAxis2Groups(typeId).map((g) => g.name).toList();
+
+    // FIXED: Merge Settings defaults with the user's historical cloud dictionary!
+    final axis1Dict = {...axis1Settings, ...listProvider.activeStoreDictionary}.toList();
+    final axis2Dict = {...axis2Settings, ...listProvider.activeCategoryDictionary}.toList();
     final tagsDict = listProvider.activeTagDictionary;
 
     return Container(

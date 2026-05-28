@@ -34,6 +34,8 @@ class ListProvider extends ChangeNotifier {
   List<String> preferredTypeOrder = [];
   List<String> preferredCategoryOrder = [];
 
+  bool _hasSyncedGlobalDict = false;
+  final List<SmartItem> _globalUserItems = [];
   List<ListItem> _items = [];
   StreamSubscription? _itemsSubscription;
 
@@ -210,6 +212,40 @@ class ListProvider extends ChangeNotifier {
     _buildDisplayList();
     _buildCheckedDisplayList();
     _saveItemsToStorage();
+    notifyListeners();
+  }
+
+  // --- GLOBAL CLOUD DICTIONARY SYNC ---
+  Future<void> syncGlobalDictionary(List<dynamic> allLists) async {
+    if (_hasSyncedGlobalDict) return;
+    final uid = AuthService.currentUserId;
+    if (uid == null) return;
+
+    _hasSyncedGlobalDict = true; // Prevent multiple calls
+    _globalUserItems.clear();
+
+    for (var list in allLists) {
+      final snapshot = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(uid)
+          .collection('lists')
+          .doc(list.id)
+          .collection('items')
+          .get();
+
+      for (var doc in snapshot.docs) {
+        final item = ListItem.fromMap(doc.data());
+        if (!item.isDeleted) {
+          _globalUserItems.add(SmartItem(
+            title: item.title,
+            category: item.category,
+            store: item.type,
+            unit: item.unit,
+            tags: item.attributeRows,
+          ));
+        }
+      }
+    }
     notifyListeners();
   }
 
@@ -511,6 +547,7 @@ class ListProvider extends ChangeNotifier {
     final Map<String, int> frequency = {};
     final Map<String, int> recency = {};
 
+    // 1. Mock Global Dictionary (System Defaults)
     for (var item in MockDictionary.globalItems) {
       final key = _generateVariantKey(item.title, item.category, item.store, item.tags);
       merged[key] = item;
@@ -519,6 +556,16 @@ class ListProvider extends ChangeNotifier {
     }
 
     int timeIndex = 0;
+
+    // 2. Cross-List Global Items (The new cloud sync!)
+    for (var item in _globalUserItems) {
+      final key = _generateVariantKey(item.title, item.category, item.store, item.tags);
+      merged[key] = item;
+      frequency[key] = (frequency[key] ?? 0) + 1;
+      recency[key] = timeIndex++;
+    }
+
+    // 3. Active List Items (Highest priority/recency)
     for (var item in _items) {
       if (item.isDeleted) continue;
 

@@ -166,6 +166,8 @@ class _MainScreenState extends State<MainScreen> {
     // FIXED: Renamed to match the exact method signature in list_provider.dart
     context.read<ListProvider>().loadItems(activeId);
 
+    context.read<ListProvider>().syncGlobalDictionary(macroProvider.lists);
+
     final listProvider = context.watch<ListProvider>();
     final displayList = listProvider.displayList;
     final activeList = context.watch<MacroListProvider>().activeList;

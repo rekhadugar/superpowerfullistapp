@@ -226,8 +226,13 @@ class _FluidEditSheetState extends State<FluidEditSheet> {
     final typeId = macroProvider.activeList?.typeId ?? 'sys_shopping';
     final appType = settings.getTypeById(typeId);
 
-    final axis1Dict = settings.getAxis1Groups(typeId).map((g) => g.name).toList();
-    final axis2Dict = settings.getAxis2Groups(typeId).map((g) => g.name).toList();
+    // Fetch defaults from settings
+    final axis1Settings = settings.getAxis1Groups(typeId).map((g) => g.name).toList();
+    final axis2Settings = settings.getAxis2Groups(typeId).map((g) => g.name).toList();
+
+    // FIXED: Merge Settings defaults with the user's historical cloud dictionary!
+    final axis1Dict = {...axis1Settings, ...provider.activeStoreDictionary}.toList();
+    final axis2Dict = {...axis2Settings, ...provider.activeCategoryDictionary}.toList();
     final tagsDict = provider.activeTagDictionary;
 
     return Column(
