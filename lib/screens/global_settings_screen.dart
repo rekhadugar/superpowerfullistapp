@@ -3,7 +3,8 @@ import 'package:provider/provider.dart';
 
 import '../providers/theme_provider.dart';
 import '../theme/app_theme.dart';
-import 'settings_screen.dart'; // This is our Organize Lists Hub
+import 'settings_screen.dart';
+import '../services/auth_service.dart';
 
 class GlobalSettingsScreen extends StatelessWidget {
   const GlobalSettingsScreen({super.key});
@@ -41,6 +42,14 @@ class GlobalSettingsScreen extends StatelessWidget {
       ),
       body: ListView(
         children: [
+          const SizedBox(height: 8),
+
+          // --- ACCOUNT SECTION ---
+          _buildSectionHeader('Account', theme),
+          const GoogleAccountLinkTile(),
+          const SizedBox(height: 16),
+          const Divider(height: 1, thickness: 1),
+
           const SizedBox(height: 8),
 
           // --- ORGANIZATION SECTION ---
@@ -95,7 +104,7 @@ class GlobalSettingsScreen extends StatelessWidget {
           const SizedBox(height: 16),
           const Divider(height: 1, thickness: 1),
 
-          // --- ABOUT SECTION (Future Proofing) ---
+          // --- ABOUT SECTION ---
           const SizedBox(height: 8),
           _buildSectionHeader('About', theme),
           const ListTile(
@@ -106,6 +115,52 @@ class GlobalSettingsScreen extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+// --- SELF MANAGING ACCOUNT LINK TILE ---
+class GoogleAccountLinkTile extends StatefulWidget {
+  const GoogleAccountLinkTile({super.key});
+
+  @override
+  State<GoogleAccountLinkTile> createState() => _GoogleAccountLinkTileState();
+}
+
+class _GoogleAccountLinkTileState extends State<GoogleAccountLinkTile> {
+  bool _isLoading = false;
+
+  Future<void> _linkAccount() async {
+    setState(() => _isLoading = true);
+    final user = await AuthService.signInWithGoogle();
+
+    if (user != null && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Account successfully secured!')),
+      );
+    }
+    if (mounted) {
+      setState(() => _isLoading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isAnon = AuthService.isAnonymous;
+
+    return ListTile(
+      contentPadding: const EdgeInsets.symmetric(horizontal: 20),
+      leading: const Icon(Icons.account_circle, size: 36, color: AppColors.primaryAction),
+      title: Text(isAnon ? 'Link Google Account' : 'Google Account Linked', style: const TextStyle(fontWeight: FontWeight.w600)),
+      subtitle: Text(isAnon ? 'Secure your lists in the cloud' : 'Your data is safely backed up'),
+      trailing: _isLoading
+          ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2))
+          : isAnon
+          ? TextButton(
+        onPressed: _linkAccount,
+        child: const Text('Link', style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.primaryAction)),
+      )
+          : const Icon(Icons.check_circle, color: AppColors.successAction),
     );
   }
 }

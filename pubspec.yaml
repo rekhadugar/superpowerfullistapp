@@ -40,6 +40,7 @@ dependencies:
   firebase_auth: ^6.5.1   # NEW: Added to support AuthService
   flutter_slidable: ^4.0.3
   shared_preferences: ^2.5.5
+  google_sign_in: 6.2.1
 
 
 

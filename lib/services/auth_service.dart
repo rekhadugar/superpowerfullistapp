@@ -1,26 +1,47 @@
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 
 class AuthService {
   static final FirebaseAuth _auth = FirebaseAuth.instance;
+  static final GoogleSignIn _googleSignIn = GoogleSignIn();
 
-  /// Silently authenticates the user upon app launch.
-  /// If they already have an account (Anonymous or Google), it does nothing.
-  /// If they are a brand new user, it generates a secure Anonymous UID.
-  static Future<void> signInAnonymouslySilently() async {
+  static String? get currentUserId => _auth.currentUser?.uid;
+
+  static bool get isAnonymous => _auth.currentUser?.isAnonymous ?? true;
+
+  static Future<UserCredential> signInAnonymously() async {
+    return await _auth.signInAnonymously();
+  }
+
+  static Future<User?> signInWithGoogle() async {
     try {
-      if (_auth.currentUser == null) {
-        final userCredential = await _auth.signInAnonymously();
-        print("DEBUG: New Anonymous User Generated - UID: ${userCredential.user?.uid}");
+      final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
+      if (googleUser == null) return null;
+
+      final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
+
+      final AuthCredential credential = GoogleAuthProvider.credential(
+        accessToken: googleAuth.accessToken,
+        idToken: googleAuth.idToken,
+      );
+
+      final currentUser = _auth.currentUser;
+
+      if (currentUser != null && currentUser.isAnonymous) {
+        final userCredential = await currentUser.linkWithCredential(credential);
+        return userCredential.user;
       } else {
-        print("DEBUG: Existing User Found - UID: ${_auth.currentUser?.uid}");
+        final userCredential = await _auth.signInWithCredential(credential);
+        return userCredential.user;
       }
     } catch (e) {
-      // If they have no internet on their very first launch, we catch the error
-      // so the app still opens successfully in local-only mode.
-      print("DEBUG: Failed to sign in silently (Likely offline): $e");
+      print("ERROR: Google Sign-In Failed: $e");
+      return null;
     }
   }
 
-  /// Helper to grab the UID for our database calls later
-  static String? get currentUserId => _auth.currentUser?.uid;
+  static Future<void> signOut() async {
+    await _googleSignIn.signOut();
+    await _auth.signOut();
+  }
 }
