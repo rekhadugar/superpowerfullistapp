@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+
 import '../providers/theme_provider.dart';
 import '../theme/app_theme.dart';
 import 'settings_screen.dart'; // This is our Organize Lists Hub
 
 class GlobalSettingsScreen extends StatelessWidget {
-  const GlobalSettingsScreen({Key? key}) : super(key: key);
+  const GlobalSettingsScreen({super.key});
 
   Widget _buildSectionHeader(String title, ThemeData theme) {
     return Padding(
@@ -15,7 +16,7 @@ class GlobalSettingsScreen extends StatelessWidget {
         style: TextStyle(
           fontSize: 12,
           fontWeight: FontWeight.bold,
-          color: AppColors.primaryAction.withOpacity(0.8),
+          color: AppColors.primaryAction.withValues(alpha: 0.8),
           letterSpacing: 1.2,
         ),
       ),
@@ -48,7 +49,7 @@ class GlobalSettingsScreen extends StatelessWidget {
             contentPadding: const EdgeInsets.symmetric(horizontal: 20),
             leading: Container(
               padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(color: AppColors.primaryAction.withOpacity(0.1), shape: BoxShape.circle),
+              decoration: BoxDecoration(color: AppColors.primaryAction.withValues(alpha: 0.1), shape: BoxShape.circle),
               child: const Icon(Icons.tune_rounded, color: AppColors.primaryAction),
             ),
             title: const Text('Organize Lists', style: TextStyle(fontWeight: FontWeight.w600)),
@@ -78,7 +79,7 @@ class GlobalSettingsScreen extends StatelessWidget {
                     return ChoiceChip(
                       label: Text(size.name.toUpperCase()),
                       selected: isSelected,
-                      selectedColor: AppColors.primaryAction.withOpacity(0.15),
+                      selectedColor: AppColors.primaryAction.withValues(alpha: 0.15),
                       showCheckmark: false,
                       labelStyle: TextStyle(
                         color: isSelected ? AppColors.primaryAction : theme.textTheme.bodyMedium?.color,

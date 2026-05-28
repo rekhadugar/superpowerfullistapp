@@ -21,7 +21,7 @@ class SwipeActionWrapper extends StatefulWidget {
   final String menuLabel;
 
   const SwipeActionWrapper({
-    Key? key,
+    super.key,
     required this.child,
     required this.itemId,
     required this.onEdit,
@@ -33,7 +33,7 @@ class SwipeActionWrapper extends StatefulWidget {
     this.menuColor = AppColors.destructiveAction,
     this.menuIcon = Icons.delete_outline,
     this.menuLabel = 'Tap To Delete',
-  }) : super(key: key);
+  });
 
   @override
   State<SwipeActionWrapper> createState() => _SwipeActionWrapperState();
@@ -452,7 +452,7 @@ class _SwipeActionWrapperState extends State<SwipeActionWrapper> with TickerProv
                                 ],
                               ),
                             ),
-                          ),
+                          )
                         ),
                       ),
                     ],

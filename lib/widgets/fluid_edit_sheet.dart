@@ -8,7 +8,7 @@ import '../theme/app_theme.dart';
 import 'horizontal_pill_selector.dart';
 
 class FluidEditSheet extends StatefulWidget {
-  const FluidEditSheet({Key? key}) : super(key: key);
+  const FluidEditSheet({super.key});
 
   @override
   State<FluidEditSheet> createState() => _FluidEditSheetState();
@@ -107,7 +107,7 @@ class _FluidEditSheetState extends State<FluidEditSheet> {
         child: Container(
           padding: const EdgeInsets.symmetric(vertical: 12),
           decoration: BoxDecoration(
-            color: color.withOpacity(0.1),
+            color: color.withValues(alpha: 0.1),
             borderRadius: BorderRadius.circular(12),
           ),
           child: Row(
@@ -149,7 +149,7 @@ class _FluidEditSheetState extends State<FluidEditSheet> {
         decoration: BoxDecoration(
           color: Theme.of(context).scaffoldBackgroundColor,
           borderRadius: const BorderRadius.vertical(top: Radius.circular(24.0)),
-          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.15), blurRadius: 20, offset: const Offset(0, -5))],
+          boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.15), blurRadius: 20, offset: const Offset(0, -5))],
         ),
         child: Column(
           children: [

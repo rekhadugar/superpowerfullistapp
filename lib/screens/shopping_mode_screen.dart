@@ -1,19 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../providers/list_provider.dart';
-import '../providers/macro_list_provider.dart';
+
 import '../engine/shopping_mode_engine.dart';
+import '../engine/sort_mode_engine.dart';
 import '../models/list_item.dart';
-import '../theme/app_theme.dart';
+import '../providers/list_provider.dart';
 import '../theme/app_constants.dart';
+import '../theme/app_theme.dart';
 import '../widgets/fluid_edit_sheet.dart';
 import '../widgets/list_item_card.dart';
 import '../widgets/swipe_action_wrapper.dart';
-import '../engine/sort_mode_engine.dart';
 import 'completed_items_screen.dart';
 
 class ShoppingModeScreen extends StatefulWidget {
-  const ShoppingModeScreen({Key? key}) : super(key: key);
+  const ShoppingModeScreen({super.key});
 
   @override
   State<ShoppingModeScreen> createState() => _ShoppingModeScreenState();
@@ -275,7 +275,7 @@ class _ShoppingModeScreenState extends State<ShoppingModeScreen> {
                       ),
                     ],
                   );
-                }).toList(),
+                }),
 
                 SliverList(
                   delegate: SliverChildListDelegate([
@@ -356,7 +356,7 @@ class _ShoppingModeScreenState extends State<ShoppingModeScreen> {
               decoration: BoxDecoration(
                 color: theme.colorScheme.inverseSurface,
                 borderRadius: BorderRadius.circular(24.0),
-                boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.3), blurRadius: 15, offset: const Offset(0, 5))],
+                boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.3), blurRadius: 15, offset: const Offset(0, 5))],
               ),
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -464,7 +464,7 @@ class _CategoryHeaderDelegate extends SliverPersistentHeaderDelegate {
       alignment: Alignment.bottomLeft,
       child: Text(
         title.toUpperCase(),
-        style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.primaryAction.withOpacity(0.8), letterSpacing: 1.2),
+        style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.primaryAction.withValues(alpha: 0.8), letterSpacing: 1.2),
       ),
     );
   }

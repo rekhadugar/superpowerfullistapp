@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+
 import '../theme/app_theme.dart';
 
 class AgileChipSelector extends StatefulWidget {
@@ -9,13 +10,13 @@ class AgileChipSelector extends StatefulWidget {
   final Function(List<String>) onSelectionChanged;
 
   const AgileChipSelector({
-    Key? key,
+    super.key,
     required this.title,
     required this.dictionary,
     required this.initialSelections,
     this.isMultiSelect = false,
     required this.onSelectionChanged,
-  }) : super(key: key);
+  });
 
   @override
   State<AgileChipSelector> createState() => _AgileChipSelectorState();
@@ -151,7 +152,7 @@ class _AgileChipSelectorState extends State<AgileChipSelector> {
                       padding: const EdgeInsets.only(right: 8.0),
                       child: InputChip(
                         label: Text(item, style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.primaryAction)),
-                        backgroundColor: AppColors.primaryAction.withOpacity(0.12),
+                        backgroundColor: AppColors.primaryAction.withValues(alpha: 0.12),
                         deleteIcon: const Icon(Icons.close, size: 16, color: AppColors.primaryAction),
                         onDeleted: () => _toggleItem(item), // Tapping the 'X' removes it
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8.0), side: const BorderSide(color: Colors.transparent)),
@@ -194,7 +195,7 @@ class _AgileChipSelectorState extends State<AgileChipSelector> {
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8.0), side: BorderSide(color: Colors.grey.shade300)),
                   ),
                 );
-              }).toList(),
+              }),
 
               // The Dynamic "+ Create" Chip
               if (_isEditing && query.isNotEmpty && !widget.dictionary.any((c) => c.toLowerCase() == query))

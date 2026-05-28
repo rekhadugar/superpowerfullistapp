@@ -1,14 +1,16 @@
 import 'dart:async';
-import 'package:flutter/material.dart';
-import '../models/list_item.dart';
-import '../theme/app_constants.dart';
-import '../engine/sticky_header_engine.dart';
-import '../engine/sort_mode_engine.dart';
 import 'dart:convert';
-import 'package:shared_preferences/shared_preferences.dart';
-import '../data/mock_global_dictionary.dart';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+import '../data/mock_global_dictionary.dart';
+import '../engine/sort_mode_engine.dart';
+import '../engine/sticky_header_engine.dart';
+import '../models/list_item.dart';
 import '../services/auth_service.dart';
+import '../theme/app_constants.dart';
 
 class ListProvider extends ChangeNotifier {
   String? _currentListId;

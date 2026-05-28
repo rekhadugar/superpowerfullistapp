@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../models/app_list_type.dart';
+
 import '../providers/macro_list_provider.dart';
 import '../providers/settings_provider.dart';
 import '../theme/app_theme.dart';
@@ -8,7 +8,7 @@ import '../theme/app_theme.dart';
 class CreateListScreen extends StatefulWidget {
   final bool isFirstLaunch;
 
-  const CreateListScreen({Key? key, this.isFirstLaunch = false}) : super(key: key);
+  const CreateListScreen({super.key, this.isFirstLaunch = false});
 
   @override
   State<CreateListScreen> createState() => _CreateListScreenState();
@@ -130,7 +130,7 @@ class _CreateListScreenState extends State<CreateListScreen> {
               const Text('List Type', style: TextStyle(fontWeight: FontWeight.bold)),
               const SizedBox(height: 8),
               DropdownButtonFormField<String>(
-                value: _selectedTypeId,
+                initialValue: _selectedTypeId,
                 decoration: const InputDecoration(border: OutlineInputBorder()),
                 items: settings.allTypes.map((type) {
                   return DropdownMenuItem(

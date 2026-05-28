@@ -2,15 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:listicle_v2/screens/shopping_mode_screen.dart';
 import 'package:provider/provider.dart';
+
 import '../providers/list_provider.dart';
 import '../providers/macro_list_provider.dart';
-import '../theme/app_constants.dart';
 import '../theme/app_theme.dart';
-import 'main_screen.dart';
 import 'global_settings_screen.dart';
+import 'main_screen.dart';
 
 class RootNavigationScreen extends StatefulWidget {
-  const RootNavigationScreen({Key? key}) : super(key: key);
+  const RootNavigationScreen({super.key});
 
   @override
   State<RootNavigationScreen> createState() => _RootNavigationScreenState();
@@ -39,7 +39,7 @@ class _RootNavigationScreenState extends State<RootNavigationScreen> {
 
   Widget _buildNavItem(IconData icon, String label, int index, ThemeData theme) {
     final isSelected = _currentIndex == index;
-    final unselectedColor = theme.textTheme.bodyMedium?.color?.withOpacity(0.5) ?? Colors.grey;
+    final unselectedColor = theme.textTheme.bodyMedium?.color?.withValues(alpha: 0.5) ?? Colors.grey;
 
     return Expanded(
       child: GestureDetector(
@@ -116,7 +116,7 @@ class _RootNavigationScreenState extends State<RootNavigationScreen> {
                 color: Theme.of(context).cardColor,
                 boxShadow: [
                   BoxShadow(
-                      color: Colors.black.withOpacity(0.05), // Subtle shadow above the bar
+                      color: Colors.black.withValues(alpha: 0.05), // Subtle shadow above the bar
                       blurRadius: 10,
                       offset: const Offset(0, -2)
                   ),

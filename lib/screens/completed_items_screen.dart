@@ -1,21 +1,23 @@
 import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../providers/list_provider.dart';
-import '../widgets/list_item_card.dart';
-import '../theme/app_theme.dart';
-import '../theme/app_constants.dart';
-import '../widgets/section_header.dart';
-import '../widgets/swipe_action_wrapper.dart';
-import '../models/list_item.dart';
+
 import '../engine/sticky_header_engine.dart';
+import '../models/list_item.dart';
+import '../providers/list_provider.dart';
+import '../theme/app_constants.dart';
+import '../theme/app_theme.dart';
 import '../widgets/batch_action_bar.dart';
 import '../widgets/fluid_edit_sheet.dart';
+import '../widgets/list_item_card.dart';
+import '../widgets/section_header.dart';
+import '../widgets/swipe_action_wrapper.dart';
 
 class CompletedItemsScreen extends StatefulWidget {
   final bool isShoppingMode; // NEW: Context flag
 
-  const CompletedItemsScreen({Key? key, this.isShoppingMode = false}) : super(key: key);
+  const CompletedItemsScreen({super.key, this.isShoppingMode = false});
 
   @override
   State<CompletedItemsScreen> createState() => _CompletedItemsScreenState();

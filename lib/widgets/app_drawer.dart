@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+
 import '../providers/list_provider.dart';
 import '../providers/macro_list_provider.dart';
 import '../providers/settings_provider.dart'; // Re-added for allTypes
@@ -7,7 +8,7 @@ import '../screens/create_list_screen.dart';
 import '../screens/global_settings_screen.dart';
 
 class AppDrawer extends StatelessWidget {
-  const AppDrawer({Key? key}) : super(key: key);
+  const AppDrawer({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -61,7 +62,7 @@ class AppDrawer extends StatelessWidget {
                       ...typeLists.map((list) => ListTile(
                         title: Text(list.name),
                         selected: list.id == activeId,
-                        selectedTileColor: Theme.of(context).colorScheme.primaryContainer.withOpacity(0.5),
+                        selectedTileColor: Theme.of(context).colorScheme.primaryContainer.withValues(alpha: 0.5),
                         onTap: () {
                           provider.setActiveList(list.id);
                           context.read<ListProvider>().loadItemsForList(list.id);

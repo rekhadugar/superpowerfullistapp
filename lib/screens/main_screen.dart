@@ -4,26 +4,26 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+
+import '../engine/sticky_header_engine.dart';
+import '../models/list_item.dart';
 import '../providers/list_provider.dart';
+import '../providers/macro_list_provider.dart';
+import '../theme/app_constants.dart';
+import '../theme/app_theme.dart';
+import '../widgets/app_drawer.dart';
+import '../widgets/batch_action_bar.dart';
 import '../widgets/edit_item_bottom_sheet.dart';
 import '../widgets/fluid_edit_sheet.dart';
 import '../widgets/list_item_card.dart';
-import '../theme/app_theme.dart';
-import '../theme/app_constants.dart';
 import '../widgets/main_options_sheet.dart';
 import '../widgets/section_header.dart';
 import '../widgets/swipe_action_wrapper.dart';
-import '../models/list_item.dart';
-import '../engine/sticky_header_engine.dart';
-import '../engine/sort_mode_engine.dart';
-import '../providers/macro_list_provider.dart';
-import '../widgets/app_drawer.dart';
-import 'create_list_screen.dart';
-import '../widgets/batch_action_bar.dart';
 import 'completed_items_screen.dart'; // NEW IMPORT
+import 'create_list_screen.dart';
 
 class MainScreen extends StatefulWidget {
-  const MainScreen({Key? key}) : super(key: key);
+  const MainScreen({super.key});
 
   @override
   State<MainScreen> createState() => _MainScreenState();

@@ -11,14 +11,14 @@ class HorizontalPillSelector extends StatelessWidget {
   final Function(List<String>) onSelectionChanged;
 
   const HorizontalPillSelector({
-    Key? key,
+    super.key,
     required this.title,
     required this.dictionary,
     required this.selectedItems,
     this.isMultiSelect = false,
     this.isTag = false,
     required this.onSelectionChanged,
-  }) : super(key: key);
+  });
 
   void _openSearchScreen(BuildContext context) async {
     final result = await Navigator.push<List<String>>(
@@ -81,7 +81,7 @@ class HorizontalPillSelector extends StatelessWidget {
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
                   decoration: BoxDecoration(
-                    color: AppColors.primaryAction.withOpacity(0.1),
+                    color: AppColors.primaryAction.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Row(

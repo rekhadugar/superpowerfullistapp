@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+
 import '../providers/list_provider.dart';
 import '../providers/macro_list_provider.dart';
 import '../providers/settings_provider.dart';
@@ -9,9 +10,9 @@ class BatchActionBar extends StatelessWidget {
   final bool isCompletedScreen;
 
   const BatchActionBar({
-    Key? key,
+    super.key,
     this.isCompletedScreen = false,
-  }) : super(key: key);
+  });
 
   void _showTargetListSelector(BuildContext context, bool isCopy) {
     final provider = context.read<ListProvider>();

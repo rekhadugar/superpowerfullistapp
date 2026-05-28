@@ -1,19 +1,20 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../providers/settings_provider.dart';
-import '../providers/macro_list_provider.dart';
-import '../providers/list_provider.dart';
-import '../models/settings_models.dart';
+
 import '../models/app_list_type.dart';
-import '../models/macro_list.dart';
 import '../models/list_item.dart';
+import '../models/macro_list.dart';
+import '../models/settings_models.dart';
+import '../providers/list_provider.dart';
+import '../providers/macro_list_provider.dart';
+import '../providers/settings_provider.dart';
 import '../theme/app_theme.dart';
 
 // ==========================================
 // LEVEL 1: THE HUB (List of all Types)
 // ==========================================
 class SettingsScreen extends StatelessWidget {
-  const SettingsScreen({Key? key}) : super(key: key);
+  const SettingsScreen({super.key});
 
   void _showCreateCustomTypeSheet(BuildContext context) {
     final nameCtrl = TextEditingController();
@@ -142,7 +143,7 @@ class SettingsScreen extends StatelessWidget {
 // ==========================================
 class TypeDetailScreen extends StatefulWidget {
   final AppListType listType;
-  const TypeDetailScreen({Key? key, required this.listType}) : super(key: key);
+  const TypeDetailScreen({super.key, required this.listType});
 
   @override
   State<TypeDetailScreen> createState() => _TypeDetailScreenState();
@@ -442,7 +443,7 @@ class _TypeDetailScreenState extends State<TypeDetailScreen> with SingleTickerPr
                   key: ValueKey(list.id),
                   tileColor: theme.cardColor,
                   selected: isSelected,
-                  selectedTileColor: AppColors.primaryAction.withOpacity(0.1),
+                  selectedTileColor: AppColors.primaryAction.withValues(alpha: 0.1),
                   title: Text(list.name, style: const TextStyle(fontWeight: FontWeight.w600)),
                   leading: isBatchMode
                       ? Checkbox(value: isSelected, activeColor: AppColors.primaryAction, onChanged: (_) => _toggleSelection(list.id))
@@ -468,7 +469,7 @@ class _TypeDetailScreenState extends State<TypeDetailScreen> with SingleTickerPr
                 SwitchListTile(
                   title: const Text('Anchor "Any" to Top'),
                   value: settings.getAnchorAxis1(widget.listType.id),
-                  activeColor: AppColors.primaryAction,
+                  activeThumbColor: AppColors.primaryAction,
                   onChanged: (val) => settings.toggleAnchor(widget.listType.id, isAxis1: true),
                 ),
                 const Divider(height: 1, thickness: 1),
@@ -490,7 +491,7 @@ class _TypeDetailScreenState extends State<TypeDetailScreen> with SingleTickerPr
                 SwitchListTile(
                   title: const Text('Anchor "Everything Else" to Top'),
                   value: settings.getAnchorAxis2(widget.listType.id),
-                  activeColor: AppColors.primaryAction,
+                  activeThumbColor: AppColors.primaryAction,
                   onChanged: (val) => settings.toggleAnchor(widget.listType.id, isAxis1: false),
                 ),
                 const Divider(height: 1, thickness: 1),
@@ -532,7 +533,7 @@ class _TypeDetailScreenState extends State<TypeDetailScreen> with SingleTickerPr
       key: ValueKey(group.id),
       tileColor: theme.cardColor,
       selected: isSelected,
-      selectedTileColor: AppColors.primaryAction.withOpacity(0.1),
+      selectedTileColor: AppColors.primaryAction.withValues(alpha: 0.1),
       title: Text(group.name, style: TextStyle(fontWeight: group.isLocked ? FontWeight.bold : FontWeight.normal)),
       subtitle: group.subtitle.isNotEmpty ? Text(group.subtitle) : null,
       leading: group.isLocked

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+
 import '../theme/app_theme.dart';
 
 class SelectionSearchScreen extends StatefulWidget {
@@ -8,12 +9,12 @@ class SelectionSearchScreen extends StatefulWidget {
   final bool isMultiSelect;
 
   const SelectionSearchScreen({
-    Key? key,
+    super.key,
     required this.title,
     required this.dictionary,
     required this.initialSelections,
     this.isMultiSelect = false,
-  }) : super(key: key);
+  });
 
   @override
   State<SelectionSearchScreen> createState() => _SelectionSearchScreenState();
@@ -134,7 +135,7 @@ class _SelectionSearchScreenState extends State<SelectionSearchScreen> {
                     leading: Container(
                       padding: const EdgeInsets.all(8),
                       decoration: BoxDecoration(
-                        color: AppColors.primaryAction.withOpacity(0.1),
+                        color: AppColors.primaryAction.withValues(alpha: 0.1),
                         shape: BoxShape.circle,
                       ),
                       child: const Icon(Icons.add, color: AppColors.primaryAction, size: 20),

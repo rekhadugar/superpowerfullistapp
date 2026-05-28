@@ -32,7 +32,7 @@ class ListItemCard extends StatefulWidget {
   final VoidCallback onToggleSelection;
 
   const ListItemCard({
-    Key? key,
+    super.key,
     required this.title,
     this.nWrap = 0,
     this.nTagRows = 0,
@@ -51,7 +51,7 @@ class ListItemCard extends StatefulWidget {
     required this.onTap,
     required this.onCheck,
     required this.onToggleSelection,
-  }) : super(key: key);
+  });
 
   @override
   State<ListItemCard> createState() => _ListItemCardState();
@@ -78,7 +78,7 @@ class _ListItemCardState extends State<ListItemCard> with SingleTickerProviderSt
   void didChangeDependencies() {
     super.didChangeDependencies();
     final theme = Theme.of(context);
-    _colorAnimation = ColorTween(begin: theme.cardColor, end: AppColors.primaryAction.withOpacity(0.15))
+    _colorAnimation = ColorTween(begin: theme.cardColor, end: AppColors.primaryAction.withValues(alpha: 0.15))
         .animate(CurvedAnimation(parent: _flashController, curve: Curves.easeInOut));
     if (widget.isHighlighted) _triggerFlash();
   }
@@ -171,7 +171,7 @@ class _ListItemCardState extends State<ListItemCard> with SingleTickerProviderSt
     return Container(
       height: AppConstants.badgeHeight * textScale,
       padding: const EdgeInsets.symmetric(horizontal: AppConstants.badgeHorizontalPadding),
-      decoration: BoxDecoration(color: theme.dividerColor.withOpacity(0.3), borderRadius: BorderRadius.circular(AppConstants.badgeBorderRadius)),
+      decoration: BoxDecoration(color: theme.dividerColor.withValues(alpha: 0.3), borderRadius: BorderRadius.circular(AppConstants.badgeBorderRadius)),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -219,7 +219,7 @@ class _ListItemCardState extends State<ListItemCard> with SingleTickerProviderSt
             animation: _colorAnimation,
             builder: (context, child) {
               Color? backgroundColor = (widget.isBatchSelected || widget.isFluidEditing)
-                  ? AppColors.primaryAction.withOpacity(0.08)
+                  ? AppColors.primaryAction.withValues(alpha: 0.08)
                   : theme.cardColor;
 
               if (_flashController.isAnimating) backgroundColor = _colorAnimation.value;
@@ -230,7 +230,7 @@ class _ListItemCardState extends State<ListItemCard> with SingleTickerProviderSt
                 decoration: BoxDecoration(
                   color: backgroundColor,
                   borderRadius: widget.isFeedback ? BorderRadius.circular(12.0) : null,
-                  border: widget.isFeedback ? Border.all(color: AppColors.primaryAction.withOpacity(0.3), width: 1.5) : Border(bottom: BorderSide(color: theme.dividerColor, width: AppConstants.borderWidth)),
+                  border: widget.isFeedback ? Border.all(color: AppColors.primaryAction.withValues(alpha: 0.3), width: 1.5) : Border(bottom: BorderSide(color: theme.dividerColor, width: AppConstants.borderWidth)),
                 ),
                 child: Opacity(opacity: widget.isDragging ? 0.0 : 1.0, child: child),
               );

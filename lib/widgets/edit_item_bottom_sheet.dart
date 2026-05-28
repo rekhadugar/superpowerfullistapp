@@ -1,22 +1,23 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+
+import '../data/mock_global_dictionary.dart';
 import '../models/list_item.dart';
 import '../providers/list_provider.dart';
 import '../providers/macro_list_provider.dart';
 import '../providers/settings_provider.dart';
 import '../theme/app_theme.dart';
 import 'horizontal_pill_selector.dart';
-import '../data/mock_global_dictionary.dart';
 
 class EditItemBottomSheet extends StatefulWidget {
   final ListItem? item;
   final Function(String title, List<String> attributes, String type, String category, int quantity, String unit) onSave;
 
   const EditItemBottomSheet({
-    Key? key,
+    super.key,
     this.item,
     required this.onSave,
-  }) : super(key: key);
+  });
 
   @override
   State<EditItemBottomSheet> createState() => _EditItemBottomSheetState();
@@ -126,7 +127,7 @@ class _EditItemBottomSheetState extends State<EditItemBottomSheet> {
             contentPadding: const EdgeInsets.symmetric(horizontal: 4.0),
             leading: Container(
               padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(color: AppColors.primaryAction.withOpacity(0.1), shape: BoxShape.circle),
+              decoration: BoxDecoration(color: AppColors.primaryAction.withValues(alpha: 0.1), shape: BoxShape.circle),
               child: const Icon(Icons.add, color: AppColors.primaryAction, size: 20),
             ),
             title: Text('Create "$query"', style: const TextStyle(color: AppColors.primaryAction, fontWeight: FontWeight.bold)),
@@ -149,7 +150,7 @@ class _EditItemBottomSheetState extends State<EditItemBottomSheet> {
         trailing: isActiveVariant
             ? Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            decoration: BoxDecoration(color: AppColors.successAction.withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
+            decoration: BoxDecoration(color: AppColors.successAction.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(8)),
             child: const Text('On List', style: TextStyle(color: AppColors.successAction, fontSize: 12, fontWeight: FontWeight.bold))
         )
             : Icon(Icons.north_west, color: theme.dividerColor, size: 16),
@@ -231,7 +232,7 @@ class _EditItemBottomSheetState extends State<EditItemBottomSheet> {
                 filled: true, fillColor: Colors.white,
                 contentPadding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 16.0),
                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(12.0), borderSide: const BorderSide(color: AppColors.primaryAction, width: 1.5)),
-                enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12.0), borderSide: BorderSide(color: AppColors.primaryAction.withOpacity(0.5), width: 1.5)),
+                enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12.0), borderSide: BorderSide(color: AppColors.primaryAction.withValues(alpha: 0.5), width: 1.5)),
                 focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12.0), borderSide: const BorderSide(color: AppColors.primaryAction, width: 2.0)),
               ),
             ),

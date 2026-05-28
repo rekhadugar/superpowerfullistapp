@@ -9,7 +9,6 @@ import 'package:provider/provider.dart';
 import 'theme/app_theme.dart';
 import 'providers/list_provider.dart';
 import 'providers/theme_provider.dart';
-import 'screens/main_screen.dart';
 
 // NEW: Firebase Foundation Imports
 import 'package:firebase_core/firebase_core.dart';
@@ -52,7 +51,7 @@ void main() async {
 }
 
 class ListicleApp extends StatelessWidget {
-  const ListicleApp({Key? key}) : super(key: key);
+  const ListicleApp({super.key});
 
   @override
   Widget build(BuildContext context) {

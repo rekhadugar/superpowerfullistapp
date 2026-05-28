@@ -7,7 +7,7 @@ import '../theme/app_theme.dart';
 import '../engine/sort_mode_engine.dart';
 
 class MainOptionsSheet extends StatelessWidget {
-  const MainOptionsSheet({Key? key}) : super(key: key);
+  const MainOptionsSheet({super.key});
 
   Widget _buildGroupButton(BuildContext context, String label, SortMode mode, SortMode currentMode, ListProvider provider) {
     final isSelected = mode == currentMode;
@@ -130,7 +130,7 @@ class MainOptionsSheet extends StatelessWidget {
             secondary: Icon(Icons.grid_view_rounded, color: theme.textTheme.titleMedium?.color),
             title: Text('Compact view', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600)),
             value: provider.isCompactView,
-            activeColor: AppColors.primaryAction,
+            activeThumbColor: AppColors.primaryAction,
             onChanged: (val) {
               provider.toggleCompactView();
             },
