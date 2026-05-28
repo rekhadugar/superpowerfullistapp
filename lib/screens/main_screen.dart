@@ -186,21 +186,20 @@ class _MainScreenState extends State<MainScreen> {
       },
       behavior: HitTestBehavior.translucent,
       child: Scaffold(
-        drawer: const AppDrawer(),
+        // FIXED: Removed the nested drawer to prevent duplication
         resizeToAvoidBottomInset: false,
         backgroundColor: theme.scaffoldBackgroundColor,
         appBar: AppBar(
-          // FIXED: Use fluid geometry so the title alignment perfectly matches the section headers
           leadingWidth: geometry.horizontalPadding + geometry.leadingBlockWidth + geometry.interElementGap,
           leading: Padding(
             padding: EdgeInsets.only(left: geometry.horizontalPadding),
             child: Builder(
               builder: (context) => IconButton(
-                // FIXED: Injected geometry.iconSize
                 icon: Icon(Icons.menu_rounded, size: geometry.iconSize, color: theme.textTheme.titleMedium?.color),
                 padding: EdgeInsets.zero,
                 alignment: Alignment.centerLeft,
-                onPressed: () => Scaffold.of(context).openDrawer(),
+                // FIXED: Route the command up to the Root Navigation Scaffold
+                onPressed: () => context.findRootAncestorStateOfType<ScaffoldState>()?.openDrawer(),
               ),
             ),
           ),

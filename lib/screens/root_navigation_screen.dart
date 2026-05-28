@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import '../providers/list_provider.dart';
 import '../providers/macro_list_provider.dart';
 import '../theme/app_theme.dart';
+import '../widgets/app_drawer.dart';
 import 'global_settings_screen.dart';
 import 'main_screen.dart';
 
@@ -52,8 +53,7 @@ class _RootNavigationScreenState extends State<RootNavigationScreen> {
           }
         },
         behavior: HitTestBehavior.opaque,
-        // FIXED: FittedBox acts as a safety valve. If the text scales too large for the
-        // 70px bar, it will safely shrink it down instead of throwing a RenderFlex error.
+        // FIXED (Batch 1.5): FittedBox acts as a safety valve to prevent RenderFlex errors on large scales
         child: FittedBox(
           fit: BoxFit.scaleDown,
           child: Column(
@@ -79,22 +79,16 @@ class _RootNavigationScreenState extends State<RootNavigationScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final provider = context.watch<ListProvider>();
-
-    // UX ENGINE: Automatically yield the space to contextual menus
-    final isBatchActive = provider.selectedItemIds.isNotEmpty;
-    final isEditingActive = provider.editItemId != null || provider.isFullEditRequested;
-    final showBottomNav = _isScrollVisible && !isBatchActive && !isEditingActive;
-
     final safeBottom = MediaQuery.of(context).padding.bottom;
-    final bottomOffset = safeBottom > 0 ? safeBottom : 16.0;
-    const barHeight = 70.0;
+    const double barHeight = 70.0;
+    final bool showBottomNav = _isScrollVisible;
 
     return Scaffold(
-      resizeToAvoidBottomInset: false,
+      // FIXED (Batch 6): Drawer relocated to Root level to overlay the bottom bar
+      drawer: const AppDrawer(),
       body: Stack(
         children: [
-          // LAYER 0: The App Content
+          // Layer 0: The Active Screen
           NotificationListener<ScrollNotification>(
             onNotification: _handleScroll,
             child: IndexedStack(
@@ -103,23 +97,21 @@ class _RootNavigationScreenState extends State<RootNavigationScreen> {
             ),
           ),
 
-          // LAYER 1: The Floating Auto-Hide Bar
-          // LAYER 1: The Floating Auto-Hide Bar
-          // LAYER 1: The Flush Auto-Hide Bottom Bar
+          // Layer 1: The Flush Auto-Hide Bottom Bar
           AnimatedPositioned(
             duration: const Duration(milliseconds: 300),
             curve: Curves.easeOutCubic,
-            left: 0,  // FIXED: Full width
-            right: 0, // FIXED: Full width
-            bottom: showBottomNav ? 0 : -(barHeight + safeBottom + 20), // FIXED: Flush to bottom
-            height: barHeight + safeBottom, // FIXED: Absorbs the home indicator area
+            left: 0,
+            right: 0,
+            bottom: showBottomNav ? 0 : -(barHeight + safeBottom + 20),
+            height: barHeight + safeBottom,
             child: Container(
-              padding: EdgeInsets.only(bottom: safeBottom), // Pushes icons up above the home indicator
+              padding: EdgeInsets.only(bottom: safeBottom),
               decoration: BoxDecoration(
                 color: Theme.of(context).cardColor,
                 boxShadow: [
                   BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.05), // Subtle shadow above the bar
+                      color: Colors.black.withValues(alpha: 0.05),
                       blurRadius: 10,
                       offset: const Offset(0, -2)
                   ),
