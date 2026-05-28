@@ -72,3 +72,30 @@ class AppLayout {
   static const double cardMargin = 12.0; // Bottom margin spacing
 }
 
+// --- NEW: The Fluid Geometry Engine ---
+// Projects scaled boundaries based on the ThemeProvider's multiplier
+class FluidGeometry {
+  final double scale;
+  const FluidGeometry(this.scale);
+
+  // Core Heights
+  double get headerHeight => AppConstants.headerHeight * scale;
+  double get baseCardHeight => AppConstants.baseCardHeight * scale;
+  double get attributeRowHeight => AppConstants.attributeRowHeight * scale;
+  double get nameWrapHeightStep => AppConstants.nameWrapHeightStep * scale;
+
+  // Layout Blocks & Margins
+  double get horizontalPadding => AppConstants.horizontalPadding * scale;
+  double get leadingBlockWidth => AppConstants.leadingBlockWidth * scale;
+  double get trailingBlockWidth => AppConstants.trailingBlockWidth * scale;
+  double get interElementGap => AppConstants.interElementGap * scale;
+
+  // Badges & Icons
+  double get badgeHeight => AppConstants.badgeHeight * scale;
+  double get badgeHorizontalPadding => AppConstants.badgeHorizontalPadding * scale;
+  double get badgeIconSize => AppConstants.badgeIconSize * scale;
+  double get badgeIconGap => AppConstants.badgeIconGap * scale;
+  double get attributeIconSize => AppConstants.attributeIconSize * scale;
+  double get iconSize => 24.0 * scale;
+}
+

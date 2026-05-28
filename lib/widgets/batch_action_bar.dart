@@ -121,17 +121,24 @@ class BatchActionBar extends StatelessWidget {
                 onPressed: () => provider.clearSelection(),
                 tooltip: 'Clear Selection',
               ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 6.0),
-                decoration: BoxDecoration(
-                  color: AppColors.primaryAction,
-                  borderRadius: BorderRadius.circular(20.0),
-                ),
-                child: Text(
-                  '$selectedCount Selected',
-                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
+
+              // FIXED: Wrapped in Flexible to prevent RenderFlex overflow at 1.5x scale
+              Flexible(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 6.0),
+                  decoration: BoxDecoration(
+                    color: AppColors.primaryAction,
+                    borderRadius: BorderRadius.circular(20.0),
+                  ),
+                  child: Text(
+                    '$selectedCount Selected',
+                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
               ),
+
               const Spacer(),
               if (isCompletedScreen) ...[
                 TextButton.icon(

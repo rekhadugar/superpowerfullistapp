@@ -986,16 +986,20 @@ class ListProvider extends ChangeNotifier {
   void _recalculateWraps() {
     bool stateChanged = false;
 
+    // FIXED: Tap into the FluidGeometry engine
+    final geometry = FluidGeometry(_textScaleFactor);
+
+    // FIXED: Calculate available width by subtracting scaled margins and UI blocks
     final double titleAvailableWidth = _viewportWidth -
-        (AppConstants.horizontalPadding * 2) -
-        AppConstants.leadingBlockWidth -
-        (AppConstants.interElementGap * 2) -
-        AppConstants.trailingBlockWidth;
+        (geometry.horizontalPadding * 2) -
+        geometry.leadingBlockWidth -
+        (geometry.interElementGap * 2) -
+        geometry.trailingBlockWidth;
 
     final double tagAvailableWidth = _viewportWidth -
-        (AppConstants.horizontalPadding * 2) -
-        AppConstants.leadingBlockWidth -
-        AppConstants.interElementGap;
+        (geometry.horizontalPadding * 2) -
+        geometry.leadingBlockWidth -
+        geometry.interElementGap;
 
     if (titleAvailableWidth <= 0) return;
 
@@ -1009,7 +1013,7 @@ class ListProvider extends ChangeNotifier {
         ),
         textDirection: TextDirection.ltr,
         maxLines: AppConstants.maxTitleLines,
-        textScaler: TextScaler.linear(_textScaleFactor),
+        textScaler: TextScaler.linear(_textScaleFactor), // TextScaler handles the font size automatically
       )..layout(maxWidth: titleAvailableWidth);
 
       final int lineCount = tp.didExceedMaxLines
@@ -1039,10 +1043,11 @@ class ListProvider extends ChangeNotifier {
             textScaler: TextScaler.linear(_textScaleFactor),
           )..layout();
 
+          // FIXED: Badge width now calculates against the scaled paddings and icon gaps
           final double actualBadgeWidth = tagTp.width +
-              (AppConstants.badgeHorizontalPadding * 2) +
-              AppConstants.badgeIconSize +
-              AppConstants.badgeIconGap;
+              (geometry.badgeHorizontalPadding * 2) +
+              geometry.badgeIconSize +
+              geometry.badgeIconGap;
 
           if (currentLineWidth == 0.0) {
             currentLineWidth = actualBadgeWidth;

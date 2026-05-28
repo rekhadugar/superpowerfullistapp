@@ -46,29 +46,32 @@ class _RootNavigationScreenState extends State<RootNavigationScreen> {
         onTap: () {
           setState(() => _currentIndex = index);
 
-          // FIXED: Trigger the cross-list fetch ONLY when they actually tap the tab.
-          // This guarantees MacroLists are loaded, and prevents stale data.
           if (index == 1) {
             final macroLists = context.read<MacroListProvider>().lists;
             context.read<ListProvider>().initializeShoppingMode(macroLists);
           }
         },
         behavior: HitTestBehavior.opaque,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(icon, color: isSelected ? AppColors.primaryAction : unselectedColor, size: 26),
-            const SizedBox(height: 4),
-            Text(
-              label,
-              style: TextStyle(
-                color: isSelected ? AppColors.primaryAction : unselectedColor,
-                fontSize: 10,
-                fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+        // FIXED: FittedBox acts as a safety valve. If the text scales too large for the
+        // 70px bar, it will safely shrink it down instead of throwing a RenderFlex error.
+        child: FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(icon, color: isSelected ? AppColors.primaryAction : unselectedColor, size: 26),
+              const SizedBox(height: 4),
+              Text(
+                label,
+                style: TextStyle(
+                  color: isSelected ? AppColors.primaryAction : unselectedColor,
+                  fontSize: 10,
+                  fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

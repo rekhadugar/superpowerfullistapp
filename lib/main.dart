@@ -70,10 +70,10 @@ class ListicleApp extends StatelessWidget {
         if (!themeProvider.isInitialized) return const SizedBox.shrink();
 
         final mediaQuery = MediaQuery.of(context);
-        // Multiply the device's native scale by our app's internal multiplier
-        final customScaler = TextScaler.linear(
-            mediaQuery.textScaler.scale(1.0) * themeProvider.textScaleMultiplier
-        );
+
+        // FIXED: Strictly override OS scaling to prevent unpredictable spatial math.
+        // We do not multiply against the native device scale anymore.
+        final customScaler = TextScaler.linear(themeProvider.textScaleMultiplier);
 
         return MediaQuery(
           data: mediaQuery.copyWith(textScaler: customScaler),

@@ -167,17 +167,20 @@ class _ListItemCardState extends State<ListItemCard> with SingleTickerProviderSt
     });
   }
 
-  Widget _buildBadge(ThemeData theme, String text, IconData icon, double textScale) {
+  // FIXED: Badge generation now consumes the FluidGeometry lens directly
+  Widget _buildBadge(ThemeData theme, String text, IconData icon, FluidGeometry geometry) {
     return Container(
-      height: AppConstants.badgeHeight * textScale,
-      padding: const EdgeInsets.symmetric(horizontal: AppConstants.badgeHorizontalPadding),
-      decoration: BoxDecoration(color: theme.dividerColor.withValues(alpha: 0.3), borderRadius: BorderRadius.circular(AppConstants.badgeBorderRadius)),
+      height: geometry.badgeHeight,
+      padding: EdgeInsets.symmetric(horizontal: geometry.badgeHorizontalPadding),
+      decoration: BoxDecoration(color: theme.dividerColor.withValues(alpha: 0.3), borderRadius: BorderRadius.circular(4.0)), // Static radius for badges
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: AppConstants.badgeIconSize, color: theme.textTheme.labelSmall?.color),
-          const SizedBox(width: AppConstants.badgeIconGap),
-          Text(text, style: theme.textTheme.labelSmall?.copyWith(fontSize: AppConstants.badgeFontSize, fontWeight: FontWeight.w600, height: 1.1), maxLines: 1),
+          Icon(icon, size: geometry.badgeIconSize, color: theme.textTheme.labelSmall?.color),
+          SizedBox(width: geometry.badgeIconGap),
+          Flexible( // Prevents massive text scaling from breaking the row
+            child: Text(text, style: theme.textTheme.labelSmall?.copyWith(fontSize: AppConstants.badgeFontSize, fontWeight: FontWeight.w600, height: 1.1), maxLines: 1, overflow: TextOverflow.ellipsis),
+          ),
         ],
       ),
     );
@@ -187,6 +190,9 @@ class _ListItemCardState extends State<ListItemCard> with SingleTickerProviderSt
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final textScale = MediaQuery.textScalerOf(context).scale(1.0);
+
+    // FIXED: Instantiate the active geometry constraints
+    final geometry = FluidGeometry(textScale);
 
     // --- ALIAS MAPPING ENGINE ---
     final macroProvider = context.watch<MacroListProvider>();
@@ -225,7 +231,7 @@ class _ListItemCardState extends State<ListItemCard> with SingleTickerProviderSt
               if (_flashController.isAnimating) backgroundColor = _colorAnimation.value;
 
               return Container(
-                padding: const EdgeInsets.symmetric(horizontal: AppConstants.horizontalPadding),
+                padding: EdgeInsets.symmetric(horizontal: geometry.horizontalPadding),
                 margin: widget.isFeedback ? EdgeInsets.zero : const EdgeInsets.only(bottom: AppConstants.cardMargin),
                 decoration: BoxDecoration(
                   color: backgroundColor,
@@ -240,7 +246,7 @@ class _ListItemCardState extends State<ListItemCard> with SingleTickerProviderSt
               mainAxisSize: widget.isFeedback ? MainAxisSize.min : MainAxisSize.max,
               children: [
                 SizedBox(
-                  height: ((AppConstants.baseCardHeight + (widget.nWrap * AppConstants.nameWrapHeightStep)) * textScale) - AppConstants.borderWidth,
+                  height: (geometry.baseCardHeight + (widget.nWrap * geometry.nameWrapHeightStep)) - AppConstants.borderWidth,
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
@@ -248,15 +254,16 @@ class _ListItemCardState extends State<ListItemCard> with SingleTickerProviderSt
                         onTap: () => widget.isBatchModeActive ? widget.onToggleSelection() : widget.onCheck(),
                         behavior: HitTestBehavior.opaque,
                         child: Container(
-                          width: AppConstants.leadingBlockWidth,
-                          height: AppConstants.baseCardHeight * textScale,
+                          width: geometry.leadingBlockWidth,
+                          height: geometry.baseCardHeight,
                           alignment: Alignment.center,
                           child: widget.isBatchModeActive
-                              ? Icon(widget.isBatchSelected ? Icons.check_box_rounded : Icons.check_box_outline_blank, color: widget.isBatchSelected ? AppColors.primaryAction : theme.dividerColor)
-                              : Icon(Icons.check_box_outline_blank, color: theme.dividerColor),
+                          // FIXED: Injected geometry.iconSize
+                              ? Icon(widget.isBatchSelected ? Icons.check_box_rounded : Icons.check_box_outline_blank, size: geometry.iconSize, color: widget.isBatchSelected ? AppColors.primaryAction : theme.dividerColor)
+                              : Icon(Icons.check_box_outline_blank, size: geometry.iconSize, color: theme.dividerColor),
                         ),
                       ),
-                      const SizedBox(width: AppConstants.interElementGap),
+                      SizedBox(width: geometry.interElementGap),
                       Expanded(
                         child: Text(
                           widget.quantity > 0 ? '${widget.title} - ${widget.quantity} ${widget.unit}' : widget.title,
@@ -268,21 +275,21 @@ class _ListItemCardState extends State<ListItemCard> with SingleTickerProviderSt
                   ),
                 ),
                 SizedBox(
-                  height: AppConstants.attributeRowHeight * textScale,
+                  height: geometry.attributeRowHeight,
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const SizedBox(width: AppConstants.leadingBlockWidth + AppConstants.interElementGap),
-                      _buildBadge(theme, contextBadgeText, contextIcon, textScale),
+                      SizedBox(width: geometry.leadingBlockWidth + geometry.interElementGap),
+                      _buildBadge(theme, contextBadgeText, contextIcon, geometry),
                     ],
                   ),
                 ),
                 if (widget.attributeRows.isNotEmpty && widget.nTagRows > 0)
                   Container(
                     width: double.infinity,
-                    height: (widget.nTagRows * AppConstants.attributeRowHeight) * textScale,
-                    padding: const EdgeInsets.only(left: AppConstants.leadingBlockWidth + AppConstants.interElementGap, top: 0.0),
-                    child: Wrap(spacing: 8.0, runSpacing: 6.0, children: widget.attributeRows.map((attr) => _buildBadge(theme, attr, Icons.sell_outlined, textScale)).toList()),
+                    height: widget.nTagRows * geometry.attributeRowHeight,
+                    padding: EdgeInsets.only(left: geometry.leadingBlockWidth + geometry.interElementGap, top: 0.0),
+                    child: Wrap(spacing: 8.0, runSpacing: 6.0, children: widget.attributeRows.map((attr) => _buildBadge(theme, attr, Icons.sell_outlined, geometry)).toList()),
                   ),
               ],
             ),

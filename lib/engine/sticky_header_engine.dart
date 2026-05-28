@@ -12,26 +12,29 @@ class PhantomHeaderData {
 
 class StickyHeaderEngine {
   /// BATCH 1: O(N) Spatial Cache Builder
-  /// Calculates the absolute Y-coordinates, now scaled dynamically by the device font size.
+  /// Calculates the absolute Y-coordinates, now scaled dynamically by FluidGeometry.
   static List<double> calculateSpatialCache(List<dynamic> displayList, {double textScaleFactor = 1.0}) {
     final List<double> offsets = [];
     double currentY = 0.0;
+
+    // FIXED: Instantiate the geometry lens once per layout pass
+    final geometry = FluidGeometry(textScaleFactor);
 
     for (var item in displayList) {
       offsets.add(currentY);
 
       if (item is String) {
-        currentY += (AppConstants.headerHeight * textScaleFactor);
+        currentY += geometry.headerHeight;
       } else if (item is ListItem) {
-        // 1. Base Height + Title Wraps (Scaled)
-        double cardHeight = (AppConstants.baseCardHeight * textScaleFactor) +
-            (item.nWrap * (AppConstants.nameWrapHeightStep * textScaleFactor));
+        // 1. Base Height + Title Wraps (Scaled via Geometry)
+        double cardHeight = geometry.baseCardHeight +
+            (item.nWrap * geometry.nameWrapHeightStep);
 
-        // 2. Context Badge Row (Scaled)
-        cardHeight += (AppConstants.attributeRowHeight * textScaleFactor);
+        // 2. Context Badge Row (Scaled via Geometry)
+        cardHeight += geometry.attributeRowHeight;
 
-        // 3. Dynamic Tag Rows (Scaled)
-        cardHeight += (item.nTagRows * (AppConstants.attributeRowHeight * textScaleFactor));
+        // 3. Dynamic Tag Rows (Scaled via Geometry)
+        cardHeight += (item.nTagRows * geometry.attributeRowHeight);
 
         // 4. Margins (Strictly 0.0, scaling 0 is 0)
         cardHeight += AppConstants.cardMargin;
@@ -76,15 +79,15 @@ class StickyHeaderEngine {
     }
 
     double pushOffset = 0.0;
-    final double scaledHeaderHeight = AppConstants.headerHeight * textScaleFactor;
+    final geometry = FluidGeometry(textScaleFactor);
 
     for (int i = activeIndex + 1; i < displayList.length; i++) {
       if (displayList[i] is String) {
         final nextHeaderY = offsets[i];
         final distanceToNextHeader = nextHeaderY - scrollOffset;
 
-        if (distanceToNextHeader < scaledHeaderHeight) {
-          pushOffset = distanceToNextHeader - scaledHeaderHeight;
+        if (distanceToNextHeader < geometry.headerHeight) {
+          pushOffset = distanceToNextHeader - geometry.headerHeight;
         }
         break;
       }

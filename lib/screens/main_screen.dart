@@ -174,6 +174,10 @@ class _MainScreenState extends State<MainScreen> {
     final theme = Theme.of(context);
     final double safeBottomPadding = MediaQuery.of(context).padding.bottom;
 
+    // FIXED: Fetch the active scale and instantiate the geometry lens for the AppBar
+    final textScale = MediaQuery.textScalerOf(context).scale(1.0);
+    final geometry = FluidGeometry(textScale);
+
     return GestureDetector(
       onTap: () {
         if (listProvider.openSwipeItemId.value != null) {
@@ -186,12 +190,14 @@ class _MainScreenState extends State<MainScreen> {
         resizeToAvoidBottomInset: false,
         backgroundColor: theme.scaffoldBackgroundColor,
         appBar: AppBar(
-          leadingWidth: AppConstants.horizontalPadding + AppConstants.leadingBlockWidth + AppConstants.interElementGap,
+          // FIXED: Use fluid geometry so the title alignment perfectly matches the section headers
+          leadingWidth: geometry.horizontalPadding + geometry.leadingBlockWidth + geometry.interElementGap,
           leading: Padding(
-            padding: const EdgeInsets.only(left: AppConstants.horizontalPadding),
+            padding: EdgeInsets.only(left: geometry.horizontalPadding),
             child: Builder(
               builder: (context) => IconButton(
-                icon: Icon(Icons.menu_rounded, color: theme.textTheme.titleMedium?.color),
+                // FIXED: Injected geometry.iconSize
+                icon: Icon(Icons.menu_rounded, size: geometry.iconSize, color: theme.textTheme.titleMedium?.color),
                 padding: EdgeInsets.zero,
                 alignment: Alignment.centerLeft,
                 onPressed: () => Scaffold.of(context).openDrawer(),
@@ -210,7 +216,8 @@ class _MainScreenState extends State<MainScreen> {
           actions: [
             // THE NEW MULTI-ACTION POPUP MENU
             PopupMenuButton<String>(
-              icon: Icon(Icons.more_vert_rounded, color: theme.textTheme.titleMedium?.color),
+              // FIXED: Injected geometry.iconSize
+              icon: Icon(Icons.more_vert_rounded, size: geometry.iconSize, color: theme.textTheme.titleMedium?.color),
               onSelected: (String value) {
                 if (value == 'share') {
                   if (activeList != null) {

@@ -35,10 +35,14 @@ class GlobalSettingsScreen extends StatelessWidget {
       appBar: AppBar(
         backgroundColor: theme.cardColor,
         elevation: 0,
-        leading: IconButton(
+        // FIXED: Only render the back button if we navigated here via the Drawer.
+        // If accessed via the Bottom Tab, it gracefully hides to prevent black-screen crashes.
+        leading: Navigator.canPop(context)
+            ? IconButton(
           icon: Icon(Icons.arrow_back_ios_new_rounded, color: theme.textTheme.titleMedium?.color),
           onPressed: () => Navigator.pop(context),
-        ),
+        )
+            : null,
         title: Text('Settings', style: theme.textTheme.titleMedium?.copyWith(fontSize: 20, fontWeight: FontWeight.w700)),
       ),
       body: ListView(
@@ -80,24 +84,34 @@ class GlobalSettingsScreen extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('App Font Size', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 16)),
-                const SizedBox(height: 12),
-                Wrap(
-                  spacing: 12.0,
-                  children: AppFontSize.values.map((size) {
-                    final isSelected = themeProvider.fontSize == size;
-                    return ChoiceChip(
-                      label: Text(size.name.toUpperCase()),
-                      selected: isSelected,
-                      selectedColor: AppColors.primaryAction.withValues(alpha: 0.15),
-                      showCheckmark: false,
-                      labelStyle: TextStyle(
-                        color: isSelected ? AppColors.primaryAction : theme.textTheme.bodyMedium?.color,
-                        fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    // FIXED: Wrapped in Expanded to prevent right-side overflow on large scales
+                    const Expanded(
+                      child: Text(
+                        'Global App Scale',
+                        style: TextStyle(fontWeight: FontWeight.w600, fontSize: 16),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
-                      onSelected: (val) => themeProvider.setFontSize(size),
-                    );
-                  }).toList(),
+                    ),
+                    Text('${(themeProvider.textScaleMultiplier * 100).toInt()}%', style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.primaryAction)),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Slider(
+                  value: themeProvider.textScaleMultiplier,
+                  min: 0.5,
+                  max: 1.5, // FIXED: Capped max at 1.5
+                  divisions: 10, // Smoother stepping for the smaller range
+                  activeColor: AppColors.primaryAction,
+                  inactiveColor: AppColors.primaryAction.withValues(alpha: 0.2),
+                  onChanged: (val) => themeProvider.setFluidScale(val),
+                ),
+                const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 8.0),
+                  child: Text('Adjusts text, margins, and component geometry globally.', style: TextStyle(fontSize: 12, color: Colors.grey)),
                 ),
               ],
             ),
@@ -112,7 +126,7 @@ class GlobalSettingsScreen extends StatelessWidget {
             contentPadding: EdgeInsets.symmetric(horizontal: 20),
             leading: Icon(Icons.info_outline_rounded, color: Colors.grey),
             title: Text('Version', style: TextStyle(fontWeight: FontWeight.w600)),
-            subtitle: Text('1.0.0 (Beta)'),
+            subtitle: Text('2.2.0 (Fluid UI Beta)'),
           ),
         ],
       ),
