@@ -42,7 +42,7 @@ class DefaultFirebaseOptions {
 
   static const FirebaseOptions web = FirebaseOptions(
     apiKey: 'AIzaSyBIdgTDKso0kkOntoeR7P07TL9npLuraxE',
-    appId: '1:112096085918:web:ff37c4fb2e1914a0f7b88f',
+    appId: '1:112096085918:web:c54e4acf1ef54170f7b88f',
     messagingSenderId: '112096085918',
     projectId: 'listicle-36491',
     authDomain: 'listicle-36491.firebaseapp.com',

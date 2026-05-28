@@ -163,7 +163,8 @@ class _MainScreenState extends State<MainScreen> {
     }
 
     final activeId = macroProvider.activeListId!;
-    context.read<ListProvider>().loadItemsForList(activeId);
+    // FIXED: Renamed to match the exact method signature in list_provider.dart
+    context.read<ListProvider>().loadItems(activeId);
 
     final listProvider = context.watch<ListProvider>();
     final displayList = listProvider.displayList;

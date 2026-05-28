@@ -1,12 +1,16 @@
+import 'dart:async';
 import 'dart:convert';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/macro_list.dart';
+import '../services/auth_service.dart';
 
 class MacroListProvider extends ChangeNotifier {
   List<MacroList> _lists = [];
   String? _activeListId;
   bool _isInitialized = false;
+  StreamSubscription? _listSubscription;
 
   List<MacroList> get lists => _lists;
   String? get activeListId => _activeListId;
@@ -24,40 +28,43 @@ class MacroListProvider extends ChangeNotifier {
     _loadLists();
   }
 
-  Future<void> _loadLists() async {
-    final prefs = await SharedPreferences.getInstance();
-    final listsJson = prefs.getString('macro_lists');
-
-    if (listsJson != null) {
-      final List<dynamic> decoded = jsonDecode(listsJson);
-      _lists = decoded.map((m) => MacroList.fromMap(m)).toList();
-    } else {
-      _lists = [
-        MacroList(
-          id: 'default_list_1',
-          name: 'Groceries',
-          typeId: 'sys_shopping',
-          displayOrder: 100.0,
-          createdAt: DateTime.now(), // FIXED: Added missing parameter
-        )
-      ];
-    }
-
-    _lists.sort((a, b) => a.displayOrder.compareTo(b.displayOrder));
-
-    _activeListId = prefs.getString('active_list_id');
-    if (_activeListId == null && _lists.isNotEmpty) {
-      _activeListId = _lists.first.id;
-    }
-
-    _isInitialized = true;
-    notifyListeners();
+  @override
+  void dispose() {
+    _listSubscription?.cancel();
+    super.dispose();
   }
 
-  Future<void> _saveLists() async {
+  Future<void> _loadLists() async {
+    final uid = AuthService.currentUserId;
+    if (uid == null) return;
+
     final prefs = await SharedPreferences.getInstance();
-    final encoded = jsonEncode(_lists.map((l) => l.toMap()).toList());
-    await prefs.setString('macro_lists', encoded);
+    _activeListId = prefs.getString('active_list_id');
+
+    final firestore = FirebaseFirestore.instance;
+    // The Stream automatically pushes offline/online updates to the UI in real-time
+    _listSubscription = firestore
+        .collection('users')
+        .doc(uid)
+        .collection('lists')
+        .snapshots()
+        .listen((snapshot) {
+
+      _lists = snapshot.docs.map((doc) => MacroList.fromMap(doc.data())).toList();
+      _lists.sort((a, b) => a.displayOrder.compareTo(b.displayOrder));
+
+      if (_lists.isEmpty) {
+        addList('Groceries', 'sys_shopping'); // Auto-create default
+      } else {
+        if (_activeListId == null || !_lists.any((l) => l.id == _activeListId)) {
+          _activeListId = _lists.first.id;
+          prefs.setString('active_list_id', _activeListId!);
+        }
+      }
+
+      _isInitialized = true;
+      notifyListeners();
+    });
   }
 
   void setActiveList(String id) async {
@@ -67,7 +74,10 @@ class MacroListProvider extends ChangeNotifier {
     await prefs.setString('active_list_id', id);
   }
 
-  void addList(String name, String typeId) {
+  Future<void> addList(String name, String typeId) async {
+    final uid = AuthService.currentUserId;
+    if (uid == null) return;
+
     double maxOrder = 0.0;
     for (var list in _lists) {
       if (list.displayOrder > maxOrder) maxOrder = list.displayOrder;
@@ -78,72 +88,126 @@ class MacroListProvider extends ChangeNotifier {
       name: name.trim(),
       typeId: typeId,
       displayOrder: maxOrder + 100.0,
-      createdAt: DateTime.now(), // FIXED: Added missing parameter
+      createdAt: DateTime.now(),
     );
 
-    _lists.add(newList);
-    _saveLists();
-    notifyListeners();
+    // Write to Firestore (will instantly update the stream)
+    await FirebaseFirestore.instance
+        .collection('users')
+        .doc(uid)
+        .collection('lists')
+        .doc(newList.id)
+        .set(newList.toMap());
   }
 
-  void updateList(String id, String newName) {
-    final index = _lists.indexWhere((l) => l.id == id);
-    if (index != -1) {
-      _lists[index] = _lists[index].copyWith(name: newName.trim());
-      _saveLists();
-      notifyListeners();
+  Future<void> updateList(String id, String newName) async {
+    final uid = AuthService.currentUserId;
+    if (uid == null) return;
+
+    await FirebaseFirestore.instance
+        .collection('users')
+        .doc(uid)
+        .collection('lists')
+        .doc(id)
+        .update({'name': newName.trim()});
+  }
+
+  Future<void> deleteList(String id) async {
+    final uid = AuthService.currentUserId;
+    if (uid == null) return;
+
+    // 1. Delete the list document
+    await FirebaseFirestore.instance
+        .collection('users')
+        .doc(uid)
+        .collection('lists')
+        .doc(id)
+        .delete();
+
+    // 2. Client-side subcollection wipe
+    final itemsSnapshot = await FirebaseFirestore.instance
+        .collection('users')
+        .doc(uid)
+        .collection('lists')
+        .doc(id)
+        .collection('items')
+        .get();
+
+    final batch = FirebaseFirestore.instance.batch();
+    for (var doc in itemsSnapshot.docs) {
+      batch.delete(doc.reference);
     }
-  }
+    await batch.commit();
 
-  void deleteList(String id) {
-    _lists.removeWhere((l) => l.id == id);
     if (_activeListId == id) {
-      _activeListId = _lists.isNotEmpty ? _lists.first.id : null;
-    }
-    _saveLists();
-    notifyListeners();
-  }
-
-  void reorderLists(int oldIndex, int newIndex) {
-    if (oldIndex < newIndex) newIndex -= 1;
-    final item = _lists.removeAt(oldIndex);
-    _lists.insert(newIndex, item);
-
-    for (int i = 0; i < _lists.length; i++) {
-      _lists[i] = _lists[i].copyWith(displayOrder: (i + 1) * 100.0);
-    }
-
-    _saveLists();
-    notifyListeners();
-  }
-
-  // --- CASCADING DELETE PROTOCOL ---
-  Future<void> deleteAllListsOfType(String typeId) async {
-    final listsToDelete = _lists.where((l) => l.typeId == typeId).toList();
-    if (listsToDelete.isEmpty) return;
-
-    final prefs = await SharedPreferences.getInstance();
-
-    // 1. Dig into local storage and wipe all orphaned item data to save space
-    for (var list in listsToDelete) {
-      await prefs.remove('items_${list.id}');
-      await prefs.remove('last_purge_date_${list.id}');
-    }
-
-    // 2. Remove the lists from memory
-    _lists.removeWhere((l) => l.typeId == typeId);
-
-    // 3. Fallback routing if the user was currently looking at one of the deleted lists
-    if (listsToDelete.any((l) => l.id == _activeListId)) {
-      _activeListId = _lists.isNotEmpty ? _lists.first.id : null;
+      _activeListId = _lists.where((l) => l.id != id).isNotEmpty ? _lists.where((l) => l.id != id).first.id : null;
+      final prefs = await SharedPreferences.getInstance();
       if (_activeListId != null) {
         await prefs.setString('active_list_id', _activeListId!);
       } else {
         await prefs.remove('active_list_id');
       }
     }
+  }
 
-    _saveLists();
-    notifyListeners();
+  Future<void> reorderLists(int oldIndex, int newIndex) async {
+    final uid = AuthService.currentUserId;
+    if (uid == null) return;
+
+    if (oldIndex < newIndex) newIndex -= 1;
+    final item = _lists.removeAt(oldIndex);
+    _lists.insert(newIndex, item);
+
+    final batch = FirebaseFirestore.instance.batch();
+    for (int i = 0; i < _lists.length; i++) {
+      final newOrder = (i + 1) * 100.0;
+      _lists[i] = _lists[i].copyWith(displayOrder: newOrder);
+
+      final docRef = FirebaseFirestore.instance
+          .collection('users')
+          .doc(uid)
+          .collection('lists')
+          .doc(_lists[i].id);
+      batch.update(docRef, {'displayOrder': newOrder});
+    }
+    await batch.commit();
+    notifyListeners(); // Optimistic immediate UI update
+  }
+
+  Future<void> deleteAllListsOfType(String typeId) async {
+    final uid = AuthService.currentUserId;
+    if (uid == null) return;
+
+    final listsToDelete = _lists.where((l) => l.typeId == typeId).toList();
+    if (listsToDelete.isEmpty) return;
+
+    final batch = FirebaseFirestore.instance.batch();
+
+    for (var list in listsToDelete) {
+      final listRef = FirebaseFirestore.instance
+          .collection('users')
+          .doc(uid)
+          .collection('lists')
+          .doc(list.id);
+      batch.delete(listRef);
+
+      final itemsSnapshot = await listRef.collection('items').get();
+      for (var doc in itemsSnapshot.docs) {
+        batch.delete(doc.reference);
+      }
+    }
+    await batch.commit();
+
+    if (listsToDelete.any((l) => l.id == _activeListId)) {
+      final remaining = _lists.where((l) => l.typeId != typeId).toList();
+      _activeListId = remaining.isNotEmpty ? remaining.first.id : null;
+
+      final prefs = await SharedPreferences.getInstance();
+      if (_activeListId != null) {
+        await prefs.setString('active_list_id', _activeListId!);
+      } else {
+        await prefs.remove('active_list_id');
+      }
+    }
   }
 }

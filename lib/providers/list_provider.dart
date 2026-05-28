@@ -7,6 +7,8 @@ import '../engine/sort_mode_engine.dart';
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../data/mock_global_dictionary.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import '../services/auth_service.dart';
 
 class ListProvider extends ChangeNotifier {
   String? _currentListId;
@@ -33,6 +35,13 @@ class ListProvider extends ChangeNotifier {
   List<String> preferredCategoryOrder = [];
 
   List<ListItem> _items = [];
+  StreamSubscription? _itemsSubscription;
+
+  @override
+  void dispose() {
+    _itemsSubscription?.cancel();
+    super.dispose();
+  }
 
   // --- GESTURE & SPATIAL CACHE STATE ---
   final ValueNotifier<String?> openSwipeItemId = ValueNotifier(null);
@@ -114,45 +123,30 @@ class ListProvider extends ChangeNotifier {
     runDataMigration();
   }
 
-  // --- LOCAL ISOLATED STORAGE ENGINE ---
-  Future<void> loadItemsForList(String listId) async {
+  Future<void> loadItems(String listId) async {
     if (_currentListId == listId) return;
-
     _currentListId = listId;
-    final prefs = await SharedPreferences.getInstance();
+    _itemsSubscription?.cancel(); // Clear the old list's listener
 
-    // FIXED: Always load the Global Settings on cold boot!
-    final storesJson = prefs.getString('global_stores');
-    if (storesJson != null) {
-      final List<dynamic> decoded = jsonDecode(storesJson);
-      preferredTypeOrder = decoded.map((m) => m['name'].toString()).toList();
-    } else {
-      preferredTypeOrder = ['Any', 'Costco', 'Target', 'Walmart', 'Trader Joe\'s'];
-    }
+    final uid = AuthService.currentUserId;
+    if (uid == null) return;
 
-    final catJson = prefs.getString('global_categories');
-    if (catJson != null) {
-      final List<dynamic> decoded = jsonDecode(catJson);
-      preferredCategoryOrder = decoded.map((m) => m['name'].toString()).toList();
-    } else {
-      preferredCategoryOrder = ['Produce', 'Dairy', 'Bakery', 'Everything Else'];
-    }
+    // This stream listens to the native offline cache. It is instantly fast.
+    _itemsSubscription = FirebaseFirestore.instance
+        .collection('users')
+        .doc(uid)
+        .collection('lists')
+        .doc(listId)
+        .collection('items')
+        .snapshots()
+        .listen((snapshot) {
 
-    // Load Items
-    final String? itemsJson = prefs.getString('items_$_currentListId');
-    if (itemsJson != null) {
-      final List<dynamic> decoded = jsonDecode(itemsJson);
-      _items = decoded.map((map) => ListItem.fromMap(map)).toList();
-    } else {
-      _items = [];
-    }
+      _items = snapshot.docs.map((doc) => ListItem.fromMap(doc.data())).toList();
 
-    await _runDailyPurge(prefs);
-
-    _recalculateWraps();
-    _buildDisplayList();
-    _buildCheckedDisplayList();
-    notifyListeners();
+      _buildDisplayList();
+      _buildCheckedDisplayList();
+      notifyListeners();
+    });
   }
 
   Future<void> _saveItemsToStorage() async {
@@ -241,15 +235,28 @@ class ListProvider extends ChangeNotifier {
   }
 
   void commitEdits() {
+    if (_currentListId == null) return;
+    final uid = AuthService.currentUserId;
+    if (uid == null) return;
+
+    final batch = FirebaseFirestore.instance.batch();
+    final listRef = FirebaseFirestore.instance
+        .collection('users')
+        .doc(uid)
+        .collection('lists')
+        .doc(_currentListId)
+        .collection('items');
+
     bool changed = false;
     for (String id in _selectedItemIds) {
       final rawIndex = _items.indexWhere((item) => item.id == id);
       if (rawIndex != -1 && _draftQuantities.containsKey(id)) {
-        _items[rawIndex] = _items[rawIndex].copyWith(quantity: _draftQuantities[id]!);
+        batch.update(listRef.doc(id), {'quantity': _draftQuantities[id]!});
         changed = true;
       }
     }
-    if (changed) _saveItemsToStorage();
+
+    if (changed) batch.commit();
     clearSelection();
   }
 
@@ -349,10 +356,15 @@ class ListProvider extends ChangeNotifier {
     return null;
   }
 
+  Future<void> loadItemsForList(String listId) => loadItems(listId);
+
   void addItem(String title, List<String> attributes, String type, String category, int newQty, String newUnit) {
+    if (_currentListId == null) return;
+    final uid = AuthService.currentUserId;
+    if (uid == null) return;
+
     final safeType = type.trim().isEmpty ? "Any" : type.trim();
     final safeCategory = category.trim().isEmpty ? "Everything Else" : category.trim();
-
     final sortedNewTags = List<String>.from(attributes)..sort();
     final newTagString = sortedNewTags.join(",");
 
@@ -365,22 +377,25 @@ class ListProvider extends ChangeNotifier {
       return itemTags.join(",") == newTagString;
     });
 
+    final listRef = FirebaseFirestore.instance
+        .collection('users')
+        .doc(uid)
+        .collection('lists')
+        .doc(_currentListId)
+        .collection('items');
+
     if (exactMatchIndex != -1) {
       final existingItem = _items[exactMatchIndex];
-      _items[exactMatchIndex] = existingItem.copyWith(
-        quantity: (existingItem.quantity + newQty).clamp(0, 99),
-        unit: newUnit,
-      );
-      _recalculateWraps();
-      _buildDisplayList();
-      _saveItemsToStorage();
+      // Merge: Update the existing document in Firestore
+      listRef.doc(existingItem.id).update({
+        'quantity': (existingItem.quantity + newQty).clamp(0, 99),
+        'unit': newUnit,
+      });
       triggerSequentialFlash(existingItem.id);
-      notifyListeners();
       return;
     }
 
     double maxCat = 0.0, maxType = 0.0, maxGlobal = 0.0;
-
     for (var item in _items) {
       if (item.category == safeCategory && item.categoryOrder > maxCat) maxCat = item.categoryOrder;
       if (item.type == safeType && item.typeOrder > maxType) maxType = item.typeOrder;
@@ -393,16 +408,15 @@ class ListProvider extends ChangeNotifier {
       attributeRows: attributes,
       type: safeType,
       category: safeCategory,
+      quantity: newQty,
+      unit: newUnit,
       categoryOrder: maxCat + 100.0,
       typeOrder: maxType + 100.0,
       globalCustomOrder: maxGlobal + 100.0,
     );
 
-    _items.add(newItem);
-    _recalculateWraps();
-    _buildDisplayList();
-    _buildCheckedDisplayList();
-    _saveItemsToStorage();
+    // Write new item to Firestore
+    listRef.doc(newItem.id).set(newItem.toMap());
 
     _flashItemId = newItem.id;
     _flashTimer?.cancel();
@@ -410,8 +424,6 @@ class ListProvider extends ChangeNotifier {
       _flashItemId = null;
       notifyListeners();
     });
-
-    notifyListeners();
   }
 
   // --- FLUID SHEET & SELECTION STATE ---
@@ -716,6 +728,10 @@ class ListProvider extends ChangeNotifier {
   }
 
   void editItem(String id, String newTitle, List<String> newAttributes, String type, String category, int newQty, String newUnit) {
+    if (_currentListId == null) return;
+    final uid = AuthService.currentUserId;
+    if (uid == null) return;
+
     final index = _items.indexWhere((item) => item.id == id);
     if (index != -1) {
       final oldItem = _items[index];
@@ -735,20 +751,24 @@ class ListProvider extends ChangeNotifier {
         return itemTags.join(",") == newTagString;
       });
 
+      final batch = FirebaseFirestore.instance.batch();
+      final listRef = FirebaseFirestore.instance
+          .collection('users')
+          .doc(uid)
+          .collection('lists')
+          .doc(_currentListId)
+          .collection('items');
+
       if (exactMatchIndex != -1) {
         final existingItem = _items[exactMatchIndex];
-        _items[exactMatchIndex] = existingItem.copyWith(
-          quantity: (existingItem.quantity + newQty).clamp(0, 99),
-          unit: newUnit,
-        );
-        _items.removeAt(index);
-
-        _recalculateWraps();
-        _buildDisplayList();
-        _buildCheckedDisplayList();
-        _saveItemsToStorage();
+        // Merge Exact Match: Increase target qty, soft-delete the old source
+        batch.update(listRef.doc(existingItem.id), {
+          'quantity': (existingItem.quantity + newQty).clamp(0, 99),
+          'unit': newUnit,
+        });
+        batch.update(listRef.doc(id), {'isDeleted': true});
+        batch.commit();
         triggerSequentialFlash(existingItem.id);
-        notifyListeners();
         return;
       }
 
@@ -771,35 +791,41 @@ class ListProvider extends ChangeNotifier {
         newTypeOrder = maxType + 100.0;
       }
 
-      _items[index] = oldItem.copyWith(
-        title: newTitle,
-        attributeRows: newAttributes,
-        type: safeType,
-        category: safeCategory,
-        quantity: newQty,
-        unit: newUnit,
-        categoryOrder: newCatOrder,
-        typeOrder: newTypeOrder,
-        isCompleted: false,
-        completedAt: null,
-      );
+      // Update the document directly
+      listRef.doc(id).update({
+        'title': newTitle,
+        'attributeRows': newAttributes,
+        'type': safeType,
+        'category': safeCategory,
+        'quantity': newQty,
+        'unit': newUnit,
+        'categoryOrder': newCatOrder,
+        'typeOrder': newTypeOrder,
+        'isCompleted': false,
+        'completedAt': null,
+      });
 
-      _recalculateWraps();
-      _buildDisplayList();
-      _buildCheckedDisplayList();
-      _saveItemsToStorage();
-      notifyListeners();
+      clearSelection();
     }
   }
 
   void updateQuantity(String id, int delta) {
+    if (_currentListId == null) return;
+    final uid = AuthService.currentUserId;
+    if (uid == null) return;
+
     final index = _items.indexWhere((item) => item.id == id);
     if (index != -1) {
       final newQuantity = (_items[index].quantity + delta).clamp(0, 99);
       if (_items[index].quantity != newQuantity) {
-        _items[index] = _items[index].copyWith(quantity: newQuantity);
-        _saveItemsToStorage();
-        notifyListeners();
+        FirebaseFirestore.instance
+            .collection('users')
+            .doc(uid)
+            .collection('lists')
+            .doc(_currentListId)
+            .collection('items')
+            .doc(id)
+            .update({'quantity': newQuantity});
       }
     }
   }
@@ -1098,31 +1124,44 @@ class ListProvider extends ChangeNotifier {
     }
   }
 
-  // --- SINGLE ACTIONS ---
   String toggleCompletion(String id) {
+    if (_currentListId == null) return id;
+    final uid = AuthService.currentUserId;
+    if (uid == null) return id;
+
     final index = _items.indexWhere((item) => item.id == id);
     if (index != -1) {
       final isNowCompleted = !_items[index].isCompleted;
-      _items[index] = _items[index].copyWith(
-        isCompleted: isNowCompleted,
-        completedAt: isNowCompleted ? DateTime.now() : null,
-      );
-      _buildDisplayList();
-      _buildCheckedDisplayList();
-      _saveItemsToStorage();
-      notifyListeners();
+      FirebaseFirestore.instance
+          .collection('users')
+          .doc(uid)
+          .collection('lists')
+          .doc(_currentListId)
+          .collection('items')
+          .doc(id)
+          .update({
+        'isCompleted': isNowCompleted,
+        'completedAt': isNowCompleted ? DateTime.now().toIso8601String() : null,
+      });
     }
     return id;
   }
 
   String deleteItem(String id) {
+    if (_currentListId == null) return id;
+    final uid = AuthService.currentUserId;
+    if (uid == null) return id;
+
     final index = _items.indexWhere((item) => item.id == id);
     if (index != -1) {
-      _items[index] = _items[index].copyWith(isDeleted: true);
-      _buildDisplayList();
-      _buildCheckedDisplayList();
-      _saveItemsToStorage();
-      notifyListeners();
+      FirebaseFirestore.instance
+          .collection('users')
+          .doc(uid)
+          .collection('lists')
+          .doc(_currentListId)
+          .collection('items')
+          .doc(id)
+          .update({'isDeleted': true}); // Preserves soft-delete for Undo
     }
     return id;
   }
@@ -1140,10 +1179,16 @@ class ListProvider extends ChangeNotifier {
     _isLoadingShoppingMode = true;
     notifyListeners();
     _shoppingModeItems.clear();
+    _shoppingCompletedItems.clear(); // Clearing this just to be safe on reload
     _itemOriginMap.clear();
     _activeShoppingStore = null;
 
-    final prefs = await SharedPreferences.getInstance();
+    final uid = AuthService.currentUserId;
+    if (uid == null) {
+      _isLoadingShoppingMode = false;
+      notifyListeners();
+      return;
+    }
 
     // DEBUG 1: Check total lists
     print('DEBUG: Total MacroLists found: ${allMacroLists.length}');
@@ -1154,23 +1199,28 @@ class ListProvider extends ChangeNotifier {
     print('DEBUG: Shopping Lists filtered: ${shoppingLists.length}');
 
     for (var list in shoppingLists) {
-      final String? itemsJson = prefs.getString('items_${list.id}');
+      // 1. Fetch all items for this specific list from Firestore
+      final snapshot = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(uid)
+          .collection('lists')
+          .doc(list.id)
+          .collection('items')
+          .get();
 
-      // DEBUG 3: Check if the database key is pulling data
-      print('DEBUG: Data for list ${list.name} (Key: items_${list.id}): ${itemsJson != null ? "FOUND" : "NULL"}');
+      // DEBUG 3: Check database pull
+      print('DEBUG: Data for list ${list.id} pulled. Documents found: ${snapshot.docs.length}');
 
-      if (itemsJson != null) {
-        final List<dynamic> decoded = json.decode(itemsJson);
-        for (var itemMap in decoded) {
-          final item = ListItem.fromMap(itemMap);
-          if (!item.isDeleted) {
-            // FIXED: Sort into active vs completed arrays
-            if (item.isCompleted) {
-              _shoppingCompletedItems.add(item);
-            } else {
-              _shoppingModeItems.add(item);
-            }
-            _itemOriginMap[item.id] = list.id;
+      for (var doc in snapshot.docs) {
+        final item = ListItem.fromMap(doc.data());
+        if (!item.isDeleted) {
+          // 2. Map the origin so we know which subcollection to save edits back to!
+          _itemOriginMap[item.id] = list.id;
+
+          if (item.isCompleted) {
+            _shoppingCompletedItems.add(item);
+          } else {
+            _shoppingModeItems.add(item);
           }
         }
       }
@@ -1187,18 +1237,18 @@ class ListProvider extends ChangeNotifier {
     final listId = _itemOriginMap[itemId];
     if (listId == null) return;
 
-    final prefs = await SharedPreferences.getInstance();
-    final String? itemsJson = prefs.getString('items_$listId');
-    if (itemsJson != null) {
-      final List<dynamic> decoded = json.decode(itemsJson);
-      final List<ListItem> listItems = decoded.map((m) => ListItem.fromMap(m)).toList();
+    final uid = AuthService.currentUserId;
+    if (uid == null) return;
 
-      final listIndex = listItems.indexWhere((i) => i.id == itemId);
-      if (listIndex != -1) {
-        listItems[listIndex] = updatedItem;
-        await prefs.setString('items_$listId', json.encode(listItems.map((i) => i.toMap()).toList()));
-      }
-    }
+    // Direct write to the specific list's subcollection in Firestore
+    await FirebaseFirestore.instance
+        .collection('users')
+        .doc(uid)
+        .collection('lists')
+        .doc(listId)
+        .collection('items')
+        .doc(itemId)
+        .update(updatedItem.toMap());
 
     // Sync active view if the user happens to be on that specific list
     if (_currentListId == listId) {
@@ -1287,29 +1337,35 @@ class ListProvider extends ChangeNotifier {
   }
 
   Future<void> restoreDeletedShoppingItems(List<String> itemIds) async {
+    final uid = AuthService.currentUserId;
+    if (uid == null) return;
+
     for (String itemId in itemIds) {
       final listId = _itemOriginMap[itemId];
       if (listId == null) continue;
 
-      final prefs = await SharedPreferences.getInstance();
-      final String? itemsJson = prefs.getString('items_$listId');
-      if (itemsJson != null) {
-        final List<dynamic> decoded = json.decode(itemsJson);
-        final List<ListItem> listItems = decoded.map((m) => ListItem.fromMap(m)).toList();
+      final docRef = FirebaseFirestore.instance
+          .collection('users')
+          .doc(uid)
+          .collection('lists')
+          .doc(listId)
+          .collection('items')
+          .doc(itemId);
 
-        final listIndex = listItems.indexWhere((i) => i.id == itemId);
-        if (listIndex != -1) {
-          ListItem item = listItems[listIndex];
-          item = item.copyWith(isDeleted: false);
-          listItems[listIndex] = item;
-          await prefs.setString('items_$listId', json.encode(listItems.map((i) => i.toMap()).toList()));
+      // Fetch the soft-deleted item from Firestore
+      final snapshot = await docRef.get();
+      if (snapshot.exists && snapshot.data() != null) {
+        ListItem item = ListItem.fromMap(snapshot.data()!);
+        item = item.copyWith(isDeleted: false);
 
-          // Put it back in the correct array
-          if (!item.isCompleted) {
-            _shoppingModeItems.insert(0, item);
-          } else {
-            _shoppingCompletedItems.insert(0, item);
-          }
+        // Restore it in the database
+        await docRef.update({'isDeleted': false});
+
+        // Put it back in the correct UI array
+        if (!item.isCompleted) {
+          _shoppingModeItems.insert(0, item);
+        } else {
+          _shoppingCompletedItems.insert(0, item);
         }
       }
 

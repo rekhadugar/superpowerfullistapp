@@ -37,8 +37,11 @@ dependencies:
   provider: ^6.1.5+1
   firebase_core: ^4.9.0
   cloud_firestore: ^6.4.1
+  firebase_auth: ^6.5.1   # NEW: Added to support AuthService
   flutter_slidable: ^4.0.3
   shared_preferences: ^2.5.5
+
+
 
 dev_dependencies:
   flutter_test:
