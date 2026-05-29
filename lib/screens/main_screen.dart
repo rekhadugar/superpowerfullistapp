@@ -43,6 +43,24 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
   final FocusNode _quickAddFocus = FocusNode();
   String _quickAddQuery = '';
 
+  // --- NEW: Mock Dictionary for Smart Suggestions ---
+  // You can replace this later with your actual Global Dictionary from ListProvider
+  final List<Map<String, String>> _mockDictionary = [
+    {'name': 'Milk', 'category': 'Dairy', 'store': 'Costco'},
+    {'name': 'Eggs', 'category': 'Dairy', 'store': 'Any'},
+    {'name': 'Apples', 'category': 'Produce', 'store': 'Target'},
+    {'name': 'Bread', 'category': 'Bakery', 'store': 'Walmart'},
+    {'name': 'Chicken Breast', 'category': 'Meat', 'store': 'Costco'},
+    {'name': 'Paper Towels', 'category': 'Household', 'store': 'Target'},
+    {'name': 'Coffee Beans', 'category': 'Pantry', 'store': 'Trader Joes'},
+  ];
+
+  List<Map<String, String>> get _filteredSuggestions {
+    if (_quickAddQuery.trim().isEmpty) return [];
+    final q = _quickAddQuery.trim().toLowerCase();
+    return _mockDictionary.where((item) => item['name']!.toLowerCase().contains(q)).toList();
+  }
+
   @override
   void initState() {
     super.initState();
@@ -197,16 +215,137 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
     _quickAddFocus.unfocus();
   }
 
-  void _commitQuickAdd() {
-    final text = _quickAddController.text.trim();
+  // FIXED: Now accepts optional dictionary parameters to seamlessly add smart suggestions
+  void _commitQuickAdd([String? specificName, String? category, String? store]) {
+    final text = specificName ?? _quickAddController.text.trim();
     if (text.isNotEmpty) {
-      context.read<ListProvider>().addItem(text, [], 'Any', 'Everything Else', 0, 'pcs');
+      context.read<ListProvider>().addItem(
+          text,
+          [],
+          store ?? 'Any',
+          category ?? 'Everything Else',
+          0,
+          'pcs'
+      );
       _quickAddController.clear();
       setState(() => _quickAddQuery = '');
       _quickAddFocus.requestFocus();
     } else {
       _closeQuickAdd();
     }
+  }
+
+  // --- NEW: Smart Suggestions UI Builder ---
+  Widget _buildSmartSuggestions(ThemeData theme, FluidGeometry geometry) {
+    final query = _quickAddQuery.trim();
+    final suggestions = _filteredSuggestions;
+
+    return Material(
+      elevation: 12.0,
+      shadowColor: Colors.black.withValues(alpha: 0.2),
+      borderRadius: BorderRadius.circular(16.0),
+      color: theme.cardColor,
+      clipBehavior: Clip.antiAlias,
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.of(context).size.height * 0.45, // Prevents pushing into the keyboard
+        ),
+        child: ListView(
+          padding: EdgeInsets.zero,
+          shrinkWrap: true,
+          children: [
+            // 1. The Dynamic "Create New" Row
+            InkWell(
+              onTap: () => _commitQuickAdd(query, 'Everything Else', 'Any'),
+              child: Padding(
+                padding: EdgeInsets.symmetric(horizontal: geometry.horizontalPadding, vertical: 12.0),
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(6.0),
+                      decoration: BoxDecoration(
+                          color: AppColors.primaryAction.withValues(alpha: 0.1),
+                          shape: BoxShape.circle
+                      ),
+                      child: Icon(Icons.add_rounded, color: AppColors.primaryAction, size: geometry.iconSize * 0.9),
+                    ),
+                    SizedBox(width: geometry.interElementGap),
+                    Expanded(
+                      child: Text(
+                        'Add "$query"',
+                        style: theme.textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.bold,
+                            color: AppColors.primaryAction
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
+            if (suggestions.isNotEmpty)
+              Divider(height: 1, color: theme.dividerColor.withValues(alpha: 0.5)),
+
+            // 2. Smart Dictionary Suggestions
+            ...suggestions.map((item) {
+              return InkWell(
+                onTap: () => _commitQuickAdd(item['name']!, item['category']!, item['store']!),
+                child: Padding(
+                  padding: EdgeInsets.symmetric(horizontal: geometry.horizontalPadding, vertical: 12.0),
+                  child: Row(
+                    children: [
+                      Icon(Icons.history_rounded, color: theme.textTheme.bodyMedium?.color?.withValues(alpha: 0.5), size: geometry.iconSize * 0.9),
+                      SizedBox(width: geometry.interElementGap),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                                item['name']!,
+                                style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600)
+                            ),
+                            const SizedBox(height: 6.0),
+                            Row(
+                              children: [
+                                _buildMiniBadge(theme, item['category']!, Icons.category_outlined),
+                                const SizedBox(width: 8.0),
+                                _buildMiniBadge(theme, item['store']!, Icons.storefront_outlined),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                      Icon(Icons.north_west_rounded, color: theme.dividerColor, size: geometry.iconSize * 0.7),
+                    ],
+                  ),
+                ),
+              );
+            }),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMiniBadge(ThemeData theme, String text, IconData icon) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6.0, vertical: 2.0),
+      decoration: BoxDecoration(
+        color: theme.dividerColor.withValues(alpha: 0.15),
+        borderRadius: BorderRadius.circular(4.0),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 10, color: theme.textTheme.bodyMedium?.color),
+          const SizedBox(width: 4),
+          Text(text, style: theme.textTheme.bodySmall?.copyWith(fontSize: 10, fontWeight: FontWeight.w600)),
+        ],
+      ),
+    );
   }
 
   @override
@@ -234,16 +373,12 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
     final textScale = MediaQuery.textScalerOf(context).scale(1.0);
     final geometry = FluidGeometry(textScale);
 
-    // Calculates a compact height tightly wrapped around the font size
     final double pillHeight = (AppConstants.titleFontSize * textScale) + 20.0;
 
     return GestureDetector(
       onTap: () {
         if (listProvider.openSwipeItemId.value != null) {
           listProvider.openSwipeItemId.value = null;
-        }
-        if (_isQuickAdding) {
-          _closeQuickAdd();
         }
       },
       behavior: HitTestBehavior.translucent,
@@ -274,7 +409,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
           title: AnimatedContainer(
             duration: const Duration(milliseconds: 250),
             curve: Curves.easeOutCubic,
-            height: pillHeight, // Uses the dynamically shorter height
+            height: pillHeight,
             margin: EdgeInsets.only(
               right: _isQuickAdding ? 0.0 : geometry.horizontalPadding,
             ),
@@ -304,7 +439,6 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
                   ),
                   border: InputBorder.none,
                   isDense: true,
-                  // Adjusted vertical padding to keep text vertically centered in the shorter box
                   contentPadding: EdgeInsets.symmetric(horizontal: geometry.horizontalPadding, vertical: 4.0),
                 ),
               ),
@@ -412,10 +546,6 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
                 }
 
                 if (notification is ScrollUpdateNotification && notification.dragDetails != null) {
-                  if (_isQuickAdding) {
-                    _closeQuickAdd();
-                  }
-
                   if (listProvider.editItemId != null) {
                     final isKeyboardOpen = MediaQuery.of(context).viewInsets.bottom > 0;
                     if (isKeyboardOpen) {
@@ -550,6 +680,27 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
                 ],
               ),
             ),
+
+            // --- FIXED: THE QUICK ADD OVERLAYS ---
+            if (_isQuickAdding) ...[
+              // 1. Transparent Modal Barrier
+              Positioned.fill(
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: _closeQuickAdd,
+                  onPanStart: (_) => _closeQuickAdd(),
+                  child: const SizedBox.expand(),
+                ),
+              ),
+              // 2. Smart Suggestions Dropdown
+              if (_quickAddQuery.trim().isNotEmpty)
+                Positioned(
+                  top: 8.0,
+                  left: geometry.horizontalPadding,
+                  right: geometry.horizontalPadding,
+                  child: _buildSmartSuggestions(theme, geometry),
+                ),
+            ],
 
             const FluidEditSheet(),
             const BatchActionBar(),
