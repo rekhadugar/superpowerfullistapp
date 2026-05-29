@@ -1,11 +1,14 @@
+// Location: lib/widgets/fluid_edit_sheet.dart
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+
 import '../providers/list_provider.dart';
 import '../providers/macro_list_provider.dart';
 import '../providers/settings_provider.dart';
 import '../models/list_item.dart';
+import '../theme/app_constants.dart';
 import '../theme/app_theme.dart';
-import 'horizontal_pill_selector.dart';
 
 class FluidEditSheet extends StatefulWidget {
   const FluidEditSheet({super.key});
@@ -15,28 +18,61 @@ class FluidEditSheet extends StatefulWidget {
 }
 
 class _FluidEditSheetState extends State<FluidEditSheet> {
-  late TextEditingController _titleController;
-  final FocusNode _titleFocus = FocusNode();
-
+  ListItem? _originalItem;
   ListItem? _draftItem;
-  final List<String> _units = ['pcs', 'lbs', 'oz', 'gal', 'pk', 'box', 'bag'];
+
+  final TextEditingController _nameController = TextEditingController();
+  final FocusNode _nameFocus = FocusNode();
+
+  final TextEditingController _quantityController = TextEditingController();
+  final TextEditingController _unitController = TextEditingController();
+
+  final TextEditingController _tagInputController = TextEditingController();
+  final FocusNode _tagFocus = FocusNode();
+
+  bool _isFullScreen = false;
+  double _dragOffset = 0.0;
+
+  final List<String> _hardcodedUnits = ['pcs', 'lbs', 'oz', 'gal', 'pk', 'box', 'bag'];
 
   @override
   void initState() {
     super.initState();
-    _titleController = TextEditingController();
 
-    _titleFocus.addListener(() {
-      if (_titleFocus.hasFocus && mounted) {
-        context.read<ListProvider>().setFullEditRequest(true);
+    _nameController.addListener(() {
+      if (_nameController.text.isEmpty && _originalItem != null) {
+        _nameController.value = TextEditingValue(
+          text: _originalItem!.title,
+          selection: TextSelection(baseOffset: 0, extentOffset: _originalItem!.title.length),
+        );
+      } else if (_draftItem != null && _draftItem!.title != _nameController.text) {
+        setState(() => _draftItem = _draftItem!.copyWith(title: _nameController.text));
+      }
+    });
+
+    _quantityController.addListener(() {
+      if (_draftItem == null) return;
+      final val = int.tryParse(_quantityController.text);
+      if (val != null && val != _draftItem!.quantity) {
+        setState(() => _draftItem = _draftItem!.copyWith(quantity: val));
+      }
+    });
+
+    _unitController.addListener(() {
+      if (_draftItem != null && _draftItem!.unit != _unitController.text) {
+        setState(() => _draftItem = _draftItem!.copyWith(unit: _unitController.text));
       }
     });
   }
 
   @override
   void dispose() {
-    _titleController.dispose();
-    _titleFocus.dispose();
+    _nameController.dispose();
+    _nameFocus.dispose();
+    _quantityController.dispose();
+    _unitController.dispose();
+    _tagInputController.dispose();
+    _tagFocus.dispose();
     super.dispose();
   }
 
@@ -49,44 +85,68 @@ class _FluidEditSheetState extends State<FluidEditSheet> {
 
   void _syncDraftWithProvider(ListProvider provider) {
     if (provider.editItemId != null) {
-      int itemIndex = provider.displayList.indexWhere((item) => item is ListItem && item.id == provider.editItemId);
-      dynamic foundItem;
-
-      if (itemIndex != -1) {
-        foundItem = provider.displayList[itemIndex];
-      } else {
-        itemIndex = provider.checkedDisplayList.indexWhere((item) => item is ListItem && item.id == provider.editItemId);
-        if (itemIndex != -1) {
-          foundItem = provider.checkedDisplayList[itemIndex];
-        }
-      }
-
-      // FIXED: Added fallback to search Shopping Mode items if not found in standard lists
-      if (foundItem == null) {
-        final shoppingIndex = provider.shoppingModeItems.indexWhere((item) => item.id == provider.editItemId);
-        if (shoppingIndex != -1) {
-          foundItem = provider.shoppingModeItems[shoppingIndex];
-        }
-      }
-
-      if (foundItem != null) {
-        final item = foundItem as ListItem;
-        if (_draftItem == null || _draftItem!.id != item.id) {
+      if (_originalItem == null || _originalItem!.id != provider.editItemId) {
+        final item = _findItem(provider, provider.editItemId!);
+        if (item != null) {
+          _originalItem = item;
           _draftItem = item.copyWith();
-          _titleController.text = item.title;
+          _nameController.text = item.title;
+          _quantityController.text = item.quantity.toString();
+          _unitController.text = item.unit;
+          _isFullScreen = provider.isFullEditRequested;
+          _dragOffset = 0.0;
         }
+      } else if (provider.isFullEditRequested && !_isFullScreen) {
+        _isFullScreen = true;
       }
-    } else if (_draftItem != null) {
+    } else if (_originalItem != null) {
+      _originalItem = null;
       _draftItem = null;
-      _titleController.clear();
+      _nameController.clear();
+      _quantityController.clear();
+      _unitController.clear();
+      _tagInputController.clear();
+      _isFullScreen = false;
     }
   }
 
-  void _saveDraft(ListProvider provider) {
-    if (_draftItem != null) {
+  ListItem? _findItem(ListProvider provider, String id) {
+    int index = provider.displayList.indexWhere((i) => i is ListItem && i.id == id);
+    if (index != -1) return provider.displayList[index] as ListItem;
+
+    index = provider.checkedDisplayList.indexWhere((i) => i is ListItem && i.id == id);
+    if (index != -1) return provider.checkedDisplayList[index] as ListItem;
+
+    index = provider.shoppingModeItems.indexWhere((i) => i.id == id);
+    if (index != -1) return provider.shoppingModeItems[index];
+
+    return null;
+  }
+
+  bool get _hasModifications {
+    if (_originalItem == null || _draftItem == null) return false;
+    if (_originalItem!.title != _draftItem!.title) return true;
+    if (_originalItem!.quantity != _draftItem!.quantity) return true;
+    if (_originalItem!.unit != _draftItem!.unit) return true;
+    if (_originalItem!.category != _draftItem!.category) return true;
+    if (_originalItem!.type != _draftItem!.type) return true;
+
+    final origTags = List<String>.from(_originalItem!.attributeRows)..sort();
+    final draftTags = List<String>.from(_draftItem!.attributeRows)..sort();
+    return origTags.join(',') != draftTags.join(',');
+  }
+
+  // FIXED: Unconditionally triggers provider.setEditItem(null) to close the sheet
+  void _saveAndClose() {
+    if (_draftItem == null || _originalItem == null) return;
+
+    final provider = context.read<ListProvider>();
+    FocusScope.of(context).unfocus();
+
+    if (_hasModifications) {
       provider.editItem(
-        _draftItem!.id,
-        _titleController.text.trim(),
+        _originalItem!.id,
+        _draftItem!.title.trim().isEmpty ? _originalItem!.title : _draftItem!.title.trim(),
         _draftItem!.attributeRows,
         _draftItem!.type,
         _draftItem!.category,
@@ -94,254 +154,459 @@ class _FluidEditSheetState extends State<FluidEditSheet> {
         _draftItem!.unit,
       );
     }
+
     provider.setEditItem(null);
-    provider.setFullEditRequest(false);
-    _titleFocus.unfocus();
   }
 
-  Widget _buildPillButton(IconData icon, String label, VoidCallback onTap, {Color color = AppColors.primaryAction}) {
-    return Expanded(
-      child: GestureDetector(
-        onTap: onTap,
-        behavior: HitTestBehavior.opaque,
-        child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 12),
-          decoration: BoxDecoration(
-            color: color.withValues(alpha: 0.1),
-            borderRadius: BorderRadius.circular(12),
+  void _discardAndClose() {
+    context.read<ListProvider>().setEditItem(null);
+    FocusScope.of(context).unfocus();
+  }
+
+  void _confirmDelete() {
+    if (_originalItem == null) return;
+    final provider = context.read<ListProvider>();
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete Item?'),
+        content: Text('Are you sure you want to delete "${_originalItem!.title}"?'),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16.0)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
           ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(icon, color: color, size: 20),
-              const SizedBox(width: 8),
-              Text(label, style: TextStyle(color: color, fontWeight: FontWeight.bold)),
-            ],
+          TextButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              provider.deleteItem(_originalItem!.id);
+              provider.setEditItem(null);
+            },
+            child: const Text('Delete', style: TextStyle(color: AppColors.destructiveAction, fontWeight: FontWeight.bold)),
           ),
-        ),
+        ],
       ),
     );
+  }
+
+  // FIXED: Pulling up anywhere on the collapsed sheet instantly snaps it to full screen
+  void _handleVerticalDragUpdate(DragUpdateDetails details) {
+    if (!_isFullScreen && details.delta.dy < 0) {
+      setState(() {
+        _isFullScreen = true;
+        _dragOffset = 0;
+      });
+    } else {
+      setState(() => _dragOffset += details.delta.dy);
+    }
+  }
+
+  void _handleVerticalDragEnd(DragEndDetails details) {
+    final velocity = details.primaryVelocity ?? 0.0;
+
+    if (velocity > 500 || _dragOffset > 100) {
+      if (_isFullScreen && _dragOffset > 150) {
+        setState(() {
+          _isFullScreen = false;
+          _dragOffset = 0;
+        });
+        FocusScope.of(context).unfocus();
+      } else {
+        _saveAndClose();
+      }
+    } else if (velocity < -500 || _dragOffset < -50) {
+      setState(() {
+        _isFullScreen = true;
+        _dragOffset = 0;
+      });
+    } else {
+      setState(() => _dragOffset = 0);
+    }
+  }
+
+  List<String> _getPopularList(ListProvider provider, String propertyType, List<String> baseSettings) {
+    final dict = provider.searchSmartDictionary('');
+    final results = List<String>.from(baseSettings);
+
+    for (var item in dict) {
+      String val = '';
+      if (propertyType == 'store') val = item.store;
+      if (propertyType == 'category') val = item.category;
+
+      if (val.isNotEmpty && val != 'Any' && val != 'Everything Else' && !results.contains(val)) {
+        results.add(val);
+      }
+    }
+    return results.take(7).toList();
+  }
+
+  List<String> _getPopularTags(ListProvider provider) {
+    final dict = provider.searchSmartDictionary('');
+    final List<String> tags = [];
+    for (var item in dict) {
+      for (var t in item.tags) {
+        if (!tags.contains(t)) tags.add(t);
+      }
+    }
+    return tags.take(15).toList();
+  }
+
+  List<String> _getPopularUnits(ListProvider provider) {
+    final dict = provider.searchSmartDictionary('');
+    final List<String> dynamicUnits = [];
+    for (var item in dict) {
+      if (item.unit.isNotEmpty && !_hardcodedUnits.contains(item.unit) && !dynamicUnits.contains(item.unit)) {
+        dynamicUnits.add(item.unit);
+      }
+    }
+    return [..._hardcodedUnits, ...dynamicUnits];
+  }
+
+  void _addTag(String tag) {
+    final clean = tag.trim().toLowerCase();
+    if (clean.isNotEmpty && !_draftItem!.attributeRows.contains(clean)) {
+      setState(() {
+        _draftItem = _draftItem!.copyWith(attributeRows: [..._draftItem!.attributeRows, clean]);
+        _tagInputController.clear();
+      });
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<ListProvider>();
+    if (_draftItem == null) return const SizedBox.shrink();
+
     final isVisible = provider.editItemId != null;
-    final bool isFull = provider.isFullEditRequested;
+    final screenHeight = MediaQuery.of(context).size.height;
+    final safeBottom = MediaQuery.of(context).padding.bottom;
+    final keyboardHeight = MediaQuery.of(context).viewInsets.bottom;
 
-    final double screenHeight = MediaQuery.of(context).size.height;
-    final double keyboardHeight = MediaQuery.of(context).viewInsets.bottom;
-    final double safeBottom = MediaQuery.of(context).padding.bottom;
-
-    double sheetHeight = 280.0 + safeBottom;
-    if (isFull) {
-      sheetHeight = screenHeight * 0.85;
+    if (keyboardHeight > 0 && !_isFullScreen) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => setState(() => _isFullScreen = true));
     }
 
+    final double targetHeight = _isFullScreen
+        ? screenHeight * 0.90
+        : 340.0 + safeBottom;
+
+    final theme = Theme.of(context);
+    final geometry = FluidGeometry(MediaQuery.textScalerOf(context).scale(1.0));
+
+    final macroProvider = context.watch<MacroListProvider>();
+    final settings = context.watch<SettingsProvider>();
+    final typeId = macroProvider.activeList?.typeId ?? 'sys_shopping';
+    final appType = settings.getTypeById(typeId);
+
+    // FIXED: Strips out empty states from the base settings before generating the chips
+    final axis1Base = settings.getAxis1Groups(typeId).map((g) => g.name).where((n) => n != 'Any' && n != 'Everything Else').toList();
+    final axis2Base = settings.getAxis2Groups(typeId).map((g) => g.name).where((n) => n != 'Any' && n != 'Everything Else').toList();
+
+    final popularStores = _getPopularList(provider, 'store', axis1Base);
+    final popularCategories = _getPopularList(provider, 'category', axis2Base);
+    final popularTags = _getPopularTags(provider);
+    final allUnits = _getPopularUnits(provider);
+
     return AnimatedPositioned(
-      duration: const Duration(milliseconds: 300),
+      duration: _dragOffset == 0 ? const Duration(milliseconds: 300) : Duration.zero,
       curve: Curves.easeOutCubic,
       left: 0,
       right: 0,
-      bottom: isVisible ? 0 : -(sheetHeight + 50),
-      height: sheetHeight,
-      child: Container(
-        decoration: BoxDecoration(
-          color: Theme.of(context).scaffoldBackgroundColor,
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(24.0)),
-          boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.15), blurRadius: 20, offset: const Offset(0, -5))],
-        ),
-        child: Column(
-          children: [
-            GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onVerticalDragEnd: (details) {
-                final velocity = details.primaryVelocity ?? 0.0;
-                if (velocity > 200) {
-                  if (isFull) {
-                    provider.setFullEditRequest(false);
-                    _titleFocus.unfocus();
-                  } else {
-                    _titleFocus.unfocus();
-                    provider.setEditItem(null);
-                  }
-                } else if (velocity < -200) {
-                  provider.setFullEditRequest(true);
-                }
-              },
-              child: Padding(
-                padding: const EdgeInsets.only(top: 8.0, left: 8.0, right: 8.0, bottom: 8.0),
+      bottom: isVisible ? -_dragOffset.clamp(0.0, double.infinity) : -(targetHeight + 50),
+      height: targetHeight,
+      child: GestureDetector(
+        onVerticalDragUpdate: _handleVerticalDragUpdate,
+        onVerticalDragEnd: _handleVerticalDragEnd,
+        child: Container(
+          decoration: BoxDecoration(
+            color: theme.scaffoldBackgroundColor,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(24.0)),
+            boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.15), blurRadius: 20, offset: const Offset(0, -5))],
+          ),
+          child: Column(
+            children: [
+              Center(
+                child: Container(
+                  margin: const EdgeInsets.only(top: 12.0, bottom: 8.0),
+                  width: 40, height: 5,
+                  decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(10)),
+                ),
+              ),
+
+              Padding(
+                padding: EdgeInsets.symmetric(horizontal: geometry.horizontalPadding, vertical: 8.0),
                 child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
-                    TextButton(
-                      onPressed: () {
-                        _titleFocus.unfocus();
-                        provider.setEditItem(null);
-                        provider.setFullEditRequest(false);
-                      },
-                      child: Text('Cancel', style: TextStyle(color: Theme.of(context).textTheme.bodyMedium?.color, fontSize: 16)),
-                    ),
+                    if (_hasModifications)
+                      IconButton(
+                        icon: const Icon(Icons.close_rounded, size: 28),
+                        color: AppColors.destructiveAction,
+                        onPressed: _discardAndClose,
+                      )
+                    else
+                      const SizedBox(width: 40),
+
+                    const SizedBox(width: 8.0),
+
                     Expanded(
-                      child: Center(
-                        child: Container(
-                          width: 50, height: 5,
-                          decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(10)),
+                      child: TextField(
+                        controller: _nameController,
+                        focusNode: _nameFocus,
+                        textCapitalization: TextCapitalization.words,
+                        textInputAction: TextInputAction.done,
+                        onSubmitted: (_) => _saveAndClose(),
+                        minLines: 1,
+                        maxLines: 3,
+                        style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+                        decoration: InputDecoration(
+                          hintText: 'Item Name',
+                          filled: true, fillColor: theme.cardColor,
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(16.0), borderSide: BorderSide.none),
+                          focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16.0), borderSide: const BorderSide(color: AppColors.primaryAction, width: 2.0)),
                         ),
                       ),
                     ),
-                    TextButton(
-                      onPressed: () => _saveDraft(provider),
-                      child: const Text('Save', style: TextStyle(color: AppColors.primaryAction, fontSize: 16, fontWeight: FontWeight.bold)),
+
+                    const SizedBox(width: 8.0),
+
+                    IconButton(
+                      icon: const Icon(Icons.check_rounded, size: 28),
+                      color: AppColors.successAction,
+                      onPressed: _saveAndClose,
                     ),
                   ],
                 ),
               ),
-            ),
 
-            Expanded(
-              child: NotificationListener<ScrollNotification>(
-                onNotification: (_) => true,
-                child: SingleChildScrollView(
-                  physics: isFull ? const BouncingScrollPhysics() : const NeverScrollableScrollPhysics(),
-                  keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-                  padding: EdgeInsets.only(left: 20.0, right: 20.0, bottom: keyboardHeight + 20.0),
-                  child: _buildSingleEditView(provider, isFull),
+              Expanded(
+                child: NotificationListener<ScrollUpdateNotification>(
+                  // FIXED: Adding top-edge pull down detection to allow dismissing from full screen
+                  onNotification: (notification) {
+                    if (_isFullScreen && notification.metrics.pixels <= 0 && notification.scrollDelta != null && notification.scrollDelta! < 0) {
+                      setState(() => _dragOffset -= notification.scrollDelta!);
+                      return true;
+                    }
+                    return false;
+                  },
+                  child: SingleChildScrollView(
+                    // FIXED: Restricts scrolling when collapsed, passing swipes to parent gesture detector
+                    physics: _isFullScreen ? const BouncingScrollPhysics() : const NeverScrollableScrollPhysics(),
+                    padding: EdgeInsets.only(left: geometry.horizontalPadding, right: geometry.horizontalPadding, bottom: keyboardHeight + safeBottom + 20.0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+
+                        // FIXED: Rebuilt layout strictly matching [Quantity Text] -> [Unit Dropdown] -> [-] -> [+]
+                        Row(
+                          children: [
+                            SizedBox(
+                              width: 70,
+                              child: TextField(
+                                controller: _quantityController,
+                                keyboardType: TextInputType.number,
+                                textAlign: TextAlign.center,
+                                style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+                                decoration: InputDecoration(
+                                  filled: true, fillColor: theme.cardColor,
+                                  contentPadding: const EdgeInsets.symmetric(horizontal: 4.0, vertical: 12.0),
+                                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12.0), borderSide: BorderSide.none),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 12.0),
+                            Expanded(
+                              child: DropdownMenu<String>(
+                                initialSelection: _draftItem!.unit,
+                                controller: _unitController,
+                                enableFilter: true,
+                                enableSearch: true,
+                                textStyle: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+                                inputDecorationTheme: InputDecorationTheme(
+                                  filled: true, fillColor: theme.cardColor,
+                                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12.0), borderSide: BorderSide.none),
+                                  contentPadding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
+                                ),
+                                dropdownMenuEntries: allUnits.map((u) => DropdownMenuEntry(value: u, label: u)).toList(),
+                                onSelected: (val) { if (val != null) setState(() => _draftItem = _draftItem!.copyWith(unit: val)); },
+                              ),
+                            ),
+                            const SizedBox(width: 12.0),
+                            Container(
+                              decoration: BoxDecoration(color: theme.cardColor, shape: BoxShape.circle),
+                              child: IconButton(
+                                  icon: const Icon(Icons.remove_rounded, color: AppColors.destructiveAction),
+                                  onPressed: () {
+                                    final newQ = (_draftItem!.quantity - 1).clamp(0, 9999);
+                                    _quantityController.text = newQ.toString();
+                                  }
+                              ),
+                            ),
+                            const SizedBox(width: 6.0),
+                            Container(
+                              decoration: BoxDecoration(color: theme.cardColor, shape: BoxShape.circle),
+                              child: IconButton(
+                                  icon: const Icon(Icons.add_rounded, color: AppColors.successAction),
+                                  onPressed: () {
+                                    final newQ = (_draftItem!.quantity + 1).clamp(0, 9999);
+                                    _quantityController.text = newQ.toString();
+                                  }
+                              ),
+                            ),
+                          ],
+                        ),
+
+                        const SizedBox(height: 24.0),
+
+                        Text(appType.axis2Label, style: theme.textTheme.labelMedium?.copyWith(fontWeight: FontWeight.bold, color: theme.hintColor)),
+                        const SizedBox(height: 8.0),
+                        Wrap(
+                          spacing: 8.0, runSpacing: 8.0,
+                          children: [
+                            ...popularCategories.map((cat) => _buildChip(
+                              label: cat,
+                              isSelected: _draftItem!.category == cat,
+                              onTap: () {
+                                // FIXED: Tapping an active chip deselects it
+                                if (_draftItem!.category == cat) {
+                                  setState(() => _draftItem = _draftItem!.copyWith(category: 'Everything Else'));
+                                } else {
+                                  setState(() => _draftItem = _draftItem!.copyWith(category: cat));
+                                }
+                              },
+                              theme: theme,
+                            )),
+                            _buildChip(label: '+ Add', isSelected: false, isAction: true, theme: theme, onTap: () {
+                              print("Navigate to Full Axis 2 Selector");
+                            }),
+                          ],
+                        ),
+
+                        const SizedBox(height: 24.0),
+
+                        Text(appType.axis1Label, style: theme.textTheme.labelMedium?.copyWith(fontWeight: FontWeight.bold, color: theme.hintColor)),
+                        const SizedBox(height: 8.0),
+                        Wrap(
+                          spacing: 8.0, runSpacing: 8.0,
+                          children: [
+                            ...popularStores.map((store) => _buildChip(
+                              label: store,
+                              isSelected: _draftItem!.type == store,
+                              onTap: () {
+                                // FIXED: Tapping an active chip deselects it
+                                if (_draftItem!.type == store) {
+                                  setState(() => _draftItem = _draftItem!.copyWith(type: 'Any'));
+                                } else {
+                                  setState(() => _draftItem = _draftItem!.copyWith(type: store));
+                                }
+                              },
+                              theme: theme,
+                            )),
+                            _buildChip(label: '+ Add', isSelected: false, isAction: true, theme: theme, onTap: () {
+                              print("Navigate to Full Axis 1 Selector");
+                            }),
+                          ],
+                        ),
+
+                        const SizedBox(height: 24.0),
+
+                        Text('Tags', style: theme.textTheme.labelMedium?.copyWith(fontWeight: FontWeight.bold, color: theme.hintColor)),
+                        const SizedBox(height: 8.0),
+
+                        // FIXED: Opaque GestureDetector absorbs taps anywhere inside the container to focus the text field
+                        GestureDetector(
+                          onTap: () => _tagFocus.requestFocus(),
+                          behavior: HitTestBehavior.opaque,
+                          child: Container(
+                            constraints: const BoxConstraints(minHeight: 120.0), // FIXED: Taller text area footprint
+                            width: double.infinity,
+                            padding: const EdgeInsets.all(12.0),
+                            decoration: BoxDecoration(
+                              color: theme.cardColor,
+                              borderRadius: BorderRadius.circular(16.0),
+                              border: Border.all(color: theme.dividerColor.withValues(alpha: 0.2)),
+                            ),
+                            child: Wrap(
+                              spacing: 8.0, runSpacing: 8.0,
+                              crossAxisAlignment: WrapCrossAlignment.center,
+                              children: [
+                                ..._draftItem!.attributeRows.map((tag) => Chip(
+                                  label: Text(tag, style: const TextStyle(color: AppColors.primaryAction, fontWeight: FontWeight.bold)),
+                                  backgroundColor: AppColors.primaryAction.withValues(alpha: 0.1),
+                                  deleteIconColor: AppColors.primaryAction,
+                                  side: BorderSide.none,
+                                  onDeleted: () {
+                                    final newTags = List<String>.from(_draftItem!.attributeRows)..remove(tag);
+                                    setState(() => _draftItem = _draftItem!.copyWith(attributeRows: newTags));
+                                  },
+                                )),
+                                IntrinsicWidth(
+                                  child: TextField(
+                                    controller: _tagInputController,
+                                    focusNode: _tagFocus,
+                                    decoration: const InputDecoration(hintText: 'add tag...', border: InputBorder.none, isDense: true, contentPadding: EdgeInsets.symmetric(vertical: 8)),
+                                    onSubmitted: _addTag,
+                                  ),
+                                )
+                              ],
+                            ),
+                          ),
+                        ),
+
+                        const SizedBox(height: 12.0),
+                        Wrap(
+                          spacing: 8.0, runSpacing: 8.0,
+                          children: popularTags.where((t) => !_draftItem!.attributeRows.contains(t)).map((tag) => _buildChip(
+                            label: tag,
+                            isSelected: false,
+                            theme: theme,
+                            onTap: () => _addTag(tag),
+                          )).toList(),
+                        ),
+
+                        const SizedBox(height: 48.0),
+
+                        if (_isFullScreen)
+                          Center(
+                            child: TextButton.icon(
+                              onPressed: _confirmDelete,
+                              icon: const Icon(Icons.delete_outline_rounded, color: AppColors.destructiveAction),
+                              label: const Text('Delete Item', style: TextStyle(color: AppColors.destructiveAction, fontSize: 16, fontWeight: FontWeight.bold)),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
   }
 
-  Widget _buildSingleEditView(ListProvider provider, bool isFull) {
-    if (_draftItem == null) return const SizedBox.shrink();
-
-    // --- ALIAS MAPPING ENGINE ---
-    final macroProvider = context.watch<MacroListProvider>();
-    final settings = context.watch<SettingsProvider>();
-
-    final typeId = macroProvider.activeList?.typeId ?? 'sys_shopping';
-    final appType = settings.getTypeById(typeId);
-
-    // Fetch defaults from settings
-    final axis1Settings = settings.getAxis1Groups(typeId).map((g) => g.name).toList();
-    final axis2Settings = settings.getAxis2Groups(typeId).map((g) => g.name).toList();
-
-    // FIXED: Merge Settings defaults with the user's historical cloud dictionary!
-    final axis1Dict = {...axis1Settings, ...provider.activeStoreDictionary}.toList();
-    final axis2Dict = {...axis2Settings, ...provider.activeCategoryDictionary}.toList();
-    final tagsDict = provider.activeTagDictionary;
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        TextField(
-          controller: _titleController,
-          focusNode: _titleFocus,
-          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
-          decoration: InputDecoration(
-            hintText: 'Item Name',
-            filled: true, fillColor: Colors.white,
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12.0), borderSide: BorderSide.none),
-            focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12.0), borderSide: const BorderSide(color: AppColors.primaryAction, width: 2.0)),
+  Widget _buildChip({required String label, required bool isSelected, required ThemeData theme, required VoidCallback onTap, bool isAction = false}) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 10.0),
+        decoration: BoxDecoration(
+          color: isSelected ? AppColors.primaryAction : (isAction ? Colors.transparent : theme.cardColor),
+          border: isAction ? Border.all(color: AppColors.primaryAction.withValues(alpha: 0.5)) : null,
+          borderRadius: BorderRadius.circular(20.0),
+        ),
+        child: Text(
+          label,
+          style: theme.textTheme.bodyMedium?.copyWith(
+            color: isSelected ? Colors.white : (isAction ? AppColors.primaryAction : theme.textTheme.bodyMedium?.color),
+            fontWeight: FontWeight.bold,
           ),
         ),
-        const SizedBox(height: 16),
-
-        Row(
-          children: [
-            Container(
-              decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12.0)),
-              child: Row(
-                children: [
-                  IconButton(icon: const Icon(Icons.remove), onPressed: () => setState(() => _draftItem = _draftItem!.copyWith(quantity: (_draftItem!.quantity - 1).clamp(0, 99)))),
-                  SizedBox(width: 24, child: Text('${_draftItem!.quantity}', textAlign: TextAlign.center, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold))),
-                  IconButton(icon: const Icon(Icons.add), onPressed: () => setState(() => _draftItem = _draftItem!.copyWith(quantity: (_draftItem!.quantity + 1).clamp(0, 99)))),
-                ],
-              ),
-            ),
-            const SizedBox(width: 16.0),
-            Expanded(
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12.0)),
-                child: DropdownButtonHideUnderline(
-                  child: DropdownButton<String>(
-                    value: _draftItem!.unit,
-                    isExpanded: true,
-                    items: _units.map((u) => DropdownMenuItem(value: u, child: Text(u, style: const TextStyle(fontWeight: FontWeight.bold)))).toList(),
-                    onChanged: (val) { if (val != null) setState(() => _draftItem = _draftItem!.copyWith(unit: val)); },
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 16),
-
-        if (!isFull)
-          Row(
-            children: [
-              _buildPillButton(Icons.edit_rounded, 'Edit', () {
-                provider.setFullEditRequest(true);
-                _titleFocus.requestFocus();
-              }, color: AppColors.primaryAction),
-              const SizedBox(width: 8),
-              _buildPillButton(Icons.copy_rounded, 'Copy', () {
-                provider.addItem(
-                  '${_draftItem!.title} (Copy)', _draftItem!.attributeRows, _draftItem!.type, _draftItem!.category, _draftItem!.quantity, _draftItem!.unit,
-                );
-                provider.setEditItem(null);
-              }),
-              const SizedBox(width: 8),
-              _buildPillButton(Icons.delete_outline_rounded, 'Delete', () {
-                final id = provider.deleteItem(_draftItem!.id);
-                provider.setEditItem(null);
-                ScaffoldMessenger.of(context).clearSnackBars();
-                ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                  content: const Text('Item deleted'), behavior: SnackBarBehavior.floating,
-                  action: SnackBarAction(label: 'Undo', textColor: AppColors.primaryAction, onPressed: () => provider.restoreItems([id])),
-                ));
-              }, color: AppColors.destructiveAction),
-            ],
-          ),
-
-        if (isFull) ...[
-          const Divider(height: 32.0, thickness: 1.0),
-
-          HorizontalPillSelector(
-            title: appType.axis2Label, // FIXED: Dynamic Label
-            dictionary: axis2Dict,     // FIXED: Dynamic Dictionary
-            selectedItems: _draftItem!.category != 'Everything Else' ? [_draftItem!.category] : [],
-            isMultiSelect: false,
-            onSelectionChanged: (vals) => setState(() => _draftItem = _draftItem!.copyWith(category: vals.isNotEmpty ? vals.first : '')),
-          ),
-
-          const Divider(height: 32.0, thickness: 1.0),
-
-          HorizontalPillSelector(
-            title: appType.axis1Label, // FIXED: Dynamic Label
-            dictionary: axis1Dict,     // FIXED: Dynamic Dictionary
-            selectedItems: _draftItem!.type != 'Any' ? [_draftItem!.type] : [],
-            isMultiSelect: false,
-            onSelectionChanged: (vals) => setState(() => _draftItem = _draftItem!.copyWith(type: vals.isNotEmpty ? vals.first : '')),
-          ),
-
-          const Divider(height: 32.0, thickness: 1.0),
-
-          HorizontalPillSelector(
-            title: 'Tags',
-            dictionary: tagsDict,
-            selectedItems: _draftItem!.attributeRows,
-            isMultiSelect: true,
-            isTag: true,
-            onSelectionChanged: (vals) => setState(() => _draftItem = _draftItem!.copyWith(attributeRows: vals)),
-          ),
-        ]
-      ],
+      ),
     );
   }
 }
