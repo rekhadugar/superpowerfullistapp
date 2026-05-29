@@ -55,9 +55,11 @@ class _AppDrawerState extends State<AppDrawer> {
     final initial = displayName.isNotEmpty ? displayName[0].toUpperCase() : 'U';
     final photoUrl = user?.photoURL;
 
-    // FIXED: Calculate the exact math required to allow full collapse
+    // Calculate heights for the reachability math
+    final double expandedHeight = MediaQuery.of(context).size.height * 0.33;
     final double collapsedHeight = MediaQuery.of(context).padding.top + kToolbarHeight;
-    final double minContentHeight = MediaQuery.of(context).size.height - collapsedHeight;
+    // FIXED: Calculate the exact distance the header needs to travel to collapse
+    final double collapseTravelDistance = expandedHeight - collapsedHeight;
 
     return Drawer(
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
@@ -67,12 +69,11 @@ class _AppDrawerState extends State<AppDrawer> {
           NotificationListener<ScrollNotification>(
             onNotification: _handleScroll,
             child: CustomScrollView(
-              // FIXED: Forces the scroll engine to allow drags even if content fits perfectly
               physics: const AlwaysScrollableScrollPhysics(),
               slivers: [
                 // --- THE ONE UI COLLAPSING PROFILE HEADER ---
                 SliverAppBar(
-                  expandedHeight: MediaQuery.of(context).size.height * 0.33,
+                  expandedHeight: expandedHeight,
                   pinned: true,
                   automaticallyImplyLeading: false,
                   backgroundColor: theme.scaffoldBackgroundColor,
@@ -81,9 +82,7 @@ class _AppDrawerState extends State<AppDrawer> {
                   flexibleSpace: LayoutBuilder(
                     builder: (BuildContext context, BoxConstraints constraints) {
                       final currentHeight = constraints.biggest.height;
-                      final expandedHeight = MediaQuery.of(context).size.height * 0.33;
-
-                      double expandRatio = (currentHeight - collapsedHeight) / (expandedHeight - collapsedHeight);
+                      double expandRatio = (currentHeight - collapsedHeight) / collapseTravelDistance;
                       expandRatio = expandRatio.clamp(0.0, 1.0);
 
                       return FlexibleSpaceBar(
@@ -119,85 +118,68 @@ class _AppDrawerState extends State<AppDrawer> {
                   ),
                 ),
 
-                // --- THE DYNAMIC LIST TAXONOMIES ---
-                // FIXED: Wrapped in a SliverToBoxAdapter with a minHeight constraint.
-                // This guarantees the area below the header is ALWAYS tall enough to allow the header to fully collapse up.
-                SliverToBoxAdapter(
-                  child: ConstrainedBox(
-                    constraints: BoxConstraints(minHeight: minContentHeight),
-                    child: Padding(
-                      padding: EdgeInsets.only(bottom: bottomBarHeight + 20),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Divider(height: 1),
+                const SliverToBoxAdapter(child: Divider(height: 1)),
 
-                          ...settings.allTypes.map((type) {
-                            final typeLists = lists.where((l) => l.typeId == type.id).toList();
-                            if (typeLists.isEmpty) return const SizedBox.shrink();
+                // --- FIXED: STICKY TAXONOMY SLIVERS ---
+                ...settings.allTypes.expand((type) {
+                  final typeLists = lists.where((l) => l.typeId == type.id).toList();
+                  if (typeLists.isEmpty) return <Widget>[];
 
-                            return Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Padding(
-                                  padding: EdgeInsets.fromLTRB(geometry.horizontalPadding, 24.0, geometry.horizontalPadding, 8.0),
-                                  child: Row(
-                                    children: [
-                                      Icon(
-                                          IconData(type.iconCodePoint, fontFamily: 'MaterialIcons'),
-                                          size: geometry.iconSize,
-                                          color: AppColors.primaryAction.withValues(alpha: 0.8)
-                                      ),
-                                      SizedBox(width: geometry.interElementGap),
-                                      Expanded(
-                                        child: Text(
-                                          type.name.toUpperCase(),
-                                          style: TextStyle(
-                                            fontSize: AppConstants.headerFontSize,
-                                            fontWeight: FontWeight.bold,
-                                            color: AppColors.primaryAction.withValues(alpha: 0.8),
-                                            letterSpacing: 1.2,
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-
-                                ...typeLists.map((list) {
-                                  final isSelected = list.id == activeId;
-                                  return InkWell(
-                                    onTap: () {
-                                      provider.setActiveList(list.id);
-                                      Navigator.pop(context);
-                                    },
-                                    child: Container(
-                                      width: double.infinity,
-                                      color: isSelected ? AppColors.primaryAction.withValues(alpha: 0.1) : Colors.transparent,
-                                      padding: EdgeInsets.only(
-                                        left: geometry.horizontalPadding + geometry.iconSize + geometry.interElementGap,
-                                        right: geometry.horizontalPadding,
-                                        top: 14.0,
-                                        bottom: 14.0,
-                                      ),
-                                      child: Text(
-                                        list.name,
-                                        style: TextStyle(
-                                          fontSize: AppConstants.titleFontSize,
-                                          fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
-                                          color: isSelected ? AppColors.primaryAction : theme.textTheme.titleMedium?.color,
-                                        ),
-                                      ),
-                                    ),
-                                  );
-                                }),
-                              ],
-                            );
-                          }),
-                        ],
+                  return [
+                    // 1. The Sticky Master List Header
+                    SliverPersistentHeader(
+                      pinned: true,
+                      delegate: _MasterListHeaderDelegate(
+                        title: type.name,
+                        iconCodePoint: type.iconCodePoint,
+                        geometry: geometry,
+                        backgroundColor: theme.scaffoldBackgroundColor,
+                        textColor: AppColors.primaryAction.withValues(alpha: 0.8),
                       ),
                     ),
-                  ),
+
+                    // 2. The List Items under the header
+                    SliverList(
+                      delegate: SliverChildBuilderDelegate(
+                            (context, index) {
+                          final list = typeLists[index];
+                          final isSelected = list.id == activeId;
+
+                          return InkWell(
+                            onTap: () {
+                              provider.setActiveList(list.id);
+                              Navigator.pop(context);
+                            },
+                            child: Container(
+                              width: double.infinity,
+                              color: isSelected ? AppColors.primaryAction.withValues(alpha: 0.1) : Colors.transparent,
+                              padding: EdgeInsets.only(
+                                left: geometry.horizontalPadding + geometry.iconSize + geometry.interElementGap,
+                                right: geometry.horizontalPadding,
+                                top: 14.0,
+                                bottom: 14.0,
+                              ),
+                              child: Text(
+                                list.name,
+                                style: TextStyle(
+                                  fontSize: AppConstants.titleFontSize,
+                                  fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                                  color: isSelected ? AppColors.primaryAction : theme.textTheme.titleMedium?.color,
+                                ),
+                              ),
+                            ),
+                          );
+                        },
+                        childCount: typeLists.length,
+                      ),
+                    ),
+                  ];
+                }),
+
+                // --- FIXED: REACHABILITY SPACER ---
+                // Appends exact blank space needed to guarantee the One UI profile header can always be collapsed
+                SliverToBoxAdapter(
+                  child: SizedBox(height: bottomBarHeight + collapseTravelDistance + 20),
                 ),
               ],
             ),
@@ -266,5 +248,66 @@ class _AppDrawerState extends State<AppDrawer> {
         ],
       ),
     );
+  }
+}
+
+// --- NEW: Custom Delegate for Sticky Taxonomy Headers ---
+class _MasterListHeaderDelegate extends SliverPersistentHeaderDelegate {
+  final String title;
+  final int iconCodePoint;
+  final FluidGeometry geometry;
+  final Color backgroundColor;
+  final Color textColor;
+
+  _MasterListHeaderDelegate({
+    required this.title,
+    required this.iconCodePoint,
+    required this.geometry,
+    required this.backgroundColor,
+    required this.textColor,
+  });
+
+  @override
+  Widget build(BuildContext context, double shrinkOffset, bool overlapsContent) {
+    // Solid background prevents lists from showing through the header when scrolling
+    return Container(
+      color: backgroundColor,
+      padding: EdgeInsets.fromLTRB(geometry.horizontalPadding, 24.0, geometry.horizontalPadding, 8.0),
+      alignment: Alignment.bottomLeft,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          Icon(
+            IconData(iconCodePoint, fontFamily: 'MaterialIcons'),
+            size: geometry.iconSize,
+            color: textColor,
+          ),
+          SizedBox(width: geometry.interElementGap),
+          Expanded(
+            child: Text(
+              title.toUpperCase(),
+              style: TextStyle(
+                fontSize: AppConstants.headerFontSize, // Automatically scaled by textScaler
+                fontWeight: FontWeight.bold,
+                color: textColor,
+                letterSpacing: 1.2,
+                height: 1.0,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Mathematically calculate the required height based on fluid scaling
+  @override
+  double get maxExtent => 24.0 + (geometry.iconSize > AppConstants.headerFontSize ? geometry.iconSize : AppConstants.headerFontSize) + 8.0;
+  @override
+  double get minExtent => maxExtent;
+
+  @override
+  bool shouldRebuild(covariant _MasterListHeaderDelegate oldDelegate) {
+    return title != oldDelegate.title || geometry.scale != oldDelegate.geometry.scale;
   }
 }

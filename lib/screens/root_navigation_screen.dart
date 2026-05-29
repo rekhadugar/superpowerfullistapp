@@ -84,7 +84,8 @@ class _RootNavigationScreenState extends State<RootNavigationScreen> {
     final bool showBottomNav = _isScrollVisible;
 
     return Scaffold(
-      // FIXED (Batch 6): Drawer relocated to Root level to overlay the bottom bar
+      // FIXED: Prevents the Bottom Navigation Bar from floating above the keyboard
+      resizeToAvoidBottomInset: false,
       drawer: const AppDrawer(),
       body: Stack(
         children: [

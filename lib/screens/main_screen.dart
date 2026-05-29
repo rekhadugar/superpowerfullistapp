@@ -20,7 +20,7 @@ import '../widgets/main_options_sheet.dart';
 import '../widgets/section_header.dart';
 import '../widgets/share_list_sheet.dart';
 import '../widgets/swipe_action_wrapper.dart';
-import 'completed_items_screen.dart'; // NEW IMPORT
+import 'completed_items_screen.dart';
 import 'create_list_screen.dart';
 
 class MainScreen extends StatefulWidget {
@@ -30,16 +30,23 @@ class MainScreen extends StatefulWidget {
   State<MainScreen> createState() => _MainScreenState();
 }
 
-class _MainScreenState extends State<MainScreen> {
+class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
   late ScrollController _scrollController;
   final ValueNotifier<PhantomHeaderData> _phantomHeaderState = ValueNotifier(const PhantomHeaderData());
 
   String? _lastScrolledFlashId;
   Timer? _toastTimer;
 
+  bool _isQuickAdding = false;
+  bool _keyboardWasOpen = false;
+  final TextEditingController _quickAddController = TextEditingController();
+  final FocusNode _quickAddFocus = FocusNode();
+  String _quickAddQuery = '';
+
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _scrollController = ScrollController();
     _scrollController.addListener(_onScroll);
 
@@ -48,6 +55,28 @@ class _MainScreenState extends State<MainScreen> {
         context.read<ListProvider>().addListener(_onProviderStateChanged);
       }
     });
+
+    _quickAddController.addListener(() {
+      if (mounted) setState(() => _quickAddQuery = _quickAddController.text);
+    });
+  }
+
+  @override
+  void didChangeMetrics() {
+    super.didChangeMetrics();
+    final bottomInset = WidgetsBinding.instance.platformDispatcher.views.first.viewInsets.bottom;
+
+    if (bottomInset > 0) {
+      _keyboardWasOpen = true;
+    } else if (bottomInset == 0.0 && _isQuickAdding && _keyboardWasOpen) {
+      if (mounted) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted && _isQuickAdding) {
+            _closeQuickAdd();
+          }
+        });
+      }
+    }
   }
 
   @override
@@ -89,10 +118,13 @@ class _MainScreenState extends State<MainScreen> {
 
   @override
   void dispose() {
-    _toastTimer?.cancel(); // NEW: Prevent memory leaks
+    WidgetsBinding.instance.removeObserver(this);
+    _toastTimer?.cancel();
     _scrollController.removeListener(_onScroll);
     _scrollController.dispose();
     _phantomHeaderState.dispose();
+    _quickAddController.dispose();
+    _quickAddFocus.dispose();
     super.dispose();
   }
 
@@ -113,9 +145,6 @@ class _MainScreenState extends State<MainScreen> {
     }
   }
 
-  // FIXED: Auto-dodging SnackBar Helper
-  // FIXED: Flush Geometry Masking SnackBar with Auto-Contrast
-  // FIXED: Now accepts a dynamic onUndo callback to prevent unmounted context crashes
   void _showActionToast(BuildContext context, String message, VoidCallback? onUndo) {
     final theme = Theme.of(context);
     ScaffoldMessenger.of(context).clearSnackBars();
@@ -126,14 +155,13 @@ class _MainScreenState extends State<MainScreen> {
         backgroundColor: theme.colorScheme.inverseSurface,
         elevation: 0,
         content: SizedBox(
-          height: 70.0,
+          height: AppConstants.baseCardHeight * 1.5,
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 24.0),
+            padding: EdgeInsets.symmetric(horizontal: AppConstants.horizontalPadding),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Expanded(child: Text(message, style: TextStyle(color: theme.colorScheme.onInverseSurface, fontWeight: FontWeight.bold))),
-
                 if (onUndo != null)
                   TextButton(
                     onPressed: () {
@@ -151,6 +179,36 @@ class _MainScreenState extends State<MainScreen> {
     );
   }
 
+  void _startQuickAdd() {
+    setState(() {
+      _isQuickAdding = true;
+      _keyboardWasOpen = false;
+    });
+    _quickAddFocus.requestFocus();
+  }
+
+  void _closeQuickAdd() {
+    setState(() {
+      _isQuickAdding = false;
+      _keyboardWasOpen = false;
+      _quickAddController.clear();
+      _quickAddQuery = '';
+    });
+    _quickAddFocus.unfocus();
+  }
+
+  void _commitQuickAdd() {
+    final text = _quickAddController.text.trim();
+    if (text.isNotEmpty) {
+      context.read<ListProvider>().addItem(text, [], 'Any', 'Everything Else', 0, 'pcs');
+      _quickAddController.clear();
+      setState(() => _quickAddQuery = '');
+      _quickAddFocus.requestFocus();
+    } else {
+      _closeQuickAdd();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final macroProvider = context.watch<MacroListProvider>();
@@ -165,7 +223,6 @@ class _MainScreenState extends State<MainScreen> {
 
     final activeId = macroProvider.activeListId!;
     context.read<ListProvider>().loadItems(activeId);
-
     context.read<ListProvider>().syncGlobalDictionary(macroProvider.lists);
 
     final listProvider = context.watch<ListProvider>();
@@ -174,90 +231,156 @@ class _MainScreenState extends State<MainScreen> {
     final theme = Theme.of(context);
     final double safeBottomPadding = MediaQuery.of(context).padding.bottom;
 
-    // FIXED: Fetch the active scale and instantiate the geometry lens for the AppBar
     final textScale = MediaQuery.textScalerOf(context).scale(1.0);
     final geometry = FluidGeometry(textScale);
+
+    // Calculates a compact height tightly wrapped around the font size
+    final double pillHeight = (AppConstants.titleFontSize * textScale) + 20.0;
 
     return GestureDetector(
       onTap: () {
         if (listProvider.openSwipeItemId.value != null) {
           listProvider.openSwipeItemId.value = null;
         }
+        if (_isQuickAdding) {
+          _closeQuickAdd();
+        }
       },
       behavior: HitTestBehavior.translucent,
       child: Scaffold(
-        // FIXED: Removed the nested drawer to prevent duplication
         resizeToAvoidBottomInset: false,
         backgroundColor: theme.scaffoldBackgroundColor,
         appBar: AppBar(
-          leadingWidth: geometry.horizontalPadding + geometry.leadingBlockWidth + geometry.interElementGap,
-          leading: Padding(
+          leadingWidth: _isQuickAdding
+              ? geometry.leadingBlockWidth + geometry.horizontalPadding
+              : geometry.horizontalPadding + geometry.leadingBlockWidth + geometry.interElementGap,
+          leading: _isQuickAdding
+              ? IconButton(
+            icon: Icon(Icons.arrow_back_rounded, size: geometry.iconSize, color: theme.textTheme.titleMedium?.color),
+            onPressed: _closeQuickAdd,
+          )
+              : Padding(
             padding: EdgeInsets.only(left: geometry.horizontalPadding),
             child: Builder(
               builder: (context) => IconButton(
                 icon: Icon(Icons.menu_rounded, size: geometry.iconSize, color: theme.textTheme.titleMedium?.color),
                 padding: EdgeInsets.zero,
                 alignment: Alignment.centerLeft,
-                // FIXED: Route the command up to the Root Navigation Scaffold
                 onPressed: () => context.findRootAncestorStateOfType<ScaffoldState>()?.openDrawer(),
               ),
             ),
           ),
           titleSpacing: 0,
-          title: Text(activeList?.name ?? 'Listicle'),
+          title: AnimatedContainer(
+            duration: const Duration(milliseconds: 250),
+            curve: Curves.easeOutCubic,
+            height: pillHeight, // Uses the dynamically shorter height
+            margin: EdgeInsets.only(
+              right: _isQuickAdding ? 0.0 : geometry.horizontalPadding,
+            ),
+            decoration: BoxDecoration(
+              color: theme.scaffoldBackgroundColor,
+              borderRadius: BorderRadius.circular(pillHeight / 2),
+            ),
+            child: _isQuickAdding
+                ? Container(
+              alignment: Alignment.center,
+              child: TextField(
+                controller: _quickAddController,
+                focusNode: _quickAddFocus,
+                textCapitalization: TextCapitalization.words,
+                textInputAction: TextInputAction.done,
+                onSubmitted: (_) => _commitQuickAdd(),
+                textAlignVertical: TextAlignVertical.center,
+                style: theme.textTheme.titleMedium?.copyWith(
+                  fontSize: AppConstants.titleFontSize,
+                ),
+                decoration: InputDecoration(
+                  hintText: 'Add an item...',
+                  hintStyle: theme.textTheme.titleMedium?.copyWith(
+                    fontSize: AppConstants.titleFontSize,
+                    color: theme.hintColor,
+                    fontWeight: FontWeight.normal,
+                  ),
+                  border: InputBorder.none,
+                  isDense: true,
+                  // Adjusted vertical padding to keep text vertically centered in the shorter box
+                  contentPadding: EdgeInsets.symmetric(horizontal: geometry.horizontalPadding, vertical: 4.0),
+                ),
+              ),
+            )
+                : GestureDetector(
+              onTap: _startQuickAdd,
+              behavior: HitTestBehavior.opaque,
+              child: Container(
+                alignment: Alignment.center,
+                padding: EdgeInsets.symmetric(horizontal: geometry.horizontalPadding),
+                child: Text(
+                  activeList?.name ?? 'Listicle',
+                  style: theme.textTheme.titleMedium?.copyWith(
+                      fontSize: AppConstants.titleFontSize,
+                      fontWeight: FontWeight.bold
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ),
+          ),
           backgroundColor: theme.cardColor,
           elevation: 0,
+          scrolledUnderElevation: 0.0,
+          surfaceTintColor: Colors.transparent,
           centerTitle: false,
-          titleTextStyle: theme.textTheme.titleMedium?.copyWith(
-            fontSize: 20,
-            fontWeight: FontWeight.w700,
-          ),
           actions: [
-            // THE NEW MULTI-ACTION POPUP MENU
-            PopupMenuButton<String>(
-              // FIXED: Injected geometry.iconSize
-              icon: Icon(Icons.more_vert_rounded, size: geometry.iconSize, color: theme.textTheme.titleMedium?.color),
-              onSelected: (String value) {
-                if (value == 'share') {
-                  if (activeList != null) {
-                    ShareListSheet.show(context, activeList);
+            if (_isQuickAdding)
+              IconButton(
+                icon: Icon(Icons.check_rounded, size: geometry.iconSize * 1.15, color: AppColors.primaryAction),
+                onPressed: _commitQuickAdd,
+              )
+            else
+              PopupMenuButton<String>(
+                icon: Icon(Icons.more_vert_rounded, size: geometry.iconSize, color: theme.textTheme.titleMedium?.color),
+                onSelected: (String value) {
+                  if (value == 'share') {
+                    if (activeList != null) {
+                      ShareListSheet.show(context, activeList);
+                    }
+                  } else if (value == 'options') {
+                    showModalBottomSheet(
+                      context: context,
+                      isScrollControlled: true,
+                      backgroundColor: Colors.transparent,
+                      builder: (ctx) => const MainOptionsSheet(),
+                    );
                   }
-                } else if (value == 'options') {
-                  showModalBottomSheet(
-                    context: context,
-                    isScrollControlled: true,
-                    backgroundColor: Colors.transparent,
-                    builder: (ctx) => const MainOptionsSheet(),
-                  );
-                }
-              },
-              itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
-                const PopupMenuItem<String>(
-                  value: 'share',
-                  child: Row(
-                    children: [
-                      Icon(Icons.person_add_alt_1_rounded, size: 20, color: AppColors.primaryAction),
-                      SizedBox(width: 12),
-                      Text('Share List', style: TextStyle(fontWeight: FontWeight.w600)),
-                    ],
+                },
+                itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
+                  const PopupMenuItem<String>(
+                    value: 'share',
+                    child: Row(
+                      children: [
+                        Icon(Icons.person_add_alt_1_rounded, size: 20, color: AppColors.primaryAction),
+                        SizedBox(width: 12),
+                        Text('Share List', style: TextStyle(fontWeight: FontWeight.w600)),
+                      ],
+                    ),
                   ),
-                ),
-                const PopupMenuDivider(),
-                const PopupMenuItem<String>(
-                  value: 'options',
-                  child: Row(
-                    children: [
-                      Icon(Icons.tune_rounded, size: 20),
-                      SizedBox(width: 12),
-                      Text('List Options'),
-                    ],
+                  const PopupMenuDivider(),
+                  const PopupMenuItem<String>(
+                    value: 'options',
+                    child: Row(
+                      children: [
+                        Icon(Icons.tune_rounded, size: 20),
+                        SizedBox(width: 12),
+                        Text('List Options'),
+                      ],
+                    ),
                   ),
-                ),
-              ],
-            ),
+                ],
+              ),
           ],
         ),
-
         body: Stack(
           children: [
             displayList.isEmpty
@@ -272,7 +395,7 @@ class _MainScreenState extends State<MainScreen> {
                     style: theme.textTheme.bodyMedium,
                   ),
                   if (listProvider.checkedDisplayList.isNotEmpty) ...[
-                    const SizedBox(height: 24),
+                    SizedBox(height: geometry.baseCardHeight),
                     TextButton.icon(
                       onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const CompletedItemsScreen())),
                       icon: Icon(Icons.history_rounded, color: theme.textTheme.bodyMedium?.color),
@@ -289,6 +412,10 @@ class _MainScreenState extends State<MainScreen> {
                 }
 
                 if (notification is ScrollUpdateNotification && notification.dragDetails != null) {
+                  if (_isQuickAdding) {
+                    _closeQuickAdd();
+                  }
+
                   if (listProvider.editItemId != null) {
                     final isKeyboardOpen = MediaQuery.of(context).viewInsets.bottom > 0;
                     if (isKeyboardOpen) {
@@ -315,7 +442,7 @@ class _MainScreenState extends State<MainScreen> {
 
                     footer: Padding(
                       key: const ValueKey('completed_footer'),
-                      padding: const EdgeInsets.symmetric(vertical: 24.0),
+                      padding: EdgeInsets.symmetric(vertical: geometry.baseCardHeight / 2),
                       child: TextButton.icon(
                         onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const CompletedItemsScreen())),
                         icon: Icon(Icons.history_rounded, color: theme.textTheme.bodyMedium?.color),
@@ -430,28 +557,15 @@ class _MainScreenState extends State<MainScreen> {
             AnimatedPositioned(
               duration: const Duration(milliseconds: 300),
               curve: Curves.easeOutCubic,
-              right: 16.0,
-              bottom: (listProvider.isBatchModeActive || listProvider.editItemId != null)
+              right: geometry.horizontalPadding,
+              bottom: (listProvider.isBatchModeActive || listProvider.editItemId != null || _isQuickAdding)
                   ? -100.0
-                  : safeBottomPadding + AppConstants.listBottomClearance + 16.0,
+                  : safeBottomPadding + AppConstants.listBottomClearance + geometry.horizontalPadding,
               child: FloatingActionButton(
-                onPressed: () {
-                  showModalBottomSheet(
-                    context: context,
-                    isScrollControlled: true,
-                    backgroundColor: Colors.transparent,
-                    builder: (ctx) => EditItemBottomSheet(
-                      onSave: (title, attributes, type, category, quantity, unit) {
-                        context.read<ListProvider>().addItem(
-                          title, attributes, type, category, quantity, unit,
-                        );
-                      },
-                    ),
-                  );
-                },
+                onPressed: _startQuickAdd,
                 backgroundColor: AppColors.primaryAction,
                 elevation: 4,
-                child: const Icon(Icons.add, color: Colors.white, size: 28),
+                child: Icon(Icons.add, color: Colors.white, size: geometry.iconSize * 1.15),
               ),
             ),
           ],
