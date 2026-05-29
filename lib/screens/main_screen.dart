@@ -43,23 +43,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
   final FocusNode _quickAddFocus = FocusNode();
   String _quickAddQuery = '';
 
-  // --- NEW: Mock Dictionary for Smart Suggestions ---
-  // You can replace this later with your actual Global Dictionary from ListProvider
-  final List<Map<String, String>> _mockDictionary = [
-    {'name': 'Milk', 'category': 'Dairy', 'store': 'Costco'},
-    {'name': 'Eggs', 'category': 'Dairy', 'store': 'Any'},
-    {'name': 'Apples', 'category': 'Produce', 'store': 'Target'},
-    {'name': 'Bread', 'category': 'Bakery', 'store': 'Walmart'},
-    {'name': 'Chicken Breast', 'category': 'Meat', 'store': 'Costco'},
-    {'name': 'Paper Towels', 'category': 'Household', 'store': 'Target'},
-    {'name': 'Coffee Beans', 'category': 'Pantry', 'store': 'Trader Joes'},
-  ];
-
-  List<Map<String, String>> get _filteredSuggestions {
-    if (_quickAddQuery.trim().isEmpty) return [];
-    final q = _quickAddQuery.trim().toLowerCase();
-    return _mockDictionary.where((item) => item['name']!.toLowerCase().contains(q)).toList();
-  }
+  // FIXED: Mock Dictionary removed completely. We now rely natively on the ListProvider.
 
   @override
   void initState() {
@@ -120,11 +104,14 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
 
       if (targetOffset != null && _scrollController.hasClients) {
         double maxScroll = _scrollController.position.maxScrollExtent;
-        double safeBuffer = AppConstants.headerHeight;
-        double scrollTarget = (targetOffset - safeBuffer).clamp(0.0, maxScroll);
+
+        // FIXED: The exact mathematical scroll target.
+        // We add the listTopPadding to account for the physical shift of the scroll view,
+        // then subtract the headerHeight so it docks flush against the bottom of the sticky header.
+        double exactScrollTarget = targetOffset + AppConstants.listTopPadding - AppConstants.headerHeight;
 
         _scrollController.animateTo(
-          scrollTarget,
+          exactScrollTarget.clamp(0.0, maxScroll),
           duration: const Duration(milliseconds: 800),
           curve: Curves.easeOutCubic,
         );
@@ -147,6 +134,9 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
   }
 
   void _onScroll() {
+    // FIXED: Prevents math errors if forced to recalculate during a hard layout shift
+    if (!_scrollController.hasClients) return;
+
     final provider = context.read<ListProvider>();
     final textScale = MediaQuery.textScalerOf(context).scale(1.0);
 
@@ -213,10 +203,23 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
       _quickAddQuery = '';
     });
     _quickAddFocus.unfocus();
+
+    // FIXED: Forces the sticky header engine to recalculate multiple times
+    // as the Flutter physics engine executes its ballistic spring-back animation.
+    void forceHeaderSync() {
+      if (mounted && _scrollController.hasClients) {
+        _onScroll();
+      }
+    }
+
+    WidgetsBinding.instance.addPostFrameCallback((_) => forceHeaderSync());
+    Future.delayed(const Duration(milliseconds: 100), forceHeaderSync);
+    Future.delayed(const Duration(milliseconds: 250), forceHeaderSync);
+    Future.delayed(const Duration(milliseconds: 450), forceHeaderSync);
   }
 
-  // FIXED: Now accepts optional dictionary parameters to seamlessly add smart suggestions
-  void _commitQuickAdd([String? specificName, String? category, String? store]) {
+  // FIXED: Now also accepts the unit parameter to fully reconstruct items from the dictionary
+  void _commitQuickAdd([String? specificName, String? category, String? store, String? unit]) {
     final text = specificName ?? _quickAddController.text.trim();
     if (text.isNotEmpty) {
       context.read<ListProvider>().addItem(
@@ -225,7 +228,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
           store ?? 'Any',
           category ?? 'Everything Else',
           0,
-          'pcs'
+          unit ?? 'pcs' // Utilizes the SmartItem unit if available
       );
       _quickAddController.clear();
       setState(() => _quickAddQuery = '');
@@ -235,10 +238,12 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
     }
   }
 
-  // --- NEW: Smart Suggestions UI Builder ---
-  Widget _buildSmartSuggestions(ThemeData theme, FluidGeometry geometry) {
+  // FIXED: Injects ListProvider directly to query the real backend dictionary
+  Widget _buildSmartSuggestions(ThemeData theme, FluidGeometry geometry, ListProvider listProvider) {
     final query = _quickAddQuery.trim();
-    final suggestions = _filteredSuggestions;
+
+    // Dynamically queries your actual global dictionary engine
+    final suggestions = listProvider.searchSmartDictionary(query);
 
     return Material(
       elevation: 12.0,
@@ -248,15 +253,15 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
       clipBehavior: Clip.antiAlias,
       child: ConstrainedBox(
         constraints: BoxConstraints(
-          maxHeight: MediaQuery.of(context).size.height * 0.45, // Prevents pushing into the keyboard
+          maxHeight: MediaQuery.of(context).size.height * 0.45,
         ),
         child: ListView(
           padding: EdgeInsets.zero,
           shrinkWrap: true,
           children: [
-            // 1. The Dynamic "Create New" Row
+            // 1. The Dynamic "Create New" Row (Always visible as the top option)
             InkWell(
-              onTap: () => _commitQuickAdd(query, 'Everything Else', 'Any'),
+              onTap: () => _commitQuickAdd(query, 'Everything Else', 'Any', 'pcs'),
               child: Padding(
                 padding: EdgeInsets.symmetric(horizontal: geometry.horizontalPadding, vertical: 12.0),
                 child: Row(
@@ -289,10 +294,11 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
             if (suggestions.isNotEmpty)
               Divider(height: 1, color: theme.dividerColor.withValues(alpha: 0.5)),
 
-            // 2. Smart Dictionary Suggestions
+            // 2. Smart Dictionary Suggestions (Sourced directly from ListProvider)
             ...suggestions.map((item) {
               return InkWell(
-                onTap: () => _commitQuickAdd(item['name']!, item['category']!, item['store']!),
+                // Passes the actual SmartItem data directly into the commit method
+                onTap: () => _commitQuickAdd(item.title, item.category, item.store, item.unit),
                 child: Padding(
                   padding: EdgeInsets.symmetric(horizontal: geometry.horizontalPadding, vertical: 12.0),
                   child: Row(
@@ -304,15 +310,15 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                                item['name']!,
+                                item.title,
                                 style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600)
                             ),
                             const SizedBox(height: 6.0),
                             Row(
                               children: [
-                                _buildMiniBadge(theme, item['category']!, Icons.category_outlined),
+                                _buildMiniBadge(theme, item.category, Icons.category_outlined),
                                 const SizedBox(width: 8.0),
-                                _buildMiniBadge(theme, item['store']!, Icons.storefront_outlined),
+                                _buildMiniBadge(theme, item.store, Icons.storefront_outlined),
                               ],
                             ),
                           ],
@@ -373,7 +379,8 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
     final textScale = MediaQuery.textScalerOf(context).scale(1.0);
     final geometry = FluidGeometry(textScale);
 
-    final double pillHeight = (AppConstants.titleFontSize * textScale) + 20.0;
+    // FIXED: The Pill now perfectly matches the height of your standard Item Cards
+    final double pillHeight = geometry.baseCardHeight;
 
     return GestureDetector(
       onTap: () {
@@ -414,7 +421,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
               right: _isQuickAdding ? 0.0 : geometry.horizontalPadding,
             ),
             decoration: BoxDecoration(
-              color: theme.scaffoldBackgroundColor,
+              color: theme.cardColor,
               borderRadius: BorderRadius.circular(pillHeight / 2),
             ),
             child: _isQuickAdding
@@ -427,19 +434,20 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
                 textInputAction: TextInputAction.done,
                 onSubmitted: (_) => _commitQuickAdd(),
                 textAlignVertical: TextAlignVertical.center,
+                // FIXED: Removed the explicit size override to let it naturally match Item Card titles
                 style: theme.textTheme.titleMedium?.copyWith(
-                  fontSize: AppConstants.titleFontSize,
+                  fontWeight: FontWeight.w600,
                 ),
                 decoration: InputDecoration(
                   hintText: 'Add an item...',
                   hintStyle: theme.textTheme.titleMedium?.copyWith(
-                    fontSize: AppConstants.titleFontSize,
                     color: theme.hintColor,
                     fontWeight: FontWeight.normal,
                   ),
                   border: InputBorder.none,
                   isDense: true,
-                  contentPadding: EdgeInsets.symmetric(horizontal: geometry.horizontalPadding, vertical: 4.0),
+                  // FIXED: Removed the squeezed vertical padding to let it center in the taller pill
+                  contentPadding: EdgeInsets.symmetric(horizontal: geometry.horizontalPadding),
                 ),
               ),
             )
@@ -451,8 +459,8 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
                 padding: EdgeInsets.symmetric(horizontal: geometry.horizontalPadding),
                 child: Text(
                   activeList?.name ?? 'Listicle',
+                  // FIXED: Also aligned the static header text to match
                   style: theme.textTheme.titleMedium?.copyWith(
-                      fontSize: AppConstants.titleFontSize,
                       fontWeight: FontWeight.bold
                   ),
                   maxLines: 1,
@@ -461,7 +469,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
               ),
             ),
           ),
-          backgroundColor: theme.cardColor,
+          backgroundColor: theme.scaffoldBackgroundColor,
           elevation: 0,
           scrolledUnderElevation: 0.0,
           surfaceTintColor: Colors.transparent,
@@ -546,6 +554,10 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
                 }
 
                 if (notification is ScrollUpdateNotification && notification.dragDetails != null) {
+                  if (_isQuickAdding) {
+                    _closeQuickAdd();
+                  }
+
                   if (listProvider.editItemId != null) {
                     final isKeyboardOpen = MediaQuery.of(context).viewInsets.bottom > 0;
                     if (isKeyboardOpen) {
@@ -561,6 +573,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
                 children: [
                   ReorderableListView.builder(
                     scrollController: _scrollController,
+                    // FIXED: Restored the original, clean list padding
                     padding: EdgeInsets.only(
                         top: AppConstants.listTopPadding,
                         bottom: listProvider.isBatchModeActive
@@ -570,14 +583,24 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
                     itemCount: displayList.length,
                     buildDefaultDragHandles: false,
 
-                    footer: Padding(
+                    // FIXED: Moved the temporary scroll void ABOVE the footer button to push it out of sight!
+                    footer: Column(
                       key: const ValueKey('completed_footer'),
-                      padding: EdgeInsets.symmetric(vertical: geometry.baseCardHeight / 2),
-                      child: TextButton.icon(
-                        onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const CompletedItemsScreen())),
-                        icon: Icon(Icons.history_rounded, color: theme.textTheme.bodyMedium?.color),
-                        label: Text('View Completed Items', style: theme.textTheme.bodyMedium),
-                      ),
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (_isQuickAdding)
+                        // FIXED: 100% of screen height mathematically guarantees any item
+                        // can reach the top of the screen on any device.
+                          SizedBox(height: MediaQuery.of(context).size.height),
+                        Padding(
+                          padding: EdgeInsets.symmetric(vertical: geometry.baseCardHeight / 2),
+                          child: TextButton.icon(
+                            onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const CompletedItemsScreen())),
+                            icon: Icon(Icons.history_rounded, color: theme.textTheme.bodyMedium?.color),
+                            label: Text('View Completed Items', style: theme.textTheme.bodyMedium),
+                          ),
+                        ),
+                      ],
                     ),
 
                     onReorder: (oldIndex, newIndex) {
@@ -681,9 +704,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
               ),
             ),
 
-            // --- FIXED: THE QUICK ADD OVERLAYS ---
             if (_isQuickAdding) ...[
-              // 1. Transparent Modal Barrier
               Positioned.fill(
                 child: GestureDetector(
                   behavior: HitTestBehavior.opaque,
@@ -692,13 +713,13 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
                   child: const SizedBox.expand(),
                 ),
               ),
-              // 2. Smart Suggestions Dropdown
               if (_quickAddQuery.trim().isNotEmpty)
                 Positioned(
                   top: 8.0,
                   left: geometry.horizontalPadding,
                   right: geometry.horizontalPadding,
-                  child: _buildSmartSuggestions(theme, geometry),
+                  // FIXED: Injects the listProvider into the builder
+                  child: _buildSmartSuggestions(theme, geometry, listProvider),
                 ),
             ],
 
