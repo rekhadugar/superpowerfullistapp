@@ -645,8 +645,11 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
                                     context.read<ListProvider>().toggleSelection(item.id);
                                   } else {
                                     if (listProvider.editItemId == item.id) {
+                                      context.read<ListProvider>().setFullEditRequest(false);
                                       context.read<ListProvider>().setEditItem(null);
                                     } else {
+                                      // FIXED: Guarantees normal taps open in collapsed mode!
+                                      context.read<ListProvider>().setFullEditRequest(false);
                                       context.read<ListProvider>().setEditItem(item.id);
                                     }
                                   }

@@ -1,3 +1,5 @@
+// Location: lib/widgets/fluid_edit_sheet.dart
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -7,7 +9,7 @@ import '../providers/settings_provider.dart';
 import '../models/list_item.dart';
 import '../theme/app_constants.dart';
 import '../theme/app_theme.dart';
-import '../screens/axis_selector_screen.dart'; // Add this import
+import '../screens/axis_selector_screen.dart';
 
 class FluidEditSheet extends StatefulWidget {
   const FluidEditSheet({super.key});
@@ -34,8 +36,6 @@ class _FluidEditSheetState extends State<FluidEditSheet> {
 
   bool _isFullScreen = false;
   double _dragHeightDelta = 0.0;
-
-  // FIXED: State tracker for post-navigation chip flashing
   String? _flashingChipLabel;
 
   final List<String> _hardcodedUnits = ['pcs', 'lbs', 'oz', 'gal', 'pk', 'box', 'bag'];
@@ -166,6 +166,7 @@ class _FluidEditSheetState extends State<FluidEditSheet> {
   void _saveAndClose() {
     if (_draftItem == null || _originalItem == null) {
       FocusManager.instance.primaryFocus?.unfocus();
+      context.read<ListProvider>().setFullEditRequest(false); // FIXED: Reset State
       context.read<ListProvider>().setEditItem(null);
       return;
     }
@@ -189,11 +190,13 @@ class _FluidEditSheetState extends State<FluidEditSheet> {
       );
     }
 
+    provider.setFullEditRequest(false); // FIXED: Reset State
     provider.setEditItem(null);
   }
 
   void _discardAndClose() {
     FocusManager.instance.primaryFocus?.unfocus();
+    context.read<ListProvider>().setFullEditRequest(false); // FIXED: Reset State
     context.read<ListProvider>().setEditItem(null);
   }
 
@@ -214,11 +217,9 @@ class _FluidEditSheetState extends State<FluidEditSheet> {
       if (velocity < -500) {
         _isFullScreen = true;
       } else if (velocity > 500) {
-        // FIXED: Any fast downward swipe fully closes and saves, even if full screen
         _saveAndClose();
       } else {
         if (startedFullScreen) {
-          // FIXED: Bypasses collapsed state entirely. If dragged down past a small threshold, save and close.
           if (currentHeight < maxHeight - 50.0) {
             _saveAndClose();
           } else {
@@ -237,7 +238,6 @@ class _FluidEditSheetState extends State<FluidEditSheet> {
     });
   }
 
-  // FIXED: Navigation hook to open the Selector Screen and flash the result
   void _openAxisSelector(bool isAxis1, String typeId) async {
     final result = await Navigator.push(
       context,
@@ -254,7 +254,6 @@ class _FluidEditSheetState extends State<FluidEditSheet> {
         _flashingChipLabel = result;
       });
 
-      // Clear the flash after 600ms
       Future.delayed(const Duration(milliseconds: 600), () {
         if (mounted) setState(() => _flashingChipLabel = null);
       });
@@ -265,16 +264,26 @@ class _FluidEditSheetState extends State<FluidEditSheet> {
     final dict = provider.searchSmartDictionary('');
     final results = List<String>.from(baseSettings);
 
+    // Scan global dictionary
     for (var item in dict) {
-      String val = '';
-      if (propertyType == 'store') val = item.store;
-      if (propertyType == 'category') val = item.category;
-
+      String val = propertyType == 'store' ? item.store : item.category;
       if (val.isNotEmpty && val != 'Any' && val != 'Everything Else' && !results.contains(val)) {
         results.add(val);
       }
     }
-    return results.take(7).toList();
+
+    // FIXED: Scan real-time memory (display lists) to grab brand new categories added during this session
+    final activeItems = [...provider.displayList, ...provider.checkedDisplayList, ...provider.shoppingModeItems];
+    for (var item in activeItems) {
+      if (item is ListItem) {
+        String val = propertyType == 'store' ? item.type : item.category;
+        if (val.isNotEmpty && val != 'Any' && val != 'Everything Else' && !results.contains(val)) {
+          results.add(val);
+        }
+      }
+    }
+
+    return results;
   }
 
   List<String> _getPopularTags(ListProvider provider) {
@@ -291,6 +300,50 @@ class _FluidEditSheetState extends State<FluidEditSheet> {
     }
 
     return tags.toList().take(15).toList();
+  }
+
+  // FIXED: Mathematical layout engine to enforce exactly 2 Rows, preserving the `+ Add` button
+  List<String> _getFittingItems(List<String> items, double maxWidth, ThemeData theme) {
+    final style = theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.bold) ?? const TextStyle(fontSize: 14, fontWeight: FontWeight.bold);
+    final List<String> fitting = [];
+
+    double currentX = 0;
+    int currentRow = 1;
+    const double spacing = 8.0;
+
+    final TextPainter tp = TextPainter(textDirection: TextDirection.ltr);
+
+    double measureWidth(String text, {bool isAction = false}) {
+      tp.text = TextSpan(text: text, style: style);
+      tp.layout();
+      return tp.width + 32.0 + (isAction ? 2.0 : 0.0); // 16px padding on left and right
+    }
+
+    final double addWidth = measureWidth('+ Add', isAction: true);
+
+    for (int i = 0; i < items.length; i++) {
+      final String item = items[i];
+      final double itemWidth = measureWidth(item);
+
+      if (currentX + itemWidth > maxWidth) {
+        currentRow++;
+        currentX = 0;
+      }
+
+      if (currentRow == 2) {
+        // If adding this item means we don't have room for "+ Add" on the 2nd row, we drop it!
+        if (currentX + itemWidth + spacing + addWidth > maxWidth) {
+          break;
+        }
+      } else if (currentRow > 2) {
+        break;
+      }
+
+      fitting.add(item);
+      currentX += itemWidth + spacing;
+    }
+
+    return fitting;
   }
 
   List<String> _getPopularUnits(ListProvider provider) {
@@ -331,7 +384,6 @@ class _FluidEditSheetState extends State<FluidEditSheet> {
           final isActive = controller.text.isNotEmpty || focusNode.hasFocus;
 
           return Container(
-            // FIXED: Increased height to 64.0 for breathing room
             height: 64.0,
             padding: const EdgeInsets.symmetric(horizontal: 16.0),
             decoration: BoxDecoration(
@@ -344,7 +396,6 @@ class _FluidEditSheetState extends State<FluidEditSheet> {
                 AnimatedPositioned(
                   duration: const Duration(milliseconds: 200),
                   curve: Curves.easeOutCubic,
-                  // FIXED: Dropped the collapsed label position to 22.0 to center it perfectly
                   top: isActive ? 8.0 : 22.0,
                   left: 0.0,
                   child: Text(
@@ -360,7 +411,6 @@ class _FluidEditSheetState extends State<FluidEditSheet> {
                 if (isActive)
                   Positioned(
                     left: 0, right: 0,
-                    // FIXED: Dropped the text bounding box lower to clear the label
                     bottom: 4.0,
                     child: TextField(
                       controller: controller,
@@ -383,7 +433,6 @@ class _FluidEditSheetState extends State<FluidEditSheet> {
     );
   }
 
-  // FIXED: Changed to AnimatedContainer to support the 600ms flash transition
   Widget _buildChip({required String label, required bool isSelected, required ThemeData theme, required VoidCallback onTap, bool isAction = false}) {
     final bool isFlashing = _flashingChipLabel == label;
 
@@ -460,11 +509,32 @@ class _FluidEditSheetState extends State<FluidEditSheet> {
     final typeId = macroProvider.activeList?.typeId ?? 'sys_shopping';
     final appType = settings.getTypeById(typeId);
 
+    // FIXED: Calculate max wrap width and pipe through the 2-Row engine
+    final double maxWrapWidth = MediaQuery.of(context).size.width - (geometry.horizontalPadding * 2);
+
     final axis1Base = settings.getAxis1Groups(typeId).map((g) => g.name).where((n) => n != 'Any' && n != 'Everything Else').toList();
     final axis2Base = settings.getAxis2Groups(typeId).map((g) => g.name).where((n) => n != 'Any' && n != 'Everything Else').toList();
 
-    final popularStores = _getPopularList(provider, 'store', axis1Base);
-    final popularCategories = _getPopularList(provider, 'category', axis2Base);
+    List<String> rawCategories = _getPopularList(provider, 'category', axis2Base);
+    if (_draftItem!.category.isNotEmpty && _draftItem!.category != 'Everything Else' && !rawCategories.contains(_draftItem!.category)) {
+      rawCategories.insert(0, _draftItem!.category);
+    }
+    // Swap active to the very front so it is guaranteed to fit in the 2 rows!
+    if (_draftItem!.category != 'Everything Else' && rawCategories.contains(_draftItem!.category)) {
+      rawCategories.remove(_draftItem!.category);
+      rawCategories.insert(0, _draftItem!.category);
+    }
+    final displayCategories = _getFittingItems(rawCategories, maxWrapWidth, theme);
+
+    List<String> rawStores = _getPopularList(provider, 'store', axis1Base);
+    if (_draftItem!.type.isNotEmpty && _draftItem!.type != 'Any' && !rawStores.contains(_draftItem!.type)) {
+      rawStores.insert(0, _draftItem!.type);
+    }
+    if (_draftItem!.type != 'Any' && rawStores.contains(_draftItem!.type)) {
+      rawStores.remove(_draftItem!.type);
+      rawStores.insert(0, _draftItem!.type);
+    }
+    final displayStores = _getFittingItems(rawStores, maxWrapWidth, theme);
 
     final allUnits = _getPopularUnits(provider);
     final allPopularTags = _getPopularTags(provider);
@@ -639,7 +709,7 @@ class _FluidEditSheetState extends State<FluidEditSheet> {
                                   Wrap(
                                     spacing: 8.0, runSpacing: 8.0,
                                     children: [
-                                      ...popularCategories.map((cat) => _buildChip(
+                                      ...displayCategories.map((cat) => _buildChip(
                                         label: cat,
                                         isSelected: _draftItem!.category == cat,
                                         onTap: () {
@@ -651,7 +721,6 @@ class _FluidEditSheetState extends State<FluidEditSheet> {
                                         },
                                         theme: theme,
                                       )),
-                                      // FIXED: Trigger navigation to full screen selector
                                       _buildChip(label: '+ Add', isSelected: false, isAction: true, theme: theme, onTap: () => _openAxisSelector(false, typeId)),
                                     ],
                                   ),
@@ -663,7 +732,7 @@ class _FluidEditSheetState extends State<FluidEditSheet> {
                                   Wrap(
                                     spacing: 8.0, runSpacing: 8.0,
                                     children: [
-                                      ...popularStores.map((store) => _buildChip(
+                                      ...displayStores.map((store) => _buildChip(
                                         label: store,
                                         isSelected: _draftItem!.type == store,
                                         onTap: () {
@@ -675,7 +744,6 @@ class _FluidEditSheetState extends State<FluidEditSheet> {
                                         },
                                         theme: theme,
                                       )),
-                                      // FIXED: Trigger navigation to full screen selector
                                       _buildChip(label: '+ Add', isSelected: false, isAction: true, theme: theme, onTap: () => _openAxisSelector(true, typeId)),
                                     ],
                                   ),
