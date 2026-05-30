@@ -1,5 +1,3 @@
-// Location: lib/widgets/fluid_edit_sheet.dart
-
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -9,6 +7,7 @@ import '../providers/settings_provider.dart';
 import '../models/list_item.dart';
 import '../theme/app_constants.dart';
 import '../theme/app_theme.dart';
+import '../screens/axis_selector_screen.dart'; // Add this import
 
 class FluidEditSheet extends StatefulWidget {
   const FluidEditSheet({super.key});
@@ -35,6 +34,9 @@ class _FluidEditSheetState extends State<FluidEditSheet> {
 
   bool _isFullScreen = false;
   double _dragHeightDelta = 0.0;
+
+  // FIXED: State tracker for post-navigation chip flashing
+  String? _flashingChipLabel;
 
   final List<String> _hardcodedUnits = ['pcs', 'lbs', 'oz', 'gal', 'pk', 'box', 'bag'];
 
@@ -173,8 +175,6 @@ class _FluidEditSheetState extends State<FluidEditSheet> {
     }
 
     final provider = context.read<ListProvider>();
-
-    // FIXED: Guaranteed keyboard dismissal
     FocusManager.instance.primaryFocus?.unfocus();
 
     if (_hasModifications) {
@@ -214,10 +214,11 @@ class _FluidEditSheetState extends State<FluidEditSheet> {
       if (velocity < -500) {
         _isFullScreen = true;
       } else if (velocity > 500) {
+        // FIXED: Any fast downward swipe fully closes and saves, even if full screen
         _saveAndClose();
       } else {
         if (startedFullScreen) {
-          // FIXED: If pulled down more than 50px from full screen, instantly close it entirely
+          // FIXED: Bypasses collapsed state entirely. If dragged down past a small threshold, save and close.
           if (currentHeight < maxHeight - 50.0) {
             _saveAndClose();
           } else {
@@ -234,6 +235,30 @@ class _FluidEditSheetState extends State<FluidEditSheet> {
         }
       }
     });
+  }
+
+  // FIXED: Navigation hook to open the Selector Screen and flash the result
+  void _openAxisSelector(bool isAxis1, String typeId) async {
+    final result = await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => AxisSelectorScreen(isAxis1: isAxis1, typeId: typeId)),
+    );
+
+    if (result != null && mounted) {
+      setState(() {
+        if (isAxis1) {
+          _draftItem = _draftItem!.copyWith(type: result);
+        } else {
+          _draftItem = _draftItem!.copyWith(category: result);
+        }
+        _flashingChipLabel = result;
+      });
+
+      // Clear the flash after 600ms
+      Future.delayed(const Duration(milliseconds: 600), () {
+        if (mounted) setState(() => _flashingChipLabel = null);
+      });
+    }
   }
 
   List<String> _getPopularList(ListProvider provider, String propertyType, List<String> baseSettings) {
@@ -290,7 +315,6 @@ class _FluidEditSheetState extends State<FluidEditSheet> {
     }
   }
 
-  // FIXED: Completely rebuilt custom widget. No more native clipping or bad alignments.
   Widget _buildCustomFloatingInput({
     required TextEditingController controller,
     required FocusNode focusNode,
@@ -307,7 +331,8 @@ class _FluidEditSheetState extends State<FluidEditSheet> {
           final isActive = controller.text.isNotEmpty || focusNode.hasFocus;
 
           return Container(
-            height: 60.0, // Fixed physical height guarantees nothing clips
+            // FIXED: Increased height to 64.0 for breathing room
+            height: 64.0,
             padding: const EdgeInsets.symmetric(horizontal: 16.0),
             decoration: BoxDecoration(
               color: theme.cardColor,
@@ -316,12 +341,12 @@ class _FluidEditSheetState extends State<FluidEditSheet> {
             child: Stack(
               alignment: Alignment.centerLeft,
               children: [
-                // The Label
                 AnimatedPositioned(
                   duration: const Duration(milliseconds: 200),
                   curve: Curves.easeOutCubic,
-                  top: isActive ? 10.0 : 20.0, // Slides up safely within the bounds
-                  left: 0.0, // Perfectly left aligned
+                  // FIXED: Dropped the collapsed label position to 22.0 to center it perfectly
+                  top: isActive ? 8.0 : 22.0,
+                  left: 0.0,
                   child: Text(
                     label,
                     style: theme.textTheme.titleMedium?.copyWith(
@@ -332,11 +357,11 @@ class _FluidEditSheetState extends State<FluidEditSheet> {
                   ),
                 ),
 
-                // The Text Input
                 if (isActive)
                   Positioned(
                     left: 0, right: 0,
-                    bottom: 6.0, // Sits comfortably below the label
+                    // FIXED: Dropped the text bounding box lower to clear the label
+                    bottom: 4.0,
                     child: TextField(
                       controller: controller,
                       focusNode: focusNode,
@@ -354,6 +379,33 @@ class _FluidEditSheetState extends State<FluidEditSheet> {
             ),
           );
         },
+      ),
+    );
+  }
+
+  // FIXED: Changed to AnimatedContainer to support the 600ms flash transition
+  Widget _buildChip({required String label, required bool isSelected, required ThemeData theme, required VoidCallback onTap, bool isAction = false}) {
+    final bool isFlashing = _flashingChipLabel == label;
+
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 300),
+        padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 10.0),
+        decoration: BoxDecoration(
+          color: isFlashing
+              ? AppColors.successAction.withValues(alpha: 0.8)
+              : isSelected ? AppColors.primaryAction : (isAction ? Colors.transparent : theme.cardColor),
+          border: isAction ? Border.all(color: AppColors.primaryAction.withValues(alpha: 0.5)) : null,
+          borderRadius: BorderRadius.circular(20.0),
+        ),
+        child: Text(
+          label,
+          style: theme.textTheme.bodyMedium?.copyWith(
+            color: (isSelected || isFlashing) ? Colors.white : (isAction ? AppColors.primaryAction : theme.textTheme.bodyMedium?.color),
+            fontWeight: FontWeight.bold,
+          ),
+        ),
       ),
     );
   }
@@ -512,12 +564,10 @@ class _FluidEditSheetState extends State<FluidEditSheet> {
                           child: NotificationListener<ScrollNotification>(
                             onNotification: (notification) {
                               if (notification.metrics.axis == Axis.vertical && _isFullScreen && notification.metrics.pixels <= 0) {
-                                // FIXED: Captures scroll updates to shrink the sheet
                                 if (notification is ScrollUpdateNotification && notification.scrollDelta != null && notification.scrollDelta! < 0) {
                                   setState(() => _dragHeightDelta += notification.scrollDelta!);
                                   return true;
                                 }
-                                // FIXED: Captures the moment the scroll is released to evaluate physics
                                 else if (notification is ScrollEndNotification) {
                                   if (_dragHeightDelta < 0) {
                                     _handleVerticalDragEnd(DragEndDetails(primaryVelocity: 0), minHeight, maxHeight, screenHeight);
@@ -601,9 +651,8 @@ class _FluidEditSheetState extends State<FluidEditSheet> {
                                         },
                                         theme: theme,
                                       )),
-                                      _buildChip(label: '+ Add', isSelected: false, isAction: true, theme: theme, onTap: () {
-                                        print("Navigate to Full Axis 2 Selector");
-                                      }),
+                                      // FIXED: Trigger navigation to full screen selector
+                                      _buildChip(label: '+ Add', isSelected: false, isAction: true, theme: theme, onTap: () => _openAxisSelector(false, typeId)),
                                     ],
                                   ),
 
@@ -626,9 +675,8 @@ class _FluidEditSheetState extends State<FluidEditSheet> {
                                         },
                                         theme: theme,
                                       )),
-                                      _buildChip(label: '+ Add', isSelected: false, isAction: true, theme: theme, onTap: () {
-                                        print("Navigate to Full Axis 1 Selector");
-                                      }),
+                                      // FIXED: Trigger navigation to full screen selector
+                                      _buildChip(label: '+ Add', isSelected: false, isAction: true, theme: theme, onTap: () => _openAxisSelector(true, typeId)),
                                     ],
                                   ),
 
@@ -764,27 +812,6 @@ class _FluidEditSheetState extends State<FluidEditSheet> {
             ),
           ),
         ],
-      ),
-    );
-  }
-
-  Widget _buildChip({required String label, required bool isSelected, required ThemeData theme, required VoidCallback onTap, bool isAction = false}) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 10.0),
-        decoration: BoxDecoration(
-          color: isSelected ? AppColors.primaryAction : (isAction ? Colors.transparent : theme.cardColor),
-          border: isAction ? Border.all(color: AppColors.primaryAction.withValues(alpha: 0.5)) : null,
-          borderRadius: BorderRadius.circular(20.0),
-        ),
-        child: Text(
-          label,
-          style: theme.textTheme.bodyMedium?.copyWith(
-            color: isSelected ? Colors.white : (isAction ? AppColors.primaryAction : theme.textTheme.bodyMedium?.color),
-            fontWeight: FontWeight.bold,
-          ),
-        ),
       ),
     );
   }
