@@ -163,6 +163,7 @@ class _FluidEditSheetState extends State<FluidEditSheet> {
 
   void _saveAndClose() {
     if (_draftItem == null || _originalItem == null) {
+      FocusManager.instance.primaryFocus?.unfocus();
       context.read<ListProvider>().setEditItem(null);
       return;
     }
@@ -172,8 +173,9 @@ class _FluidEditSheetState extends State<FluidEditSheet> {
     }
 
     final provider = context.read<ListProvider>();
-    // FIXED: Drops the keyboard entirely when saving/closing
-    FocusScope.of(context).unfocus();
+
+    // FIXED: Guaranteed keyboard dismissal
+    FocusManager.instance.primaryFocus?.unfocus();
 
     if (_hasModifications) {
       provider.editItem(
@@ -191,8 +193,8 @@ class _FluidEditSheetState extends State<FluidEditSheet> {
   }
 
   void _discardAndClose() {
+    FocusManager.instance.primaryFocus?.unfocus();
     context.read<ListProvider>().setEditItem(null);
-    FocusScope.of(context).unfocus();
   }
 
   void _handleVerticalDragUpdate(DragUpdateDetails details) {
@@ -212,22 +214,16 @@ class _FluidEditSheetState extends State<FluidEditSheet> {
       if (velocity < -500) {
         _isFullScreen = true;
       } else if (velocity > 500) {
-        // FIXED: Swiping down fast when maximized instantly fully closes it instead of collapsing
-        if (startedFullScreen) {
-          _saveAndClose();
-        } else {
-          _saveAndClose();
-        }
+        _saveAndClose();
       } else {
         if (startedFullScreen) {
-          // FIXED: Dragging down past a threshold when maximized instantly fully closes it
-          if (currentHeight < maxHeight - 100) {
+          // FIXED: If pulled down more than 50px from full screen, instantly close it entirely
+          if (currentHeight < maxHeight - 50.0) {
             _saveAndClose();
           } else {
             _isFullScreen = true;
           }
         } else {
-          // Standard physics for when starting from a collapsed state
           if (currentHeight > screenHeight * 0.70) {
             _isFullScreen = true;
           } else if (currentHeight < minHeight - 50) {
@@ -294,38 +290,70 @@ class _FluidEditSheetState extends State<FluidEditSheet> {
     }
   }
 
-  Widget _buildNativeFloatingLabelInput({
+  // FIXED: Completely rebuilt custom widget. No more native clipping or bad alignments.
+  Widget _buildCustomFloatingInput({
     required TextEditingController controller,
     required FocusNode focusNode,
     required String label,
     required ThemeData theme,
     TextInputType? keyboardType,
-    VoidCallback? onTap,
   }) {
-    return TextField(
-      controller: controller,
-      focusNode: focusNode,
-      keyboardType: keyboardType,
-      textAlign: TextAlign.left,
-      onTap: onTap,
-      style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
-      decoration: InputDecoration(
-        labelText: label,
-        labelStyle: theme.textTheme.titleMedium?.copyWith(
-          color: theme.hintColor.withValues(alpha: 0.4),
-          fontWeight: FontWeight.normal,
-        ),
-        floatingLabelStyle: TextStyle(
-          fontSize: 12,
-          fontWeight: FontWeight.bold,
-          color: theme.hintColor.withValues(alpha: 0.8),
-        ),
-        floatingLabelBehavior: FloatingLabelBehavior.always,
-        filled: true,
-        fillColor: theme.cardColor,
-        // FIXED: Re-balanced padding to drop the typed text slightly lower and prevent top-clipping
-        contentPadding: const EdgeInsets.only(left: 16.0, right: 16.0, top: 22.0, bottom: 10.0),
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12.0), borderSide: BorderSide.none),
+    return GestureDetector(
+      onTap: () => focusNode.requestFocus(),
+      behavior: HitTestBehavior.opaque,
+      child: AnimatedBuilder(
+        animation: Listenable.merge([controller, focusNode]),
+        builder: (context, child) {
+          final isActive = controller.text.isNotEmpty || focusNode.hasFocus;
+
+          return Container(
+            height: 60.0, // Fixed physical height guarantees nothing clips
+            padding: const EdgeInsets.symmetric(horizontal: 16.0),
+            decoration: BoxDecoration(
+              color: theme.cardColor,
+              borderRadius: BorderRadius.circular(12.0),
+            ),
+            child: Stack(
+              alignment: Alignment.centerLeft,
+              children: [
+                // The Label
+                AnimatedPositioned(
+                  duration: const Duration(milliseconds: 200),
+                  curve: Curves.easeOutCubic,
+                  top: isActive ? 10.0 : 20.0, // Slides up safely within the bounds
+                  left: 0.0, // Perfectly left aligned
+                  child: Text(
+                    label,
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontSize: isActive ? 11.0 : 16.0,
+                      fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
+                      color: theme.hintColor.withValues(alpha: isActive ? 0.8 : 0.4),
+                    ),
+                  ),
+                ),
+
+                // The Text Input
+                if (isActive)
+                  Positioned(
+                    left: 0, right: 0,
+                    bottom: 6.0, // Sits comfortably below the label
+                    child: TextField(
+                      controller: controller,
+                      focusNode: focusNode,
+                      keyboardType: keyboardType,
+                      textAlign: TextAlign.left,
+                      style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+                      decoration: const InputDecoration(
+                        isDense: true,
+                        contentPadding: EdgeInsets.zero,
+                        border: InputBorder.none,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          );
+        },
       ),
     );
   }
@@ -481,11 +509,20 @@ class _FluidEditSheetState extends State<FluidEditSheet> {
                         const SizedBox(height: 12.0),
 
                         Expanded(
-                          child: NotificationListener<ScrollUpdateNotification>(
+                          child: NotificationListener<ScrollNotification>(
                             onNotification: (notification) {
-                              if (notification.metrics.axis == Axis.vertical && _isFullScreen && notification.metrics.pixels <= 0 && notification.scrollDelta != null && notification.scrollDelta! < 0) {
-                                setState(() => _dragHeightDelta += notification.scrollDelta!);
-                                return true;
+                              if (notification.metrics.axis == Axis.vertical && _isFullScreen && notification.metrics.pixels <= 0) {
+                                // FIXED: Captures scroll updates to shrink the sheet
+                                if (notification is ScrollUpdateNotification && notification.scrollDelta != null && notification.scrollDelta! < 0) {
+                                  setState(() => _dragHeightDelta += notification.scrollDelta!);
+                                  return true;
+                                }
+                                // FIXED: Captures the moment the scroll is released to evaluate physics
+                                else if (notification is ScrollEndNotification) {
+                                  if (_dragHeightDelta < 0) {
+                                    _handleVerticalDragEnd(DragEndDetails(primaryVelocity: 0), minHeight, maxHeight, screenHeight);
+                                  }
+                                }
                               }
                               return false;
                             },
@@ -499,7 +536,7 @@ class _FluidEditSheetState extends State<FluidEditSheet> {
                                   Row(
                                     children: [
                                       Expanded(
-                                        child: _buildNativeFloatingLabelInput(
+                                        child: _buildCustomFloatingInput(
                                           controller: _quantityController,
                                           focusNode: _quantityFocus,
                                           label: 'Quantity',
@@ -511,7 +548,7 @@ class _FluidEditSheetState extends State<FluidEditSheet> {
                                       const SizedBox(width: 12.0),
 
                                       Expanded(
-                                        child: _buildNativeFloatingLabelInput(
+                                        child: _buildCustomFloatingInput(
                                           controller: _unitController,
                                           focusNode: _unitFocus,
                                           label: 'Unit',
@@ -750,11 +787,5 @@ class _FluidEditSheetState extends State<FluidEditSheet> {
         ),
       ),
     );
-  }
-}
-
-extension ConstrainedWidget on Widget {
-  Widget constrained({required double width}) {
-    return SizedBox(width: width, child: this);
   }
 }
