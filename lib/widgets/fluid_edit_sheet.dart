@@ -172,6 +172,7 @@ class _FluidEditSheetState extends State<FluidEditSheet> {
     }
 
     final provider = context.read<ListProvider>();
+    // FIXED: Drops the keyboard entirely when saving/closing
     FocusScope.of(context).unfocus();
 
     if (_hasModifications) {
@@ -203,6 +204,7 @@ class _FluidEditSheetState extends State<FluidEditSheet> {
   void _handleVerticalDragEnd(DragEndDetails details, double minHeight, double maxHeight, double screenHeight) {
     final velocity = details.primaryVelocity ?? 0.0;
     final currentHeight = (_isFullScreen ? maxHeight : minHeight) + _dragHeightDelta;
+    final bool startedFullScreen = _isFullScreen;
 
     setState(() {
       _dragHeightDelta = 0.0;
@@ -210,19 +212,29 @@ class _FluidEditSheetState extends State<FluidEditSheet> {
       if (velocity < -500) {
         _isFullScreen = true;
       } else if (velocity > 500) {
-        if (_isFullScreen && currentHeight < maxHeight - 50) {
-          _isFullScreen = false;
-          FocusScope.of(context).unfocus();
+        // FIXED: Swiping down fast when maximized instantly fully closes it instead of collapsing
+        if (startedFullScreen) {
+          _saveAndClose();
         } else {
           _saveAndClose();
         }
       } else {
-        if (currentHeight > screenHeight * 0.70) {
-          _isFullScreen = true;
-        } else if (currentHeight < minHeight - 50) {
-          _saveAndClose();
+        if (startedFullScreen) {
+          // FIXED: Dragging down past a threshold when maximized instantly fully closes it
+          if (currentHeight < maxHeight - 100) {
+            _saveAndClose();
+          } else {
+            _isFullScreen = true;
+          }
         } else {
-          _isFullScreen = false;
+          // Standard physics for when starting from a collapsed state
+          if (currentHeight > screenHeight * 0.70) {
+            _isFullScreen = true;
+          } else if (currentHeight < minHeight - 50) {
+            _saveAndClose();
+          } else {
+            _isFullScreen = false;
+          }
         }
       }
     });
@@ -282,7 +294,6 @@ class _FluidEditSheetState extends State<FluidEditSheet> {
     }
   }
 
-  // FIXED: Ripped out the custom stack and implemented Native InputDecoration labels
   Widget _buildNativeFloatingLabelInput({
     required TextEditingController controller,
     required FocusNode focusNode,
@@ -309,10 +320,11 @@ class _FluidEditSheetState extends State<FluidEditSheet> {
           fontWeight: FontWeight.bold,
           color: theme.hintColor.withValues(alpha: 0.8),
         ),
-        floatingLabelBehavior: FloatingLabelBehavior.always, // Natively handles spacing and alignment
+        floatingLabelBehavior: FloatingLabelBehavior.always,
         filled: true,
         fillColor: theme.cardColor,
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
+        // FIXED: Re-balanced padding to drop the typed text slightly lower and prevent top-clipping
+        contentPadding: const EdgeInsets.only(left: 16.0, right: 16.0, top: 22.0, bottom: 10.0),
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(12.0), borderSide: BorderSide.none),
       ),
     );
@@ -403,7 +415,6 @@ class _FluidEditSheetState extends State<FluidEditSheet> {
             left: 0, right: 0,
             bottom: isVisible ? 0 : -maxHeight,
             height: targetHeight,
-            // FIXED: Restored the missing GestureDetector that allows physical drag-to-expand
             child: GestureDetector(
               behavior: HitTestBehavior.opaque,
               onVerticalDragUpdate: _handleVerticalDragUpdate,
@@ -681,7 +692,7 @@ class _FluidEditSheetState extends State<FluidEditSheet> {
                         left: 0, right: 0,
                         bottom: keyboardHeight,
                         child: Container(
-                          height: 70.0, // FIXED: Double height for the accessory view
+                          height: 70.0,
                           width: double.infinity,
                           decoration: BoxDecoration(
                             color: theme.cardColor,
@@ -691,7 +702,7 @@ class _FluidEditSheetState extends State<FluidEditSheet> {
                             scrollDirection: Axis.horizontal,
                             physics: const BouncingScrollPhysics(),
                             padding: EdgeInsets.symmetric(horizontal: geometry.horizontalPadding),
-                            child: Center( // FIXED: Vertically centers the chips inside the taller container
+                            child: Center(
                               child: Row(
                                 children: allUnits.map((u) => Padding(
                                   padding: const EdgeInsets.only(right: 8.0),
@@ -739,5 +750,11 @@ class _FluidEditSheetState extends State<FluidEditSheet> {
         ),
       ),
     );
+  }
+}
+
+extension ConstrainedWidget on Widget {
+  Widget constrained({required double width}) {
+    return SizedBox(width: width, child: this);
   }
 }
