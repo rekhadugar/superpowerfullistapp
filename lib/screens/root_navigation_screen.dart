@@ -81,7 +81,12 @@ class _RootNavigationScreenState extends State<RootNavigationScreen> {
   Widget build(BuildContext context) {
     final safeBottom = MediaQuery.of(context).padding.bottom;
     const double barHeight = 70.0;
-    final bool showBottomNav = _isScrollVisible;
+
+    // 1. Check if the Fluid Edit Sheet is open
+    final isEditing = context.watch<ListProvider>().editItemId != null;
+
+    // 2. Hide the bottom nav if the user scrolls down OR if they are editing an item
+    final bool showBottomNav = _isScrollVisible && !isEditing;
 
     return Scaffold(
       // FIXED: Prevents the Bottom Navigation Bar from floating above the keyboard

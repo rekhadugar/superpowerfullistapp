@@ -379,7 +379,6 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
     final textScale = MediaQuery.textScalerOf(context).scale(1.0);
     final geometry = FluidGeometry(textScale);
 
-    // FIXED: The Pill now perfectly matches the height of your standard Item Cards
     final double pillHeight = geometry.baseCardHeight;
 
     return GestureDetector(
@@ -389,359 +388,358 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
         }
       },
       behavior: HitTestBehavior.translucent,
-      child: Scaffold(
-        resizeToAvoidBottomInset: false,
-        backgroundColor: theme.scaffoldBackgroundColor,
-        appBar: AppBar(
-          leadingWidth: _isQuickAdding
-              ? geometry.leadingBlockWidth + geometry.horizontalPadding
-              : geometry.horizontalPadding + geometry.leadingBlockWidth + geometry.interElementGap,
-          leading: _isQuickAdding
-              ? IconButton(
-            icon: Icon(Icons.arrow_back_rounded, size: geometry.iconSize, color: theme.textTheme.titleMedium?.color),
-            onPressed: _closeQuickAdd,
-          )
-              : Padding(
-            padding: EdgeInsets.only(left: geometry.horizontalPadding),
-            child: Builder(
-              builder: (context) => IconButton(
-                icon: Icon(Icons.menu_rounded, size: geometry.iconSize, color: theme.textTheme.titleMedium?.color),
-                padding: EdgeInsets.zero,
-                alignment: Alignment.centerLeft,
-                onPressed: () => context.findRootAncestorStateOfType<ScaffoldState>()?.openDrawer(),
-              ),
-            ),
-          ),
-          titleSpacing: 0,
-          title: AnimatedContainer(
-            duration: const Duration(milliseconds: 250),
-            curve: Curves.easeOutCubic,
-            height: pillHeight,
-            margin: EdgeInsets.only(
-              right: _isQuickAdding ? 0.0 : geometry.horizontalPadding,
-            ),
-            decoration: BoxDecoration(
-              color: theme.cardColor,
-              borderRadius: BorderRadius.circular(pillHeight / 2),
-            ),
-            child: _isQuickAdding
-                ? Container(
-              alignment: Alignment.center,
-              child: TextField(
-                controller: _quickAddController,
-                focusNode: _quickAddFocus,
-                textCapitalization: TextCapitalization.words,
-                textInputAction: TextInputAction.done,
-                onSubmitted: (_) => _commitQuickAdd(),
-                textAlignVertical: TextAlignVertical.center,
-                // FIXED: Removed the explicit size override to let it naturally match Item Card titles
-                style: theme.textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.w600,
-                ),
-                decoration: InputDecoration(
-                  hintText: 'Add an item...',
-                  hintStyle: theme.textTheme.titleMedium?.copyWith(
-                    color: theme.hintColor,
-                    fontWeight: FontWeight.normal,
-                  ),
-                  border: InputBorder.none,
-                  isDense: true,
-                  // FIXED: Removed the squeezed vertical padding to let it center in the taller pill
-                  contentPadding: EdgeInsets.symmetric(horizontal: geometry.horizontalPadding),
-                ),
-              ),
-            )
-                : GestureDetector(
-              onTap: _startQuickAdd,
-              behavior: HitTestBehavior.opaque,
-              child: Container(
-                alignment: Alignment.center,
-                padding: EdgeInsets.symmetric(horizontal: geometry.horizontalPadding),
-                child: Text(
-                  activeList?.name ?? 'Listicle',
-                  // FIXED: Also aligned the static header text to match
-                  style: theme.textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.bold
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-            ),
-          ),
-          backgroundColor: theme.scaffoldBackgroundColor,
-          elevation: 0,
-          scrolledUnderElevation: 0.0,
-          surfaceTintColor: Colors.transparent,
-          centerTitle: false,
-          actions: [
-            if (_isQuickAdding)
-              IconButton(
-                icon: Icon(Icons.check_rounded, size: geometry.iconSize * 1.15, color: AppColors.primaryAction),
-                onPressed: _commitQuickAdd,
+      // FIXED: Wrap the entire Scaffold in a Stack to elevate the Fluid Edit Sheet above the AppBar
+      child: Stack(
+        children: [
+          Scaffold(
+            resizeToAvoidBottomInset: false,
+            backgroundColor: theme.scaffoldBackgroundColor,
+            appBar: AppBar(
+              leadingWidth: _isQuickAdding
+                  ? geometry.leadingBlockWidth + geometry.horizontalPadding
+                  : geometry.horizontalPadding + geometry.leadingBlockWidth + geometry.interElementGap,
+              leading: _isQuickAdding
+                  ? IconButton(
+                icon: Icon(Icons.arrow_back_rounded, size: geometry.iconSize, color: theme.textTheme.titleMedium?.color),
+                onPressed: _closeQuickAdd,
               )
-            else
-              PopupMenuButton<String>(
-                icon: Icon(Icons.more_vert_rounded, size: geometry.iconSize, color: theme.textTheme.titleMedium?.color),
-                onSelected: (String value) {
-                  if (value == 'share') {
-                    if (activeList != null) {
-                      ShareListSheet.show(context, activeList);
-                    }
-                  } else if (value == 'options') {
-                    showModalBottomSheet(
-                      context: context,
-                      isScrollControlled: true,
-                      backgroundColor: Colors.transparent,
-                      builder: (ctx) => const MainOptionsSheet(),
-                    );
-                  }
-                },
-                itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
-                  const PopupMenuItem<String>(
-                    value: 'share',
-                    child: Row(
-                      children: [
-                        Icon(Icons.person_add_alt_1_rounded, size: 20, color: AppColors.primaryAction),
-                        SizedBox(width: 12),
-                        Text('Share List', style: TextStyle(fontWeight: FontWeight.w600)),
-                      ],
-                    ),
+                  : Padding(
+                padding: EdgeInsets.only(left: geometry.horizontalPadding),
+                child: Builder(
+                  builder: (context) => IconButton(
+                    icon: Icon(Icons.menu_rounded, size: geometry.iconSize, color: theme.textTheme.titleMedium?.color),
+                    padding: EdgeInsets.zero,
+                    alignment: Alignment.centerLeft,
+                    onPressed: () => context.findRootAncestorStateOfType<ScaffoldState>()?.openDrawer(),
                   ),
-                  const PopupMenuDivider(),
-                  const PopupMenuItem<String>(
-                    value: 'options',
-                    child: Row(
-                      children: [
-                        Icon(Icons.tune_rounded, size: 20),
-                        SizedBox(width: 12),
-                        Text('List Options'),
-                      ],
-                    ),
-                  ),
-                ],
+                ),
               ),
-          ],
-        ),
-        body: Stack(
-          children: [
-            displayList.isEmpty
-                ? Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    'All caught up!\nTap + to add your first item.',
-                    textAlign: TextAlign.center,
-                    style: theme.textTheme.bodyMedium,
-                  ),
-                  if (listProvider.checkedDisplayList.isNotEmpty) ...[
-                    SizedBox(height: geometry.baseCardHeight),
-                    TextButton.icon(
-                      onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const CompletedItemsScreen())),
-                      icon: Icon(Icons.history_rounded, color: theme.textTheme.bodyMedium?.color),
-                      label: Text('View Completed Items', style: theme.textTheme.bodyMedium),
+              titleSpacing: 0,
+              title: AnimatedContainer(
+                duration: const Duration(milliseconds: 250),
+                curve: Curves.easeOutCubic,
+                height: pillHeight,
+                margin: EdgeInsets.only(
+                  right: _isQuickAdding ? 0.0 : geometry.horizontalPadding,
+                ),
+                decoration: BoxDecoration(
+                  color: theme.cardColor,
+                  borderRadius: BorderRadius.circular(pillHeight / 2),
+                ),
+                child: _isQuickAdding
+                    ? Container(
+                  alignment: Alignment.center,
+                  child: TextField(
+                    controller: _quickAddController,
+                    focusNode: _quickAddFocus,
+                    textCapitalization: TextCapitalization.words,
+                    textInputAction: TextInputAction.done,
+                    onSubmitted: (_) => _commitQuickAdd(),
+                    textAlignVertical: TextAlignVertical.center,
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w600,
                     ),
-                  ]
-                ],
-              ),
-            )
-                : NotificationListener<ScrollNotification>(
-              onNotification: (ScrollNotification notification) {
-                if (listProvider.openSwipeItemId.value != null) {
-                  listProvider.openSwipeItemId.value = null;
-                }
-
-                if (notification is ScrollUpdateNotification && notification.dragDetails != null) {
-                  if (_isQuickAdding) {
-                    _closeQuickAdd();
-                  }
-
-                  if (listProvider.editItemId != null) {
-                    final isKeyboardOpen = MediaQuery.of(context).viewInsets.bottom > 0;
-                    if (isKeyboardOpen) {
-                      FocusManager.instance.primaryFocus?.unfocus();
-                    } else {
-                      listProvider.setEditItem(null);
-                    }
-                  }
-                }
-                return false;
-              },
-              child: Stack(
-                children: [
-                  ReorderableListView.builder(
-                    scrollController: _scrollController,
-                    // FIXED: Restored the original, clean list padding
-                    padding: EdgeInsets.only(
-                        top: AppConstants.listTopPadding,
-                        bottom: listProvider.isBatchModeActive
-                            ? AppConstants.batchModeBottomClearance
-                            : safeBottomPadding + AppConstants.listBottomClearance
+                    decoration: InputDecoration(
+                      hintText: 'Add an item...',
+                      hintStyle: theme.textTheme.titleMedium?.copyWith(
+                        color: theme.hintColor,
+                        fontWeight: FontWeight.normal,
+                      ),
+                      border: InputBorder.none,
+                      isDense: true,
+                      contentPadding: EdgeInsets.symmetric(horizontal: geometry.horizontalPadding),
                     ),
-                    itemCount: displayList.length,
-                    buildDefaultDragHandles: false,
-
-                    // FIXED: Moved the temporary scroll void ABOVE the footer button to push it out of sight!
-                    footer: Column(
-                      key: const ValueKey('completed_footer'),
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        if (_isQuickAdding)
-                        // FIXED: 100% of screen height mathematically guarantees any item
-                        // can reach the top of the screen on any device.
-                          SizedBox(height: MediaQuery.of(context).size.height),
-                        Padding(
-                          padding: EdgeInsets.symmetric(vertical: geometry.baseCardHeight / 2),
-                          child: TextButton.icon(
-                            onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const CompletedItemsScreen())),
-                            icon: Icon(Icons.history_rounded, color: theme.textTheme.bodyMedium?.color),
-                            label: Text('View Completed Items', style: theme.textTheme.bodyMedium),
-                          ),
-                        ),
-                      ],
-                    ),
-
-                    onReorder: (oldIndex, newIndex) {
-                      if (oldIndex == newIndex) {
-                        final item = displayList[oldIndex];
-                        if (item is ListItem) context.read<ListProvider>().toggleSelection(item.id);
-                        return;
-                      }
-                      context.read<ListProvider>().executeNativeReorder(oldIndex, newIndex);
-                    },
-                    proxyDecorator: (child, index, animation) {
-                      return Material(color: Colors.transparent, elevation: 8.0, shadowColor: Colors.black45, child: child);
-                    },
-                    itemBuilder: (context, index) {
-                      final item = displayList[index];
-
-                      if (item is String) {
-                        return Container(key: ValueKey('header_$item'), child: SectionHeader(title: item));
-                      }
-
-                      if (item is ListItem) {
-                        Widget coreCard = ListItemCard(
-                          title: item.title,
-                          nWrap: item.nWrap,
-                          nTagRows: item.nTagRows,
-                          attributeRows: item.attributeRows,
-                          type: item.type,
-                          category: item.category,
-                          sortMode: listProvider.currentSortMode,
-                          quantity: item.quantity,
-                          unit: item.unit,
-                          isHighlighted: listProvider.flashItemId == item.id,
-                          isDragging: false,
-                          isBatchModeActive: listProvider.isBatchModeActive,
-                          isBatchSelected: listProvider.selectedItemIds.contains(item.id),
-                          isFluidEditing: listProvider.editItemId == item.id,
-
-                          onCheck: () {
-                            final id = listProvider.toggleCompletion(item.id);
-                            _showActionToast(context, '${item.title} checked off', () => listProvider.restoreItems([id]));
-                          },
-                          onTap: () {
-                            if (listProvider.openSwipeItemId.value != null) {
-                              listProvider.openSwipeItemId.value = null;
-                            } else {
-                              if (listProvider.isBatchModeActive) {
-                                context.read<ListProvider>().toggleSelection(item.id);
-                              } else {
-                                if (listProvider.editItemId == item.id) {
-                                  context.read<ListProvider>().setEditItem(null);
-                                } else {
-                                  context.read<ListProvider>().setEditItem(item.id);
-                                }
-                              }
-                            }
-                          },
-                          onToggleSelection: () => context.read<ListProvider>().toggleSelection(item.id),
-                        );
-
-                        return ReorderableDelayedDragStartListener(
-                          key: ValueKey('drag_${item.id}'),
-                          index: index,
-                          child: SwipeActionWrapper(
-                            key: ValueKey('swipe_${item.id}'),
-                            itemId: item.id,
-                            requireConfirm: true,
-                            isBatchModeActive: listProvider.isBatchModeActive,
-                            onCheckout: () {
-                              final id = listProvider.toggleCompletion(item.id);
-                              _showActionToast(context, '${item.title} checked off', () => listProvider.restoreItems([id]));
-                            },
-                            onEdit: () {
-                              listProvider.clearAllInteractions();
-                              listProvider.setEditItem(item.id);
-                              listProvider.setFullEditRequest(true);
-                            },
-                            onDelete: () {
-                              final id = listProvider.deleteItem(item.id);
-                              _showActionToast(context, '${item.title} deleted', () => listProvider.restoreItems([id]));
-                            },
-                            child: coreCard,
-                          ),
-                        );
-                      }
-                      return const SizedBox.shrink();
-                    },
                   ),
-                  ValueListenableBuilder<PhantomHeaderData>(
-                    valueListenable: _phantomHeaderState,
-                    builder: (context, data, child) {
-                      if (data.title == null) return const SizedBox.shrink();
-                      return Positioned(
-                        top: 0, left: 0, right: 0,
-                        child: RepaintBoundary(
-                          child: Transform.translate(offset: Offset(0, data.yOffset), child: SectionHeader(title: data.title!)),
-                        ),
-                      );
-                    },
-                  ),
-                ],
-              ),
-            ),
-
-            if (_isQuickAdding) ...[
-              Positioned.fill(
-                child: GestureDetector(
+                )
+                    : GestureDetector(
+                  onTap: _startQuickAdd,
                   behavior: HitTestBehavior.opaque,
-                  onTap: _closeQuickAdd,
-                  onPanStart: (_) => _closeQuickAdd(),
-                  child: const SizedBox.expand(),
+                  child: Container(
+                    alignment: Alignment.center,
+                    padding: EdgeInsets.symmetric(horizontal: geometry.horizontalPadding),
+                    child: Text(
+                      activeList?.name ?? 'Listicle',
+                      style: theme.textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.bold
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
                 ),
               ),
-              if (_quickAddQuery.trim().isNotEmpty)
-                Positioned(
-                  top: 8.0,
-                  left: geometry.horizontalPadding,
-                  right: geometry.horizontalPadding,
-                  // FIXED: Injects the listProvider into the builder
-                  child: _buildSmartSuggestions(theme, geometry, listProvider),
-                ),
-            ],
-
-            const FluidEditSheet(),
-            const BatchActionBar(),
-
-            AnimatedPositioned(
-              duration: const Duration(milliseconds: 300),
-              curve: Curves.easeOutCubic,
-              right: geometry.horizontalPadding,
-              bottom: (listProvider.isBatchModeActive || listProvider.editItemId != null || _isQuickAdding)
-                  ? -100.0
-                  : safeBottomPadding + AppConstants.listBottomClearance + geometry.horizontalPadding,
-              child: FloatingActionButton(
-                onPressed: _startQuickAdd,
-                backgroundColor: AppColors.primaryAction,
-                elevation: 4,
-                child: Icon(Icons.add, color: Colors.white, size: geometry.iconSize * 1.15),
-              ),
+              backgroundColor: theme.scaffoldBackgroundColor,
+              elevation: 0,
+              scrolledUnderElevation: 0.0,
+              surfaceTintColor: Colors.transparent,
+              centerTitle: false,
+              actions: [
+                if (_isQuickAdding)
+                  IconButton(
+                    icon: Icon(Icons.check_rounded, size: geometry.iconSize * 1.15, color: AppColors.primaryAction),
+                    onPressed: _commitQuickAdd,
+                  )
+                else
+                  PopupMenuButton<String>(
+                    icon: Icon(Icons.more_vert_rounded, size: geometry.iconSize, color: theme.textTheme.titleMedium?.color),
+                    onSelected: (String value) {
+                      if (value == 'share') {
+                        if (activeList != null) {
+                          ShareListSheet.show(context, activeList);
+                        }
+                      } else if (value == 'options') {
+                        showModalBottomSheet(
+                          context: context,
+                          isScrollControlled: true,
+                          backgroundColor: Colors.transparent,
+                          builder: (ctx) => const MainOptionsSheet(),
+                        );
+                      }
+                    },
+                    itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
+                      const PopupMenuItem<String>(
+                        value: 'share',
+                        child: Row(
+                          children: [
+                            Icon(Icons.person_add_alt_1_rounded, size: 20, color: AppColors.primaryAction),
+                            SizedBox(width: 12),
+                            Text('Share List', style: TextStyle(fontWeight: FontWeight.w600)),
+                          ],
+                        ),
+                      ),
+                      const PopupMenuDivider(),
+                      const PopupMenuItem<String>(
+                        value: 'options',
+                        child: Row(
+                          children: [
+                            Icon(Icons.tune_rounded, size: 20),
+                            SizedBox(width: 12),
+                            Text('List Options'),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+              ],
             ),
-          ],
-        ),
+            body: Stack(
+              children: [
+                displayList.isEmpty
+                    ? Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        'All caught up!\nTap + to add your first item.',
+                        textAlign: TextAlign.center,
+                        style: theme.textTheme.bodyMedium,
+                      ),
+                      if (listProvider.checkedDisplayList.isNotEmpty) ...[
+                        SizedBox(height: geometry.baseCardHeight),
+                        TextButton.icon(
+                          onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const CompletedItemsScreen())),
+                          icon: Icon(Icons.history_rounded, color: theme.textTheme.bodyMedium?.color),
+                          label: Text('View Completed Items', style: theme.textTheme.bodyMedium),
+                        ),
+                      ]
+                    ],
+                  ),
+                )
+                    : NotificationListener<ScrollNotification>(
+                  onNotification: (ScrollNotification notification) {
+                    if (listProvider.openSwipeItemId.value != null) {
+                      listProvider.openSwipeItemId.value = null;
+                    }
+
+                    if (notification is ScrollUpdateNotification && notification.dragDetails != null) {
+                      if (_isQuickAdding) {
+                        _closeQuickAdd();
+                      }
+
+                      if (listProvider.editItemId != null) {
+                        final isKeyboardOpen = MediaQuery.of(context).viewInsets.bottom > 0;
+                        if (isKeyboardOpen) {
+                          FocusManager.instance.primaryFocus?.unfocus();
+                        } else {
+                          listProvider.setEditItem(null);
+                        }
+                      }
+                    }
+                    return false;
+                  },
+                  child: Stack(
+                    children: [
+                      ReorderableListView.builder(
+                        scrollController: _scrollController,
+                        padding: EdgeInsets.only(
+                            top: AppConstants.listTopPadding,
+                            bottom: listProvider.isBatchModeActive
+                                ? AppConstants.batchModeBottomClearance
+                                : safeBottomPadding + AppConstants.listBottomClearance
+                        ),
+                        itemCount: displayList.length,
+                        buildDefaultDragHandles: false,
+
+                        footer: Column(
+                          key: const ValueKey('completed_footer'),
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (_isQuickAdding)
+                              SizedBox(height: MediaQuery.of(context).size.height),
+                            Padding(
+                              padding: EdgeInsets.symmetric(vertical: geometry.baseCardHeight / 2),
+                              child: TextButton.icon(
+                                onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const CompletedItemsScreen())),
+                                icon: Icon(Icons.history_rounded, color: theme.textTheme.bodyMedium?.color),
+                                label: Text('View Completed Items', style: theme.textTheme.bodyMedium),
+                              ),
+                            ),
+                          ],
+                        ),
+
+                        onReorder: (oldIndex, newIndex) {
+                          if (oldIndex == newIndex) {
+                            final item = displayList[oldIndex];
+                            if (item is ListItem) context.read<ListProvider>().toggleSelection(item.id);
+                            return;
+                          }
+                          context.read<ListProvider>().executeNativeReorder(oldIndex, newIndex);
+                        },
+                        proxyDecorator: (child, index, animation) {
+                          return Material(color: Colors.transparent, elevation: 8.0, shadowColor: Colors.black45, child: child);
+                        },
+                        itemBuilder: (context, index) {
+                          final item = displayList[index];
+
+                          if (item is String) {
+                            return Container(key: ValueKey('header_$item'), child: SectionHeader(title: item));
+                          }
+
+                          if (item is ListItem) {
+                            Widget coreCard = ListItemCard(
+                              title: item.title,
+                              nWrap: item.nWrap,
+                              nTagRows: item.nTagRows,
+                              attributeRows: item.attributeRows,
+                              type: item.type,
+                              category: item.category,
+                              sortMode: listProvider.currentSortMode,
+                              quantity: item.quantity,
+                              unit: item.unit,
+                              isHighlighted: listProvider.flashItemId == item.id,
+                              isDragging: false,
+                              isBatchModeActive: listProvider.isBatchModeActive,
+                              isBatchSelected: listProvider.selectedItemIds.contains(item.id),
+                              isFluidEditing: listProvider.editItemId == item.id,
+
+                              onCheck: () {
+                                final id = listProvider.toggleCompletion(item.id);
+                                _showActionToast(context, '${item.title} checked off', () => listProvider.restoreItems([id]));
+                              },
+                              onTap: () {
+                                if (listProvider.openSwipeItemId.value != null) {
+                                  listProvider.openSwipeItemId.value = null;
+                                } else {
+                                  if (listProvider.isBatchModeActive) {
+                                    context.read<ListProvider>().toggleSelection(item.id);
+                                  } else {
+                                    if (listProvider.editItemId == item.id) {
+                                      context.read<ListProvider>().setEditItem(null);
+                                    } else {
+                                      context.read<ListProvider>().setEditItem(item.id);
+                                    }
+                                  }
+                                }
+                              },
+                              onToggleSelection: () => context.read<ListProvider>().toggleSelection(item.id),
+                            );
+
+                            return ReorderableDelayedDragStartListener(
+                              key: ValueKey('drag_${item.id}'),
+                              index: index,
+                              child: SwipeActionWrapper(
+                                key: ValueKey('swipe_${item.id}'),
+                                itemId: item.id,
+                                requireConfirm: true,
+                                isBatchModeActive: listProvider.isBatchModeActive,
+                                onCheckout: () {
+                                  final id = listProvider.toggleCompletion(item.id);
+                                  _showActionToast(context, '${item.title} checked off', () => listProvider.restoreItems([id]));
+                                },
+                                onEdit: () {
+                                  listProvider.clearAllInteractions();
+                                  listProvider.setEditItem(item.id);
+                                  listProvider.setFullEditRequest(true);
+                                },
+                                onDelete: () {
+                                  final id = listProvider.deleteItem(item.id);
+                                  _showActionToast(context, '${item.title} deleted', () => listProvider.restoreItems([id]));
+                                },
+                                child: coreCard,
+                              ),
+                            );
+                          }
+                          return const SizedBox.shrink();
+                        },
+                      ),
+                      ValueListenableBuilder<PhantomHeaderData>(
+                        valueListenable: _phantomHeaderState,
+                        builder: (context, data, child) {
+                          if (data.title == null) return const SizedBox.shrink();
+                          return Positioned(
+                            top: 0, left: 0, right: 0,
+                            child: RepaintBoundary(
+                              child: Transform.translate(offset: Offset(0, data.yOffset), child: SectionHeader(title: data.title!)),
+                            ),
+                          );
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+
+                if (_isQuickAdding) ...[
+                  Positioned.fill(
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: _closeQuickAdd,
+                      onPanStart: (_) => _closeQuickAdd(),
+                      child: const SizedBox.expand(),
+                    ),
+                  ),
+                  if (_quickAddQuery.trim().isNotEmpty)
+                    Positioned(
+                      top: 8.0,
+                      left: geometry.horizontalPadding,
+                      right: geometry.horizontalPadding,
+                      child: _buildSmartSuggestions(theme, geometry, listProvider),
+                    ),
+                ],
+
+                const BatchActionBar(),
+
+                AnimatedPositioned(
+                  duration: const Duration(milliseconds: 300),
+                  curve: Curves.easeOutCubic,
+                  right: geometry.horizontalPadding,
+                  bottom: (listProvider.isBatchModeActive || listProvider.editItemId != null || _isQuickAdding)
+                      ? -100.0
+                      : safeBottomPadding + AppConstants.listBottomClearance + geometry.horizontalPadding,
+                  child: FloatingActionButton(
+                    onPressed: _startQuickAdd,
+                    backgroundColor: AppColors.primaryAction,
+                    elevation: 4,
+                    child: Icon(Icons.add, color: Colors.white, size: geometry.iconSize * 1.15),
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          // FIXED: Moved outside the Scaffold so it renders OVER the AppBar and absorbs all taps!
+          const FluidEditSheet(),
+        ],
       ),
     );
   }
