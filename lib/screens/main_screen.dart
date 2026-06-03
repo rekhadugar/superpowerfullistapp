@@ -427,29 +427,44 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
                   borderRadius: BorderRadius.circular(pillHeight / 2),
                 ),
                 child: _isQuickAdding
-                    ? Container(
-                  alignment: Alignment.center,
-                  child: TextField(
-                    controller: _quickAddController,
-                    focusNode: _quickAddFocus,
-                    textCapitalization: TextCapitalization.words,
-                    textInputAction: TextInputAction.done,
-                    onSubmitted: (_) => _commitQuickAdd(),
-                    textAlignVertical: TextAlignVertical.center,
-                    style: theme.textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w600,
-                    ),
-                    decoration: InputDecoration(
-                      hintText: 'Add an item...',
-                      hintStyle: theme.textTheme.titleMedium?.copyWith(
-                        color: theme.hintColor,
-                        fontWeight: FontWeight.normal,
-                      ),
-                      border: InputBorder.none,
-                      isDense: true,
-                      contentPadding: EdgeInsets.symmetric(horizontal: geometry.horizontalPadding),
-                    ),
-                  ),
+                    ? AnimatedBuilder(
+                  animation: _quickAddController,
+                  builder: (context, child) {
+                    return Stack(
+                      alignment: Alignment.centerLeft,
+                      children: [
+                        // FIXED: Perfectly centered placeholder text
+                        if (_quickAddController.text.isEmpty)
+                          Center(
+                            child: Text(
+                              'Add an item...',
+                              style: theme.textTheme.titleMedium?.copyWith(
+                                color: theme.hintColor,
+                                fontWeight: FontWeight.normal,
+                              ),
+                            ),
+                          ),
+                        // FIXED: Left-aligned active text and cursor
+                        TextField(
+                          controller: _quickAddController,
+                          focusNode: _quickAddFocus,
+                          textAlign: TextAlign.left,
+                          textCapitalization: TextCapitalization.words,
+                          textInputAction: TextInputAction.done,
+                          onSubmitted: (_) => _commitQuickAdd(),
+                          textAlignVertical: TextAlignVertical.center,
+                          style: theme.textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.w600,
+                          ),
+                          decoration: InputDecoration(
+                            border: InputBorder.none,
+                            isDense: true,
+                            contentPadding: EdgeInsets.symmetric(horizontal: geometry.horizontalPadding),
+                          ),
+                        ),
+                      ],
+                    );
+                  },
                 )
                     : GestureDetector(
                   onTap: _startQuickAdd,

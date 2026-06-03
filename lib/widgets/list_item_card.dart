@@ -268,9 +268,15 @@ class _ListItemCardState extends State<ListItemCard> with SingleTickerProviderSt
                         child: Text(
                           widget.quantity > 0 ? '${widget.title} - ${widget.quantity} ${widget.unit}' : widget.title,
                           maxLines: AppConstants.maxTitleLines, overflow: TextOverflow.ellipsis,
-                          style: theme.textTheme.titleMedium?.copyWith(fontSize: AppConstants.titleFontSize, height: AppConstants.titleLineHeight),
+                          style: theme.textTheme.titleMedium?.copyWith(
+                            fontSize: AppConstants.titleFontSize,
+                            height: AppConstants.titleLineHeight,
+                            // FIXED: Bumped to w600 (Semi-bold) to pop against the regular badges
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
                       ),
+
                     ],
                   ),
                 ),

@@ -36,11 +36,11 @@ class SectionHeader extends StatelessWidget {
       color: theme.scaffoldBackgroundColor,
       child: Text(
         title,
-        style: theme.textTheme.titleSmall?.copyWith(
-          fontSize: AppConstants.headerFontSize,
-          fontWeight: FontWeight.w700,
+        // FIXED: Shifted to titleMedium and synchronized fontSize with Item Cards
+        style: theme.textTheme.titleMedium?.copyWith(
+          fontSize: AppConstants.titleFontSize,
+          fontWeight: FontWeight.w700, // Bold
           letterSpacing: 0.3,
-          color: theme.textTheme.titleLarge?.color,
         ),
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
