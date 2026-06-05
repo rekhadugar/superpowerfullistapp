@@ -4,7 +4,8 @@ class MacroList {
   final String typeId;
   final double displayOrder;
   final DateTime createdAt;
-  final List<String> editors; // NEW: The multiplayer bouncer
+  final List<String> editors;
+  final int activeItemCount; // NEW: Denormalized counter for NoSQL optimization
 
   MacroList({
     required this.id,
@@ -13,6 +14,7 @@ class MacroList {
     this.displayOrder = 100.0,
     required this.createdAt,
     required this.editors,
+    this.activeItemCount = -1, // -1 acts as the "unmigrated/legacy" flag
   });
 
   Map<String, dynamic> toMap() {
@@ -23,6 +25,7 @@ class MacroList {
       'displayOrder': displayOrder,
       'createdAt': createdAt.toIso8601String(),
       'editors': editors,
+      'activeItemCount': activeItemCount,
     };
   }
 
@@ -35,8 +38,8 @@ class MacroList {
       createdAt: map['createdAt'] != null
           ? DateTime.parse(map['createdAt'])
           : DateTime.now(),
-      // Default to empty array to prevent crashes on legacy data
       editors: List<String>.from(map['editors'] ?? []),
+      activeItemCount: map['activeItemCount'] ?? -1,
     );
   }
 
@@ -44,16 +47,17 @@ class MacroList {
     String? name,
     String? typeId,
     double? displayOrder,
-    DateTime? createdAt,
     List<String>? editors,
+    int? activeItemCount,
   }) {
     return MacroList(
       id: id,
       name: name ?? this.name,
       typeId: typeId ?? this.typeId,
       displayOrder: displayOrder ?? this.displayOrder,
-      createdAt: createdAt ?? this.createdAt,
+      createdAt: createdAt,
       editors: editors ?? this.editors,
+      activeItemCount: activeItemCount ?? this.activeItemCount,
     );
   }
 }

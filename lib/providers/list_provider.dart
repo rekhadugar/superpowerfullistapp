@@ -447,7 +447,6 @@ class ListProvider extends ChangeNotifier {
 
     if (exactMatchIndex != -1) {
       final existingItem = _items[exactMatchIndex];
-      // Merge: Update the existing document in Firestore
       listRef.doc(existingItem.id).update({
         'quantity': (existingItem.quantity + newQty).clamp(0, 99),
         'unit': newUnit,
@@ -476,7 +475,8 @@ class ListProvider extends ChangeNotifier {
       globalCustomOrder: maxGlobal + 100.0,
     );
 
-    // Write new item to Firestore
+    // FIXED: Increment the denormalized active counter
+    _adjustActiveItemCount(_currentListId!, 1);
     listRef.doc(newItem.id).set(newItem.toMap());
 
     _flashItemId = newItem.id;
@@ -485,6 +485,143 @@ class ListProvider extends ChangeNotifier {
       _flashItemId = null;
       notifyListeners();
     });
+  }
+
+  String toggleCompletion(String id) {
+    if (_currentListId == null) return id;
+    final uid = AuthService.currentUserId;
+    if (uid == null) return id;
+
+    final index = _items.indexWhere((item) => item.id == id);
+    if (index != -1) {
+      final isNowCompleted = !_items[index].isCompleted;
+
+      // FIXED: Track completion state
+      _adjustActiveItemCount(_currentListId!, isNowCompleted ? -1 : 1);
+
+      FirebaseFirestore.instance
+          .collection('users')
+          .doc(uid)
+          .collection('lists')
+          .doc(_currentListId)
+          .collection('items')
+          .doc(id)
+          .update({
+        'isCompleted': isNowCompleted,
+        'completedAt': isNowCompleted ? DateTime.now().toIso8601String() : null,
+      });
+    }
+    return id;
+  }
+
+  String deleteItem(String id) {
+    if (_currentListId == null) return id;
+    final uid = AuthService.currentUserId;
+    if (uid == null) return id;
+
+    final index = _items.indexWhere((item) => item.id == id);
+    if (index != -1) {
+      // FIXED: Only decrement if the item was actively rendered
+      if (!_items[index].isDeleted && !_items[index].isCompleted) {
+        _adjustActiveItemCount(_currentListId!, -1);
+      }
+
+      FirebaseFirestore.instance
+          .collection('users')
+          .doc(uid)
+          .collection('lists')
+          .doc(_currentListId)
+          .collection('items')
+          .doc(id)
+          .update({'isDeleted': true});
+    }
+    return id;
+  }
+
+  void editItem(String id, String newTitle, List<String> newAttributes, String type, String category, int newQty, String newUnit) {
+    if (_currentListId == null) return;
+    final uid = AuthService.currentUserId;
+    if (uid == null) return;
+
+    final index = _items.indexWhere((item) => item.id == id);
+    if (index != -1) {
+      final oldItem = _items[index];
+      final safeType = type.trim().isEmpty ? "Any" : type.trim();
+      final safeCategory = category.trim().isEmpty ? "Everything Else" : category.trim();
+
+      final sortedNewTags = List<String>.from(newAttributes)..sort();
+      final newTagString = sortedNewTags.join(",");
+
+      final exactMatchIndex = _items.indexWhere((item) {
+        if (item.id == id) return false;
+        if (item.isDeleted || item.isCompleted) return false;
+        if (item.title.trim().toLowerCase() != newTitle.trim().toLowerCase()) return false;
+        if (item.category != safeCategory) return false;
+        if (item.type != safeType) return false;
+        final itemTags = List<String>.from(item.attributeRows)..sort();
+        return itemTags.join(",") == newTagString;
+      });
+
+      final batch = FirebaseFirestore.instance.batch();
+      final listRef = FirebaseFirestore.instance
+          .collection('users')
+          .doc(uid)
+          .collection('lists')
+          .doc(_currentListId)
+          .collection('items');
+
+      if (exactMatchIndex != -1) {
+        final existingItem = _items[exactMatchIndex];
+        batch.update(listRef.doc(existingItem.id), {
+          'quantity': (existingItem.quantity + newQty).clamp(0, 99),
+          'unit': newUnit,
+        });
+        batch.update(listRef.doc(id), {'isDeleted': true});
+        batch.commit();
+        triggerSequentialFlash(existingItem.id);
+        return;
+      }
+
+      double newCatOrder = oldItem.categoryOrder;
+      double newTypeOrder = oldItem.typeOrder;
+
+      if (oldItem.category != safeCategory) {
+        double maxCat = 0.0;
+        for (var i in _items) {
+          if (i.category == safeCategory && i.categoryOrder > maxCat) maxCat = i.categoryOrder;
+        }
+        newCatOrder = maxCat + 100.0;
+      }
+
+      if (oldItem.type != safeType) {
+        double maxType = 0.0;
+        for (var i in _items) {
+          if (i.type == safeType && i.typeOrder > maxType) maxType = i.typeOrder;
+        }
+        newTypeOrder = maxType + 100.0;
+      }
+
+      // FIXED: If editing a dead item (restoring it via edit), reactivate it
+      bool wasInactive = oldItem.isDeleted || oldItem.isCompleted;
+      if (wasInactive) {
+        _adjustActiveItemCount(_currentListId!, 1);
+      }
+
+      listRef.doc(id).update({
+        'title': newTitle,
+        'attributeRows': newAttributes,
+        'type': safeType,
+        'category': safeCategory,
+        'quantity': newQty,
+        'unit': newUnit,
+        'categoryOrder': newCatOrder,
+        'typeOrder': newTypeOrder,
+        'isCompleted': false,
+        'completedAt': null,
+      });
+
+      clearSelection();
+    }
   }
 
   // --- FLUID SHEET & SELECTION STATE ---
@@ -652,7 +789,7 @@ class ListProvider extends ChangeNotifier {
 
     final batch = FirebaseFirestore.instance.batch();
     final listRef = FirebaseFirestore.instance.collection('lists').doc(_currentListId).collection('items');
-    bool changed = false;
+    int changedCount = 0;
 
     for (int i = 0; i < _items.length; i++) {
       if (!_items[i].isDeleted && !_items[i].isCompleted) {
@@ -663,33 +800,11 @@ class ListProvider extends ChangeNotifier {
           'isCompleted': true,
           'completedAt': now.toIso8601String(),
         });
-        changed = true;
+        changedCount++;
       }
     }
-    if (changed) {
-      batch.commit();
-      _buildDisplayList();
-      _buildCheckedDisplayList();
-      notifyListeners();
-    }
-  }
-
-  void deleteCompletedItems() {
-    final uid = AuthService.currentUserId;
-    if (uid == null || _currentListId == null) return;
-
-    final batch = FirebaseFirestore.instance.batch();
-    final listRef = FirebaseFirestore.instance.collection('lists').doc(_currentListId).collection('items');
-    bool changed = false;
-
-    for (int i = 0; i < _items.length; i++) {
-      if (_items[i].isCompleted && !_items[i].isDeleted) {
-        _items[i] = _items[i].copyWith(isDeleted: true);
-        batch.update(listRef.doc(_items[i].id), {'isDeleted': true});
-        changed = true;
-      }
-    }
-    if (changed) {
+    if (changedCount > 0) {
+      _adjustActiveItemCount(_currentListId!, -changedCount);
       batch.commit();
       _buildDisplayList();
       _buildCheckedDisplayList();
@@ -705,9 +820,13 @@ class ListProvider extends ChangeNotifier {
     final batch = FirebaseFirestore.instance.batch();
     final listRef = FirebaseFirestore.instance.collection('lists').doc(_currentListId).collection('items');
 
+    int activeChecked = 0;
+
     for (String id in checkedIds) {
       final index = _items.indexWhere((item) => item.id == id);
       if (index != -1) {
+        if (!_items[index].isCompleted && !_items[index].isDeleted) activeChecked++;
+
         final now = DateTime.now();
         _items[index] = _items[index].copyWith(isCompleted: true, completedAt: now);
         batch.update(listRef.doc(id), {
@@ -717,6 +836,7 @@ class ListProvider extends ChangeNotifier {
       }
     }
 
+    if (activeChecked > 0) _adjustActiveItemCount(_currentListId!, -activeChecked);
     batch.commit();
     clearSelection();
     _buildDisplayList();
@@ -732,19 +852,58 @@ class ListProvider extends ChangeNotifier {
     final batch = FirebaseFirestore.instance.batch();
     final listRef = FirebaseFirestore.instance.collection('lists').doc(_currentListId).collection('items');
 
+    int activeDeleted = 0;
+
     for (String id in deletedIds) {
       final index = _items.indexWhere((item) => item.id == id);
       if (index != -1) {
+        if (!_items[index].isCompleted && !_items[index].isDeleted) activeDeleted++;
+
         _items[index] = _items[index].copyWith(isDeleted: true);
         batch.update(listRef.doc(id), {'isDeleted': true});
       }
     }
 
+    if (activeDeleted > 0) _adjustActiveItemCount(_currentListId!, -activeDeleted);
     batch.commit();
     clearSelection();
     _buildDisplayList();
     _buildCheckedDisplayList();
     return deletedIds;
+  }
+
+  void restoreItems(List<String> ids) {
+    final uid = AuthService.currentUserId;
+    if (uid == null || _currentListId == null) return;
+
+    final batch = FirebaseFirestore.instance.batch();
+    final listRef = FirebaseFirestore.instance.collection('lists').doc(_currentListId).collection('items');
+    int activeRestored = 0;
+
+    for (String id in ids) {
+      final index = _items.indexWhere((item) => item.id == id);
+      if (index != -1) {
+        if (_items[index].isDeleted || _items[index].isCompleted) activeRestored++;
+
+        _items[index] = _items[index].copyWith(
+          isDeleted: false,
+          isCompleted: false,
+          completedAt: null,
+        );
+        batch.update(listRef.doc(id), {
+          'isDeleted': false,
+          'isCompleted': false,
+          'completedAt': null,
+        });
+      }
+    }
+    if (activeRestored > 0) {
+      _adjustActiveItemCount(_currentListId!, activeRestored);
+      batch.commit();
+      _buildDisplayList();
+      _buildCheckedDisplayList();
+      notifyListeners();
+    }
   }
 
   Future<void> moveSelectedToTargetList(String targetListId) async {
@@ -759,15 +918,20 @@ class ListProvider extends ChangeNotifier {
     final sourceRef = FirebaseFirestore.instance.collection('lists').doc(_currentListId).collection('items');
     final destRef = FirebaseFirestore.instance.collection('lists').doc(targetListId).collection('items');
 
-    // Optimistic UI Update (remove from current view instantly)
+    int activeMoved = itemsToMove.where((i) => !i.isCompleted && !i.isDeleted).length;
+
     _items.removeWhere((item) => _selectedItemIds.contains(item.id));
     _buildDisplayList();
     _buildCheckedDisplayList();
 
-    // Stage the network transaction
     for (var item in itemsToMove) {
-      batch.delete(sourceRef.doc(item.id)); // Delete from old subcollection
-      batch.set(destRef.doc(item.id), item.toMap()); // Add to new subcollection
+      batch.delete(sourceRef.doc(item.id));
+      batch.set(destRef.doc(item.id), item.toMap());
+    }
+
+    if (activeMoved > 0) {
+      _adjustActiveItemCount(_currentListId!, -activeMoved);
+      _adjustActiveItemCount(targetListId, activeMoved);
     }
 
     await batch.commit();
@@ -786,7 +950,9 @@ class ListProvider extends ChangeNotifier {
     final batch = FirebaseFirestore.instance.batch();
     final destRef = FirebaseFirestore.instance.collection('lists').doc(targetListId).collection('items');
 
+    int activeCopied = itemsToCopy.where((i) => !i.isCompleted && !i.isDeleted).length;
     int timeOffset = 0;
+
     for (var original in itemsToCopy) {
       final newId = DateTime.now().microsecondsSinceEpoch.toString() + original.id + timeOffset.toString();
       final copiedItem = original.copyWith(
@@ -798,41 +964,11 @@ class ListProvider extends ChangeNotifier {
       timeOffset++;
     }
 
+    if (activeCopied > 0) _adjustActiveItemCount(targetListId, activeCopied);
+
     await batch.commit();
     clearSelection();
     notifyListeners();
-  }
-
-  void restoreItems(List<String> ids) {
-    final uid = AuthService.currentUserId;
-    if (uid == null || _currentListId == null) return;
-
-    final batch = FirebaseFirestore.instance.batch();
-    final listRef = FirebaseFirestore.instance.collection('lists').doc(_currentListId).collection('items');
-    bool changed = false;
-
-    for (String id in ids) {
-      final index = _items.indexWhere((item) => item.id == id);
-      if (index != -1) {
-        _items[index] = _items[index].copyWith(
-          isDeleted: false,
-          isCompleted: false,
-          completedAt: null,
-        );
-        batch.update(listRef.doc(id), {
-          'isDeleted': false,
-          'isCompleted': false,
-          'completedAt': null,
-        });
-        changed = true;
-      }
-    }
-    if (changed) {
-      batch.commit();
-      _buildDisplayList();
-      _buildCheckedDisplayList();
-      notifyListeners();
-    }
   }
 
   void copySelectedItems() {
@@ -858,6 +994,9 @@ class ListProvider extends ChangeNotifier {
     }
 
     if (newItems.isNotEmpty) {
+      int activeCopied = newItems.where((i) => !i.isCompleted && !i.isDeleted).length;
+      if (activeCopied > 0) _adjustActiveItemCount(_currentListId!, activeCopied);
+
       _items.addAll(newItems);
       batch.commit();
       clearSelection();
@@ -866,85 +1005,26 @@ class ListProvider extends ChangeNotifier {
     }
   }
 
-  void editItem(String id, String newTitle, List<String> newAttributes, String type, String category, int newQty, String newUnit) {
-    if (_currentListId == null) return;
+  void deleteCompletedItems() {
     final uid = AuthService.currentUserId;
-    if (uid == null) return;
+    if (uid == null || _currentListId == null) return;
 
-    final index = _items.indexWhere((item) => item.id == id);
-    if (index != -1) {
-      final oldItem = _items[index];
-      final safeType = type.trim().isEmpty ? "Any" : type.trim();
-      final safeCategory = category.trim().isEmpty ? "Everything Else" : category.trim();
+    final batch = FirebaseFirestore.instance.batch();
+    final listRef = FirebaseFirestore.instance.collection('lists').doc(_currentListId).collection('items');
+    bool changed = false;
 
-      final sortedNewTags = List<String>.from(newAttributes)..sort();
-      final newTagString = sortedNewTags.join(",");
-
-      final exactMatchIndex = _items.indexWhere((item) {
-        if (item.id == id) return false;
-        if (item.isDeleted || item.isCompleted) return false;
-        if (item.title.trim().toLowerCase() != newTitle.trim().toLowerCase()) return false;
-        if (item.category != safeCategory) return false;
-        if (item.type != safeType) return false;
-        final itemTags = List<String>.from(item.attributeRows)..sort();
-        return itemTags.join(",") == newTagString;
-      });
-
-      final batch = FirebaseFirestore.instance.batch();
-      final listRef = FirebaseFirestore.instance
-          .collection('users')
-          .doc(uid)
-          .collection('lists')
-          .doc(_currentListId)
-          .collection('items');
-
-      if (exactMatchIndex != -1) {
-        final existingItem = _items[exactMatchIndex];
-        // Merge Exact Match: Increase target qty, soft-delete the old source
-        batch.update(listRef.doc(existingItem.id), {
-          'quantity': (existingItem.quantity + newQty).clamp(0, 99),
-          'unit': newUnit,
-        });
-        batch.update(listRef.doc(id), {'isDeleted': true});
-        batch.commit();
-        triggerSequentialFlash(existingItem.id);
-        return;
+    for (int i = 0; i < _items.length; i++) {
+      if (_items[i].isCompleted && !_items[i].isDeleted) {
+        _items[i] = _items[i].copyWith(isDeleted: true);
+        batch.update(listRef.doc(_items[i].id), {'isDeleted': true});
+        changed = true;
       }
-
-      double newCatOrder = oldItem.categoryOrder;
-      double newTypeOrder = oldItem.typeOrder;
-
-      if (oldItem.category != safeCategory) {
-        double maxCat = 0.0;
-        for (var i in _items) {
-          if (i.category == safeCategory && i.categoryOrder > maxCat) maxCat = i.categoryOrder;
-        }
-        newCatOrder = maxCat + 100.0;
-      }
-
-      if (oldItem.type != safeType) {
-        double maxType = 0.0;
-        for (var i in _items) {
-          if (i.type == safeType && i.typeOrder > maxType) maxType = i.typeOrder;
-        }
-        newTypeOrder = maxType + 100.0;
-      }
-
-      // Update the document directly
-      listRef.doc(id).update({
-        'title': newTitle,
-        'attributeRows': newAttributes,
-        'type': safeType,
-        'category': safeCategory,
-        'quantity': newQty,
-        'unit': newUnit,
-        'categoryOrder': newCatOrder,
-        'typeOrder': newTypeOrder,
-        'isCompleted': false,
-        'completedAt': null,
-      });
-
-      clearSelection();
+    }
+    if (changed) {
+      batch.commit();
+      _buildDisplayList();
+      _buildCheckedDisplayList();
+      notifyListeners();
     }
   }
 
@@ -1268,48 +1348,6 @@ class ListProvider extends ChangeNotifier {
     }
   }
 
-  String toggleCompletion(String id) {
-    if (_currentListId == null) return id;
-    final uid = AuthService.currentUserId;
-    if (uid == null) return id;
-
-    final index = _items.indexWhere((item) => item.id == id);
-    if (index != -1) {
-      final isNowCompleted = !_items[index].isCompleted;
-      FirebaseFirestore.instance
-          .collection('users')
-          .doc(uid)
-          .collection('lists')
-          .doc(_currentListId)
-          .collection('items')
-          .doc(id)
-          .update({
-        'isCompleted': isNowCompleted,
-        'completedAt': isNowCompleted ? DateTime.now().toIso8601String() : null,
-      });
-    }
-    return id;
-  }
-
-  String deleteItem(String id) {
-    if (_currentListId == null) return id;
-    final uid = AuthService.currentUserId;
-    if (uid == null) return id;
-
-    final index = _items.indexWhere((item) => item.id == id);
-    if (index != -1) {
-      FirebaseFirestore.instance
-          .collection('users')
-          .doc(uid)
-          .collection('lists')
-          .doc(_currentListId)
-          .collection('items')
-          .doc(id)
-          .update({'isDeleted': true}); // Preserves soft-delete for Undo
-    }
-    return id;
-  }
-
   // ==========================================
   // SHOPPING MODE ENGINE HOOKS
   // ==========================================
@@ -1319,9 +1357,27 @@ class ListProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  // --- NEW: INCREMENT HELPER ---
+  // Uses atomic FieldValue increments to safely update the parent MacroList
+  void _adjustActiveItemCount(String listId, int delta) {
+    if (delta == 0) return;
+    final uid = AuthService.currentUserId;
+    if (uid == null) return;
+
+    // FIXED: Upsert (set with merge) instead of strict update
+    FirebaseFirestore.instance
+        .collection('users')
+        .doc(uid)
+        .collection('lists')
+        .doc(listId)
+        .set({'activeItemCount': FieldValue.increment(delta)}, SetOptions(merge: true));
+  }
+
+  // --- UPDATED SHOPPING MODE ENGINE ---
   Future<void> initializeShoppingMode(List<dynamic> allMacroLists) async {
     _isLoadingShoppingMode = true;
     notifyListeners();
+
     _shoppingModeItems.clear();
     _shoppingCompletedItems.clear();
     _itemOriginMap.clear();
@@ -1334,32 +1390,65 @@ class ListProvider extends ChangeNotifier {
       return;
     }
 
-    final shoppingLists = allMacroLists.where((l) => l.typeId == 'sys_shopping').toList();
+    // FIXED: Skip lists that definitively have 0 active items, saving read queries!
+    // We explicitly allow -1 (legacy lists) to pass through so we can heal them.
+    final shoppingLists = allMacroLists.where((l) => l.typeId == 'sys_shopping' && l.activeItemCount != 0).toList();
 
-    for (var list in shoppingLists) {
-      final snapshot = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(uid)
-          .collection('lists')
-          .doc(list.id)
-          .collection('items')
-          .get();
+    final fetchTasks = shoppingLists.map((list) async {
+      try {
+        final snapshot = await FirebaseFirestore.instance
+            .collection('users')
+            .doc(uid)
+            .collection('lists')
+            .doc(list.id)
+            .collection('items')
+            .get();
 
-      for (var doc in snapshot.docs) {
+        return {
+          'listId': list.id,
+          'listRef': list,
+          'docs': snapshot.docs,
+        };
+      } catch (e) {
+        return {'listId': list.id, 'listRef': list, 'docs': []};
+      }
+    });
+
+    final results = await Future.wait(fetchTasks);
+
+    for (var result in results) {
+      final listId = result['listId'] as String;
+      final parentList = result['listRef'] as dynamic; // MacroList
+      final docs = result['docs'] as List<dynamic>;
+
+      int actualActiveCount = 0;
+
+      for (var doc in docs) {
         final item = ListItem.fromMap(doc.data());
         if (!item.isDeleted) {
-          _itemOriginMap[item.id] = list.id;
+          _itemOriginMap[item.id] = listId;
 
           if (item.isCompleted) {
             _shoppingCompletedItems.add(item);
           } else {
+            actualActiveCount++;
             _shoppingModeItems.add(item);
           }
         }
       }
+
+      // THE SELF-HEALING PROTOCOL
+      // If the list is legacy data (-1), heal it now by setting its true active item count.
+      if (parentList.activeItemCount == -1) {
+        FirebaseFirestore.instance
+            .collection('users')
+            .doc(uid)
+            .collection('lists')
+            .doc(listId)
+            .set({'activeItemCount': actualActiveCount}, SetOptions(merge: true)); // FIXED: Upsert
+      }
     }
 
-    // FIXED: Invoke wrap recalculations on fetch to ensure geometric heights aren't collapsed to 0px
     _recalculateWrapsForShopping();
     _isLoadingShoppingMode = false;
     notifyListeners();
@@ -1490,11 +1579,17 @@ class ListProvider extends ChangeNotifier {
   }
 
   Future<void> toggleShoppingItemsCompletion(List<String> itemIds) async {
+    Map<String, int> listDeltas = {};
+
     for (String itemId in itemIds) {
       int index = _shoppingModeItems.indexWhere((i) => i.id == itemId);
       if (index != -1) {
         ListItem item = _shoppingModeItems[index];
-        final isNowCompleted = true;
+
+        final listId = _itemOriginMap[itemId];
+        if (listId != null) {
+          listDeltas[listId] = (listDeltas[listId] ?? 0) - 1; // Leaving active array
+        }
 
         if (_activeShoppingStore != null && _activeShoppingStore != 'Any') {
           final currentLocs = List<String>.from(item.locations);
@@ -1507,46 +1602,60 @@ class ListProvider extends ChangeNotifier {
         item = item.copyWith(isCompleted: true, completedAt: DateTime.now());
 
         _shoppingModeItems.removeAt(index);
-        _shoppingCompletedItems.insert(0, item); // Move to completed array
+        _shoppingCompletedItems.insert(0, item);
         await _updateOriginListStorage(itemId, item);
       }
     }
+
+    for (var entry in listDeltas.entries) {
+      _adjustActiveItemCount(entry.key, entry.value);
+    }
+
     clearSelection();
     notifyListeners();
   }
 
   Future<void> restoreShoppingItems(List<String> itemIds) async {
+    Map<String, int> listDeltas = {};
+
     for (String itemId in itemIds) {
       int compIndex = _shoppingCompletedItems.indexWhere((i) => i.id == itemId);
       if (compIndex != -1) {
         ListItem item = _shoppingCompletedItems[compIndex];
         item = item.copyWith(isCompleted: false, completedAt: null);
 
+        final listId = _itemOriginMap[itemId];
+        if (listId != null) {
+          listDeltas[listId] = (listDeltas[listId] ?? 0) + 1; // Returning to active array
+        }
+
         _shoppingCompletedItems.removeAt(compIndex);
-        _shoppingModeItems.insert(0, item); // Move back to active array
+        _shoppingModeItems.insert(0, item);
         await _updateOriginListStorage(itemId, item);
       }
     }
+
+    for (var entry in listDeltas.entries) {
+      _adjustActiveItemCount(entry.key, entry.value);
+    }
+
     notifyListeners();
   }
 
-  Future<void> deleteShoppingItemPermanently(String itemId) async {
-    int compIndex = _shoppingCompletedItems.indexWhere((i) => i.id == itemId);
-    if (compIndex != -1) {
-      ListItem item = _shoppingCompletedItems[compIndex];
-      item = item.copyWith(isDeleted: true);
-      _shoppingCompletedItems.removeAt(compIndex);
-      await _updateOriginListStorage(itemId, item);
-      notifyListeners();
-    }
-  }
-
   Future<void> deleteShoppingItems(List<String> itemIds) async {
+    Map<String, int> listDeltas = {};
+
     for (String itemId in itemIds) {
       int index = _shoppingModeItems.indexWhere((i) => i.id == itemId);
       if (index != -1) {
         ListItem item = _shoppingModeItems[index];
         item = item.copyWith(isDeleted: true);
+
+        final listId = _itemOriginMap[itemId];
+        if (listId != null) {
+          listDeltas[listId] = (listDeltas[listId] ?? 0) - 1; // Leaving active array
+        }
+
         _shoppingModeItems.removeAt(index);
         await _updateOriginListStorage(itemId, item);
         continue;
@@ -1560,6 +1669,11 @@ class ListProvider extends ChangeNotifier {
         await _updateOriginListStorage(itemId, item);
       }
     }
+
+    for (var entry in listDeltas.entries) {
+      _adjustActiveItemCount(entry.key, entry.value);
+    }
+
     clearSelection();
     notifyListeners();
   }
@@ -1567,6 +1681,7 @@ class ListProvider extends ChangeNotifier {
   Future<void> restoreDeletedShoppingItems(List<String> itemIds) async {
     final uid = AuthService.currentUserId;
     if (uid == null) return;
+    Map<String, int> listDeltas = {};
 
     for (String itemId in itemIds) {
       final listId = _itemOriginMap[itemId];
@@ -1580,24 +1695,21 @@ class ListProvider extends ChangeNotifier {
           .collection('items')
           .doc(itemId);
 
-      // Fetch the soft-deleted item from Firestore
       final snapshot = await docRef.get();
       if (snapshot.exists && snapshot.data() != null) {
         ListItem item = ListItem.fromMap(snapshot.data()!);
         item = item.copyWith(isDeleted: false);
 
-        // Restore it in the database
         await docRef.update({'isDeleted': false});
 
-        // Put it back in the correct UI array
         if (!item.isCompleted) {
+          listDeltas[listId] = (listDeltas[listId] ?? 0) + 1; // Back to active
           _shoppingModeItems.insert(0, item);
         } else {
           _shoppingCompletedItems.insert(0, item);
         }
       }
 
-      // Keep main UI synced if we happen to be viewing the same list
       if (_currentListId == listId) {
         final activeIndex = _items.indexWhere((i) => i.id == itemId);
         if (activeIndex != -1) {
@@ -1606,12 +1718,27 @@ class ListProvider extends ChangeNotifier {
       }
     }
 
+    for (var entry in listDeltas.entries) {
+      _adjustActiveItemCount(entry.key, entry.value);
+    }
+
     if (_currentListId != null) {
       _buildDisplayList();
       _buildCheckedDisplayList();
     }
 
     notifyListeners();
+  }
+
+  Future<void> deleteShoppingItemPermanently(String itemId) async {
+    int compIndex = _shoppingCompletedItems.indexWhere((i) => i.id == itemId);
+    if (compIndex != -1) {
+      ListItem item = _shoppingCompletedItems[compIndex];
+      item = item.copyWith(isDeleted: true);
+      _shoppingCompletedItems.removeAt(compIndex);
+      await _updateOriginListStorage(itemId, item);
+      notifyListeners();
+    }
   }
 
   Future<void> banishShoppingItems(List<String> itemIds) async {
