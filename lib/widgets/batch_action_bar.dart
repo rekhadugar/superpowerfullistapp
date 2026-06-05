@@ -101,6 +101,7 @@ class BatchActionBar extends StatelessWidget {
 
     final isVisible = selectedCount > 0;
     final safeBottom = MediaQuery.of(context).padding.bottom;
+    final theme = Theme.of(context);
 
     return AnimatedPositioned(
       duration: const Duration(milliseconds: 300),
@@ -111,61 +112,38 @@ class BatchActionBar extends StatelessWidget {
       child: Material(
         elevation: 8.0,
         borderRadius: BorderRadius.circular(16.0),
-        color: Colors.grey.shade900,
+        color: theme.colorScheme.inverseSurface,
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 12.0),
+          padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 8.0),
           child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             children: [
-              IconButton(
-                icon: const Icon(Icons.close_rounded, color: Colors.white70),
-                onPressed: () => provider.clearSelection(),
-                tooltip: 'Clear Selection',
-              ),
-
-              // FIXED: Wrapped in Flexible to prevent RenderFlex overflow at 1.5x scale
-              Flexible(
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 6.0),
-                  decoration: BoxDecoration(
-                    color: AppColors.primaryAction,
-                    borderRadius: BorderRadius.circular(20.0),
-                  ),
-                  child: Text(
-                    '$selectedCount Selected',
-                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-              ),
-
-              const Spacer(),
               if (isCompletedScreen) ...[
                 TextButton.icon(
-                  icon: const Icon(Icons.restore, color: Colors.white),
-                  label: const Text('Restore', style: TextStyle(color: Colors.white)),
+                  icon: Icon(Icons.restore, color: theme.colorScheme.onInverseSurface),
+                  label: Text('Restore', style: TextStyle(color: theme.colorScheme.onInverseSurface, fontWeight: FontWeight.bold)),
                   onPressed: () {
                     provider.restoreItems(provider.selectedItemIds.toList());
                     provider.clearSelection();
                   },
                 ),
               ] else ...[
-                IconButton(
-                  icon: const Icon(Icons.drive_file_move_outline, color: Colors.white),
-                  tooltip: 'Move',
+                TextButton.icon(
+                  icon: const Icon(Icons.check_circle_outline, color: AppColors.primaryAction),
+                  label: const Text('Check', style: TextStyle(color: AppColors.primaryAction, fontWeight: FontWeight.bold)),
+                  onPressed: () => provider.checkSelectedItems(),
+                ),
+                TextButton.icon(
+                  icon: Icon(Icons.drive_file_move_outline, color: theme.colorScheme.onInverseSurface),
+                  label: Text('Move', style: TextStyle(color: theme.colorScheme.onInverseSurface, fontWeight: FontWeight.bold)),
                   onPressed: () => _showTargetListSelector(context, false),
                 ),
-                IconButton(
-                  icon: const Icon(Icons.copy_rounded, color: Colors.white),
-                  tooltip: 'Copy',
+                TextButton.icon(
+                  icon: Icon(Icons.copy_rounded, color: theme.colorScheme.onInverseSurface),
+                  label: Text('Copy', style: TextStyle(color: theme.colorScheme.onInverseSurface, fontWeight: FontWeight.bold)),
                   onPressed: () => _showTargetListSelector(context, true),
                 ),
               ],
-              IconButton(
-                icon: const Icon(Icons.delete_outline_rounded, color: Colors.redAccent),
-                tooltip: 'Delete',
-                onPressed: () => provider.deleteSelectedItems(),
-              ),
             ],
           ),
         ),

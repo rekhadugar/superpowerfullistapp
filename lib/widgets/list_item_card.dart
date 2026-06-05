@@ -198,7 +198,15 @@ class _ListItemCardState extends State<ListItemCard> with SingleTickerProviderSt
     final macroProvider = context.watch<MacroListProvider>();
     final settings = context.watch<SettingsProvider>();
     final typeId = macroProvider.activeList?.typeId ?? 'sys_shopping';
-    final appType = settings.getTypeById(typeId);
+
+    // FIXED: Safely resolve the icon code point without crashing the render tree
+    int iconCodePoint = Icons.shopping_bag_outlined.codePoint;
+    try {
+      final appType = settings.getTypeById(typeId);
+      iconCodePoint = appType.iconCodePoint;
+    } catch (_) {
+      // Silent catch: If the ID isn't in the dictionary, keep the safe fallback icon
+    }
 
     // If sorting by Categories (Axis 2), display the Store (Axis 1) badge for context
     final bool showAxis1 = widget.sortMode == SortMode.categories;
@@ -206,7 +214,7 @@ class _ListItemCardState extends State<ListItemCard> with SingleTickerProviderSt
 
     // Dynamically assign the list's main icon to Axis 1, and a generic folder to Axis 2
     final IconData contextIcon = showAxis1
-        ? IconData(appType.iconCodePoint, fontFamily: 'MaterialIcons')
+        ? IconData(iconCodePoint, fontFamily: 'MaterialIcons')
         : Icons.folder_outlined;
 
     return AnimatedScale(

@@ -530,6 +530,11 @@ class ListProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  void selectAll(List<String> ids) {
+    _selectedItemIds.addAll(ids);
+    notifyListeners();
+  }
+
   String _generateVariantKey(String title, String category, String store, List<String> tags) {
     final sortedTags = List<String>.from(tags)..sort();
     return '${title.toLowerCase().trim()}|${category.trim()}|${store.trim()}|${sortedTags.join(",")}';
@@ -1318,7 +1323,7 @@ class ListProvider extends ChangeNotifier {
     _isLoadingShoppingMode = true;
     notifyListeners();
     _shoppingModeItems.clear();
-    _shoppingCompletedItems.clear(); // Clearing this just to be safe on reload
+    _shoppingCompletedItems.clear();
     _itemOriginMap.clear();
     _activeShoppingStore = null;
 
@@ -1329,16 +1334,9 @@ class ListProvider extends ChangeNotifier {
       return;
     }
 
-    // DEBUG 1: Check total lists
-    print('DEBUG: Total MacroLists found: ${allMacroLists.length}');
-
     final shoppingLists = allMacroLists.where((l) => l.typeId == 'sys_shopping').toList();
 
-    // DEBUG 2: Check how many are actually 'Shopping' lists
-    print('DEBUG: Shopping Lists filtered: ${shoppingLists.length}');
-
     for (var list in shoppingLists) {
-      // 1. Fetch all items for this specific list from Firestore
       final snapshot = await FirebaseFirestore.instance
           .collection('users')
           .doc(uid)
@@ -1347,13 +1345,9 @@ class ListProvider extends ChangeNotifier {
           .collection('items')
           .get();
 
-      // DEBUG 3: Check database pull
-      print('DEBUG: Data for list ${list.id} pulled. Documents found: ${snapshot.docs.length}');
-
       for (var doc in snapshot.docs) {
         final item = ListItem.fromMap(doc.data());
         if (!item.isDeleted) {
-          // 2. Map the origin so we know which subcollection to save edits back to!
           _itemOriginMap[item.id] = list.id;
 
           if (item.isCompleted) {
@@ -1365,11 +1359,106 @@ class ListProvider extends ChangeNotifier {
       }
     }
 
-    // DEBUG 4: Final item count
-    print('DEBUG: Total valid shopping items loaded: ${_shoppingModeItems.length}');
-
+    // FIXED: Invoke wrap recalculations on fetch to ensure geometric heights aren't collapsed to 0px
+    _recalculateWrapsForShopping();
     _isLoadingShoppingMode = false;
     notifyListeners();
+  }
+
+  // FIXED: Added companion geometric engine wrapper specifically designed for cross-list state
+  void _recalculateWrapsForShopping() {
+    final geometry = FluidGeometry(_textScaleFactor);
+
+    final double titleAvailableWidth = _viewportWidth -
+        (geometry.horizontalPadding * 2) -
+        geometry.leadingBlockWidth -
+        (geometry.interElementGap * 2) -
+        geometry.trailingBlockWidth;
+
+    final double tagAvailableWidth = _viewportWidth -
+        (geometry.horizontalPadding * 2) -
+        geometry.leadingBlockWidth -
+        geometry.interElementGap;
+
+    if (titleAvailableWidth <= 0) return;
+
+    int calcWrap(ListItem item) {
+      final TextPainter tp = TextPainter(
+        text: TextSpan(
+            text: item.title,
+            style: const TextStyle(fontSize: AppConstants.titleFontSize, height: AppConstants.titleLineHeight)
+        ),
+        textDirection: TextDirection.ltr,
+        maxLines: AppConstants.maxTitleLines,
+        textScaler: TextScaler.linear(_textScaleFactor),
+      )..layout(maxWidth: titleAvailableWidth);
+
+      final int lineCount = tp.didExceedMaxLines
+          ? AppConstants.maxTitleLines
+          : tp.getBoxesForSelection(TextSelection(baseOffset: 0, extentOffset: item.title.length)).isNotEmpty
+          ? (tp.height / (AppConstants.titleFontSize * AppConstants.titleLineHeight * _textScaleFactor)).round()
+          : 1;
+
+      return (lineCount - 1).clamp(0, 5);
+    }
+
+    int calcTags(ListItem item) {
+      int calculatedTagRows = 0;
+      if (item.attributeRows.isNotEmpty) {
+        double currentLineWidth = 0.0;
+        calculatedTagRows = 1;
+        const double wrapSpacing = 8.0;
+
+        for (String tag in item.attributeRows) {
+          final TextPainter tagTp = TextPainter(
+            text: TextSpan(
+                text: tag,
+                style: const TextStyle(
+                    fontSize: 12.0, // Constant mapping equivalent to AppConstants.badgeFontSize
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: 0.2,
+                    height: 1.1)),
+            textDirection: TextDirection.ltr,
+            textScaler: TextScaler.linear(_textScaleFactor),
+          )..layout();
+
+          final double actualBadgeWidth = tagTp.width +
+              (geometry.badgeHorizontalPadding * 2) +
+              geometry.badgeIconSize +
+              geometry.badgeIconGap;
+
+          if (currentLineWidth == 0.0) {
+            currentLineWidth = actualBadgeWidth;
+          } else if (currentLineWidth + wrapSpacing + actualBadgeWidth > tagAvailableWidth) {
+            calculatedTagRows++;
+            currentLineWidth = actualBadgeWidth;
+          } else {
+            currentLineWidth += wrapSpacing + actualBadgeWidth;
+          }
+        }
+      }
+      return calculatedTagRows;
+    }
+
+    // Process the Active Shopping Array
+    for (int i = 0; i < _shoppingModeItems.length; i++) {
+      final item = _shoppingModeItems[i];
+      final calculatedNWrap = calcWrap(item);
+      final calculatedTagRows = calcTags(item);
+      if (item.nWrap != calculatedNWrap || item.nTagRows != calculatedTagRows) {
+        _shoppingModeItems[i] = item.copyWith(nWrap: calculatedNWrap, nTagRows: calculatedTagRows);
+      }
+    }
+
+    // Process the Completed Shopping Array
+    for (int i = 0; i < _shoppingCompletedItems.length; i++) {
+      final item = _shoppingCompletedItems[i];
+      final calculatedNWrap = calcWrap(item);
+      final calculatedTagRows = calcTags(item);
+      if (item.nWrap != calculatedNWrap || item.nTagRows != calculatedTagRows) {
+        _shoppingCompletedItems[i] = item.copyWith(nWrap: calculatedNWrap, nTagRows: calculatedTagRows);
+      }
+    }
   }
 
   Future<void> _updateOriginListStorage(String itemId, ListItem updatedItem) async {

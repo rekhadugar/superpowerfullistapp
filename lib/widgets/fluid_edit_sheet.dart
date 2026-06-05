@@ -507,19 +507,29 @@ class _FluidEditSheetState extends State<FluidEditSheet> {
     final macroProvider = context.watch<MacroListProvider>();
     final settings = context.watch<SettingsProvider>();
     final typeId = macroProvider.activeList?.typeId ?? 'sys_shopping';
-    final appType = settings.getTypeById(typeId);
 
-    // FIXED: Calculate max wrap width and pipe through the 2-Row engine
+    // FIXED: Crash-proof Settings Lookup. Safely falls back if the dictionary is unmapped.
+    String axis1Label = 'Store';
+    String axis2Label = 'Category';
+    List<String> axis1Base = [];
+    List<String> axis2Base = [];
+
+    try {
+      final appType = settings.getTypeById(typeId);
+      axis1Label = appType.axis1Label;
+      axis2Label = appType.axis2Label;
+      axis1Base = settings.getAxis1Groups(typeId).map((g) => g.name).where((n) => n != 'Any' && n != 'Everything Else').toList();
+      axis2Base = settings.getAxis2Groups(typeId).map((g) => g.name).where((n) => n != 'Any' && n != 'Everything Else').toList();
+    } catch (_) {
+      // Silent catch: UI will survive using the safe defaults above
+    }
+
     final double maxWrapWidth = MediaQuery.of(context).size.width - (geometry.horizontalPadding * 2);
-
-    final axis1Base = settings.getAxis1Groups(typeId).map((g) => g.name).where((n) => n != 'Any' && n != 'Everything Else').toList();
-    final axis2Base = settings.getAxis2Groups(typeId).map((g) => g.name).where((n) => n != 'Any' && n != 'Everything Else').toList();
 
     List<String> rawCategories = _getPopularList(provider, 'category', axis2Base);
     if (_draftItem!.category.isNotEmpty && _draftItem!.category != 'Everything Else' && !rawCategories.contains(_draftItem!.category)) {
       rawCategories.insert(0, _draftItem!.category);
     }
-    // Swap active to the very front so it is guaranteed to fit in the 2 rows!
     if (_draftItem!.category != 'Everything Else' && rawCategories.contains(_draftItem!.category)) {
       rawCategories.remove(_draftItem!.category);
       rawCategories.insert(0, _draftItem!.category);
@@ -704,7 +714,7 @@ class _FluidEditSheetState extends State<FluidEditSheet> {
 
                                   const SizedBox(height: 24.0),
 
-                                  Text(appType.axis2Label, style: theme.textTheme.labelMedium?.copyWith(fontWeight: FontWeight.bold, color: theme.hintColor)),
+                                  Text(axis2Label, style: theme.textTheme.labelMedium?.copyWith(fontWeight: FontWeight.bold, color: theme.hintColor)),
                                   const SizedBox(height: 8.0),
                                   Wrap(
                                     spacing: 8.0, runSpacing: 8.0,
@@ -727,7 +737,7 @@ class _FluidEditSheetState extends State<FluidEditSheet> {
 
                                   const SizedBox(height: 24.0),
 
-                                  Text(appType.axis1Label, style: theme.textTheme.labelMedium?.copyWith(fontWeight: FontWeight.bold, color: theme.hintColor)),
+                                  Text(axis1Label, style: theme.textTheme.labelMedium?.copyWith(fontWeight: FontWeight.bold, color: theme.hintColor)),
                                   const SizedBox(height: 8.0),
                                   Wrap(
                                     spacing: 8.0, runSpacing: 8.0,

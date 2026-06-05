@@ -388,13 +388,56 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
         }
       },
       behavior: HitTestBehavior.translucent,
-      // FIXED: Wrap the entire Scaffold in a Stack to elevate the Fluid Edit Sheet above the AppBar
       child: Stack(
         children: [
           Scaffold(
             resizeToAvoidBottomInset: false,
             backgroundColor: theme.scaffoldBackgroundColor,
-            appBar: AppBar(
+            // FIXED: Contextual AppBar for Batch Selection Mode
+            appBar: listProvider.isBatchModeActive
+                ? AppBar(
+              backgroundColor: theme.cardColor,
+              elevation: 0,
+              leading: IconButton(
+                icon: Icon(Icons.close, color: theme.textTheme.titleMedium?.color),
+                onPressed: () => listProvider.clearSelection(),
+              ),
+              title: Text(
+                '${listProvider.selectedItemIds.length} Selected',
+                style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+              ),
+              actions: [
+                IconButton(
+                  icon: Icon(Icons.select_all, color: theme.textTheme.titleMedium?.color),
+                  tooltip: 'Select All',
+                  onPressed: () {
+                    final allVisibleIds = displayList.whereType<ListItem>().map((e) => e.id).toList();
+                    listProvider.selectAll(allVisibleIds);
+                  },
+                ),
+                PopupMenuButton<String>(
+                  icon: Icon(Icons.more_vert, color: theme.textTheme.titleMedium?.color),
+                  onSelected: (String value) {
+                    if (value == 'delete') {
+                      listProvider.deleteSelectedItems();
+                    }
+                  },
+                  itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
+                    const PopupMenuItem<String>(
+                      value: 'delete',
+                      child: Row(
+                        children: [
+                          Icon(Icons.delete_outline, color: AppColors.destructiveAction, size: 20),
+                          SizedBox(width: 12),
+                          Text('Delete Selected', style: TextStyle(color: AppColors.destructiveAction, fontWeight: FontWeight.bold)),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            )
+                : AppBar(
               leadingWidth: _isQuickAdding
                   ? geometry.leadingBlockWidth + geometry.horizontalPadding
                   : geometry.horizontalPadding + geometry.leadingBlockWidth + geometry.interElementGap,
@@ -433,7 +476,6 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
                     return Stack(
                       alignment: Alignment.centerLeft,
                       children: [
-                        // FIXED: Perfectly centered placeholder text
                         if (_quickAddController.text.isEmpty)
                           Center(
                             child: Text(
@@ -444,7 +486,6 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
                               ),
                             ),
                           ),
-                        // FIXED: Left-aligned active text and cursor
                         TextField(
                           controller: _quickAddController,
                           focusNode: _quickAddFocus,
@@ -663,7 +704,6 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
                                       context.read<ListProvider>().setFullEditRequest(false);
                                       context.read<ListProvider>().setEditItem(null);
                                     } else {
-                                      // FIXED: Guarantees normal taps open in collapsed mode!
                                       context.read<ListProvider>().setFullEditRequest(false);
                                       context.read<ListProvider>().setEditItem(item.id);
                                     }
@@ -754,8 +794,6 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
               ],
             ),
           ),
-
-          // FIXED: Moved outside the Scaffold so it renders OVER the AppBar and absorbs all taps!
           const FluidEditSheet(),
         ],
       ),

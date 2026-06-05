@@ -1,14 +1,16 @@
+// Location: lib/screens/root_navigation_screen.dart
+
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
-import 'package:listicle_v2/screens/shopping_mode_screen.dart';
 import 'package:provider/provider.dart';
 
 import '../providers/list_provider.dart';
 import '../providers/macro_list_provider.dart';
 import '../theme/app_theme.dart';
 import '../widgets/app_drawer.dart';
-import 'global_settings_screen.dart';
 import 'main_screen.dart';
+import 'shopping_mode_screen.dart';
+import 'profile_screen.dart'; // FIXED: Added new import
 
 class RootNavigationScreen extends StatefulWidget {
   const RootNavigationScreen({super.key});
@@ -24,7 +26,7 @@ class _RootNavigationScreenState extends State<RootNavigationScreen> {
   final List<Widget> _screens = [
     const MainScreen(),
     const ShoppingModeScreen(),
-    const GlobalSettingsScreen(),
+    const ProfileScreen(), // FIXED: Replaced GlobalSettingsScreen
   ];
 
   bool _handleScroll(ScrollNotification notification) {
@@ -53,7 +55,6 @@ class _RootNavigationScreenState extends State<RootNavigationScreen> {
           }
         },
         behavior: HitTestBehavior.opaque,
-        // FIXED (Batch 1.5): FittedBox acts as a safety valve to prevent RenderFlex errors on large scales
         child: FittedBox(
           fit: BoxFit.scaleDown,
           child: Column(
@@ -82,19 +83,17 @@ class _RootNavigationScreenState extends State<RootNavigationScreen> {
     final safeBottom = MediaQuery.of(context).padding.bottom;
     const double barHeight = 70.0;
 
-    // 1. Check if the Fluid Edit Sheet is open
     final isEditing = context.watch<ListProvider>().editItemId != null;
+    final isBatchMode = context.watch<ListProvider>().isBatchModeActive; // NEW: Track selection state
 
-    // 2. Hide the bottom nav if the user scrolls down OR if they are editing an item
-    final bool showBottomNav = _isScrollVisible && !isEditing;
+    // FIXED: Bottom bar now collapses seamlessly when selection mode is active
+    final bool showBottomNav = _isScrollVisible && !isEditing && !isBatchMode;
 
     return Scaffold(
-      // FIXED: Prevents the Bottom Navigation Bar from floating above the keyboard
       resizeToAvoidBottomInset: false,
       drawer: const AppDrawer(),
       body: Stack(
         children: [
-          // Layer 0: The Active Screen
           NotificationListener<ScrollNotification>(
             onNotification: _handleScroll,
             child: IndexedStack(
@@ -102,8 +101,6 @@ class _RootNavigationScreenState extends State<RootNavigationScreen> {
               children: _screens,
             ),
           ),
-
-          // Layer 1: The Flush Auto-Hide Bottom Bar
           AnimatedPositioned(
             duration: const Duration(milliseconds: 300),
             curve: Curves.easeOutCubic,
