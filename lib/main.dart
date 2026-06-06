@@ -16,6 +16,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'firebase_options.dart';
 import 'services/auth_service.dart';
 import 'screens/sign_in_screen.dart'; // NEW: Import the sign in screen
+import 'services/dictionary_service.dart'; // NEW IMPORT
 
 void main() async {
   // Ensure Flutter engine is fully bound before calling native code
@@ -25,6 +26,8 @@ void main() async {
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
+
+  DictionaryService.initialize();
 
   // 2. Enable Firestore Native Offline Persistence (The Local-First Magic)
   FirebaseFirestore.instance.settings = const Settings(

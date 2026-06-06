@@ -22,6 +22,8 @@ import '../widgets/share_list_sheet.dart';
 import '../widgets/swipe_action_wrapper.dart';
 import 'completed_items_screen.dart';
 import 'create_list_screen.dart';
+import '../services/dictionary_service.dart';
+import '../data/mock_global_dictionary.dart'; // Brings the SmartItem class back into scope
 
 class MainScreen extends StatefulWidget {
   const MainScreen({super.key});
@@ -43,6 +45,10 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
   final FocusNode _quickAddFocus = FocusNode();
   String _quickAddQuery = '';
 
+  // NEW: Debouncer variables
+  Timer? _debounce;
+  List<SmartItem> _liveSuggestions = [];
+
   // FIXED: Mock Dictionary removed completely. We now rely natively on the ListProvider.
 
   @override
@@ -58,8 +64,34 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
       }
     });
 
+    // FIXED: Implementing the 300ms Debouncer and Character Threshold
     _quickAddController.addListener(() {
-      if (mounted) setState(() => _quickAddQuery = _quickAddController.text);
+      if (!mounted) return;
+      final text = _quickAddController.text;
+
+      // Prevent redundant triggers if only focus changed
+      if (text == _quickAddQuery) return;
+
+      setState(() => _quickAddQuery = text);
+
+      // Cancel the previous timer if the user is still typing
+      if (_debounce?.isActive ?? false) _debounce!.cancel();
+
+      // Shield 1: Character Threshold (Don't search for 1 or 2 letters)
+      if (text.trim().length < 3) {
+        setState(() => _liveSuggestions = []);
+        return;
+      }
+
+      // Shield 2: Wait 300ms after they stop typing before filtering
+      _debounce = Timer(const Duration(milliseconds: 300), () {
+        if (mounted && _quickAddQuery == text) {
+          // Shield 3: Instant RAM query
+          setState(() {
+            _liveSuggestions = DictionaryService.searchItems(text);
+          });
+        }
+      });
     });
   }
 
@@ -125,6 +157,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _toastTimer?.cancel();
+    _debounce?.cancel(); // NEW: Cancel debouncer on dispose
     _scrollController.removeListener(_onScroll);
     _scrollController.dispose();
     _phantomHeaderState.dispose();
@@ -201,11 +234,10 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
       _keyboardWasOpen = false;
       _quickAddController.clear();
       _quickAddQuery = '';
+      _liveSuggestions = []; // NEW: Clear the suggestions
     });
     _quickAddFocus.unfocus();
 
-    // FIXED: Forces the sticky header engine to recalculate multiple times
-    // as the Flutter physics engine executes its ballistic spring-back animation.
     void forceHeaderSync() {
       if (mounted && _scrollController.hasClients) {
         _onScroll();
@@ -242,9 +274,6 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
   Widget _buildSmartSuggestions(ThemeData theme, FluidGeometry geometry, ListProvider listProvider) {
     final query = _quickAddQuery.trim();
 
-    // Dynamically queries your actual global dictionary engine
-    final suggestions = listProvider.searchSmartDictionary(query);
-
     return Material(
       elevation: 12.0,
       shadowColor: Colors.black.withValues(alpha: 0.2),
@@ -259,7 +288,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
           padding: EdgeInsets.zero,
           shrinkWrap: true,
           children: [
-            // 1. The Dynamic "Create New" Row (Always visible as the top option)
+            // 1. The Dynamic "Create New" Row (Always visible)
             InkWell(
               onTap: () => _commitQuickAdd(query, 'Everything Else', 'Any', 'pcs'),
               child: Padding(
@@ -291,13 +320,13 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
               ),
             ),
 
-            if (suggestions.isNotEmpty)
+            // FIXED: Now uses the live async array populated by the debouncer
+            if (_liveSuggestions.isNotEmpty)
               Divider(height: 1, color: theme.dividerColor.withValues(alpha: 0.5)),
 
-            // 2. Smart Dictionary Suggestions (Sourced directly from ListProvider)
-            ...suggestions.map((item) {
+            // 2. Smart Dictionary Suggestions
+            ..._liveSuggestions.map((item) {
               return InkWell(
-                // Passes the actual SmartItem data directly into the commit method
                 onTap: () => _commitQuickAdd(item.title, item.category, item.store, item.unit),
                 child: Padding(
                   padding: EdgeInsets.symmetric(horizontal: geometry.horizontalPadding, vertical: 12.0),

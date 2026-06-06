@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
+import '../services/dictionary_uploader.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -63,6 +64,31 @@ class _ProfileScreenState extends State<ProfileScreen> {
               _buildActionTile(theme, icon: Icons.logout_rounded, title: 'Sign Out', color: AppColors.destructiveAction, onTap: () => _showComingSoon('Authentication')),
             ],
           ),
+
+          const SizedBox(height: 64),
+          // --- TEMPORARY DATABASE UPLOADER ---
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20.0),
+            child: ElevatedButton.icon(
+              icon: const Icon(Icons.cloud_upload),
+              label: const Text('UPLOAD GLOBAL DICTIONARY'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.orange,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 16),
+              ),
+              onPressed: () async {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Upload started! Check terminal logs.')),
+                );
+                await DictionaryUploader.uploadDictionary();
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Upload Complete! 🎉')),
+                );
+              },
+            ),
+          ),
+          const SizedBox(height: 32),
 
           const SizedBox(height: 24),
           _buildSectionHeader(theme, 'APP SETTINGS'),
